@@ -38,6 +38,7 @@ data class WlSection(
     val date: String? = null,
     val heading: String? = null,
     val text: JsonObject? = null,
+    val placeMarkerColor: String? = null,
     val blocks: List<WlBlock> = emptyList(),
 )
 
