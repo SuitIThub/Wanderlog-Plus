@@ -2,6 +2,8 @@ package de.wanderlogplus.shared.sync
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import java.util.Locale
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class HlcTest {
@@ -28,6 +30,36 @@ class HlcTest {
         val a = Hlc(999, 5, "x"); val b = Hlc(1000, 0, "a")
         assertTrue(a.encode() < b.encode())
         assertEquals(a, Hlc.parse(a.encode()))
+    }
+
+    @Test fun `encode is locale independent and ASCII`() {
+        val old = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.forLanguageTag("ar-EG"))
+            val h = Hlc(1_700_000_000_123, 42, "node")
+            val s = h.encode()
+            assertTrue(s.all { it.code < 128 }, s)
+            assertEquals(h, Hlc.parse(s))
+        } finally {
+            Locale.setDefault(old)
+        }
+    }
+
+    @Test fun `out-of-range values are rejected`() {
+        assertFailsWith<IllegalArgumentException> { Hlc(-1, 0, "a") }
+        assertFailsWith<IllegalArgumentException> { Hlc(0, -1, "a") }
+        assertFailsWith<IllegalArgumentException> { Hlc(0, 1_000_000, "a") }
+        Hlc(0, 999_999, "a")
+    }
+
+    @Test fun `parse rejects invalid strings`() {
+        assertFailsWith<IllegalArgumentException> { Hlc.parse("garbage") }
+        assertFailsWith<IllegalArgumentException> { Hlc.parse("1-2-a") }
+    }
+
+    @Test fun `nodeId containing dash roundtrips`() {
+        val h = Hlc(5, 7, "dev-a-1")
+        assertEquals(h, Hlc.parse(h.encode()))
     }
 
     @Test fun `nodeId breaks ties`() {

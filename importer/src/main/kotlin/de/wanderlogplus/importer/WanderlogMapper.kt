@@ -18,6 +18,8 @@ data class ImportedEntity(
     val sourceId: String,
     val fields: Map<String, JsonElement>,
     val masterFields: Set<String> = emptySet(),
+    /** Written on create (with base) but never compared, updated or conflicted on reimport. */
+    val createOnlyFields: Set<String> = emptySet(),
 ) {
     val id: String get() = EntityCodec.importedId(type, sourceId)
 }
@@ -78,8 +80,8 @@ object WanderlogMapper {
         val metadata = response.resources.placeMetadata.associateBy { it.placeId }
         val out = mutableListOf<ImportedEntity>()
 
-        fun add(type: EntityType, sourceId: String, fields: Map<String, JsonElement>, master: Set<String> = emptySet()) {
-            out += ImportedEntity(type, sourceId, fields, master)
+        fun add(type: EntityType, sourceId: String, fields: Map<String, JsonElement>, master: Set<String> = emptySet(), createOnly: Set<String> = emptySet()) {
+            out += ImportedEntity(type, sourceId, fields, master, createOnly)
         }
 
         val trip = Trip(EntityCodec.importedId(EntityType.TRIP, "trip:${plan.key}"), plan.title, plan.startDate, plan.endDate, plan.key)
@@ -158,7 +160,7 @@ object WanderlogMapper {
                 note = md(b.text),
             )
             stays += stay
-            add(EntityType.STAY, "block:${b.id}", EntityCodec.fields(stay))
+            add(EntityType.STAY, "block:${b.id}", EntityCodec.fields(stay), createOnly = setOf("regionId"))
         }
 
         // Days
@@ -189,7 +191,8 @@ object WanderlogMapper {
                     tags = b.reactions.keys.toList(),
                     status = if (isDay) PlaceStatus.PLANNED else PlaceStatus.IDEA,
                 )
-                add(EntityType.SAVED_PLACE, "block:${b.id}", EntityCodec.fields(sp))
+                val heuristic = !isDay && infoBySection[s.id] == null
+                add(EntityType.SAVED_PLACE, "block:${b.id}", EntityCodec.fields(sp), createOnly = if (heuristic) setOf("regionId") else emptySet())
             }
         }
 
@@ -239,7 +242,7 @@ object WanderlogMapper {
                 } else {
                     DayItem("", dayId, keys[i], DayItemKind.PLACE, pid(b.place!!.placeId))
                 }
-                add(EntityType.DAY_ITEM, "block:${b.id}", EntityCodec.fields(item))
+                add(EntityType.DAY_ITEM, "block:${b.id}", EntityCodec.fields(item), createOnly = setOf("sortKey"))
             }
         }
 
@@ -251,10 +254,11 @@ object WanderlogMapper {
         }
         val noteKeys = SortKey.sequence(noteSections.size)
         noteSections.forEachIndexed { i, (s, body) ->
-            add(EntityType.NOTE, "section:${s.id}", EntityCodec.fields(Note("", s.heading ?: "", body, noteKeys[i])))
+            add(EntityType.NOTE, "section:${s.id}", EntityCodec.fields(Note("", s.heading ?: "", body, noteKeys[i])), createOnly = setOf("sortKey"))
         }
 
         // Expenses
+        val emittedIds = out.mapTo(HashSet()) { it.id }
         plan.itinerary.budget?.expenses?.forEach { e ->
             val x = Expense(
                 id = "",
@@ -263,7 +267,11 @@ object WanderlogMapper {
                 category = e.category,
                 description = e.description,
                 date = e.associatedDate,
-                relatedId = e.blockId?.let { EntityCodec.importedId(EntityType.STAY, "block:$it") },
+                relatedId = e.blockId?.let { bid ->
+                    listOf(EntityType.STAY, EntityType.FLIGHT, EntityType.TRAIN)
+                        .map { EntityCodec.importedId(it, "block:$bid") }
+                        .firstOrNull { it in emittedIds }
+                },
             )
             add(EntityType.EXPENSE, "expense:${e.id}", EntityCodec.fields(x))
         }

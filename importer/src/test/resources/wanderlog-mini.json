@@ -725,6 +725,18 @@
       "date": "2027-05-01",
       "blockId": 101,
       "associatedDate": "2027-05-09"
+     },
+     {
+      "id": 2,
+      "amount": {
+       "amount": 250.0,
+       "currencyCode": "EUR"
+      },
+      "category": "flight",
+      "description": "Flight T",
+      "date": "2027-05-01",
+      "blockId": 103,
+      "associatedDate": "2027-05-08"
      }
     ],
     "payments": []

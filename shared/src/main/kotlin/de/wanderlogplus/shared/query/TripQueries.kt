@@ -28,10 +28,12 @@ class TripQueries(
         return if (d >= parse(last.checkOut)) last else null
     }
 
+    // Last Day wins when several share a date; used by both days() and regionFor().
+    private val dayByDate: Map<String, Day> by lazy { days.associateBy { it.date } }
+
     fun days(): List<DayView> {
         val start = parse(trip.startDate)
         val end = parse(trip.endDate)
-        val byDate = days.associateBy { it.date }
         val result = mutableListOf<DayView>()
         var d = start
         while (d <= end) {
@@ -39,7 +41,7 @@ class TripQueries(
             val region = regionFor(date)
             result += DayView(
                 date = date,
-                day = byDate[date],
+                day = dayByDate[date],
                 regionId = region,
                 stay = stayFor(date),
                 isTravelDay = region == null || stays.any { it.checkIn == date || it.checkOut == date },
@@ -50,7 +52,7 @@ class TripQueries(
     }
 
     fun regionFor(date: String): String? =
-        days.firstOrNull { it.date == date }?.regionOverrideId ?: stayFor(date)?.regionId
+        dayByDate[date]?.regionOverrideId ?: stayFor(date)?.regionId
 
     fun suggestionsFor(date: String): List<SavedPlace> {
         val r = regionFor(date) ?: return emptyList()

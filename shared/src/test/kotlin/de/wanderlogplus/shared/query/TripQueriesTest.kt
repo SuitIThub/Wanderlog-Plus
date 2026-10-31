@@ -27,6 +27,19 @@ class TripQueriesTest {
     ) = TripQueries(trip, stays, days, regions, places, items)
 
     @Test
+    fun `days and regionFor agree when several days share a date`() {
+        val q = queries(
+            days = listOf(
+                Day("d1", date = "2027-05-10", regionOverrideId = "o"),
+                Day("d2", date = "2027-05-10", regionOverrideId = "k"),
+            ),
+        )
+        val view = q.days().first { it.date == "2027-05-10" }
+        assertEquals(view.day?.regionOverrideId, q.regionFor("2027-05-10"))
+        assertEquals(view.regionId, q.regionFor("2027-05-10"))
+    }
+
+    @Test
     fun `days covers whole trip`() {
         val d = queries().days()
         assertEquals(22, d.size)

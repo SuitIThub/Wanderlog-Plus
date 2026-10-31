@@ -32,7 +32,7 @@ class WanderlogParserTest {
         assertEquals("TA", flight.flightInfo!!.airline!!.iata)
         val hotel = r.tripPlan.itinerary.sections.first { it.type == "hotels" }.blocks.first()
         assertEquals(35.67, hotel.place!!.geometry.location.lat)
-        assertEquals(1, r.tripPlan.itinerary.budget!!.expenses.size)
+        assertEquals(2, r.tripPlan.itinerary.budget!!.expenses.size)
         assertEquals(2, r.resources.placeMetadata.size)
         assertNull(r.resources.placeMetadata[0].openingPeriods[1].close)
     }
@@ -73,7 +73,7 @@ class WanderlogParserTest {
 
     @Test
     fun `real export parses`() {
-        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-rkqpffsjnb.json")
+        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-real.json")
         assumeTrue(f.exists())
         val r = WanderlogParser.parse(f.readText())
         assertEquals(30, r.tripPlan.itinerary.sections.size)

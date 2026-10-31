@@ -17,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ReimportMergerTest {
@@ -61,6 +62,39 @@ class ReimportMergerTest {
         assertEquals(JsonPrimitive("wanderlog"), rec(stay).value("_source"))
         assertEquals(JsonPrimitive(stay.sourceId), rec(stay).value("_sourceId"))
         assertEquals(JsonPrimitive(false), rec(stay).fields["_base.deleted"]!!.value)
+    }
+
+    @Test
+    fun `shifted sortKeys of existing day items are not reimported`() {
+        val s = snapshot()
+        run(s)
+        val items = s.entities.filter { it.type == EntityType.DAY_ITEM }
+        assertTrue(items.isNotEmpty())
+        val before = items.associateWith { rec(it).value("sortKey") }
+        val shifted = ImportSnapshot(s.entities.map {
+            if (it.type == EntityType.DAY_ITEM) it.copy(fields = it.fields + ("sortKey" to JsonPrimitive("zzz-" + it.sourceId))) else it
+        })
+        val r = run(shifted)
+        assertEquals(0, r.stats.conflicts)
+        assertEquals(0, r.stats.updated)
+        items.forEach {
+            assertEquals(before[it], rec(it).value("sortKey"))
+            assertNull(rec(it).value("_conflict.sortKey"))
+        }
+        assertTrue(run(shifted).changes.isEmpty())
+    }
+
+    @Test
+    fun `app-changed heuristic regionId is kept without conflict`() {
+        val s = snapshot()
+        run(s)
+        val f1 = savedFor(s, "PID_F1")
+        appSet(f1, "regionId", JsonPrimitive("app-region"))
+        val r = run(s.withField(f1, "regionId", JsonPrimitive("other-heuristic")))
+        assertEquals(JsonPrimitive("app-region"), rec(f1).value("regionId"))
+        assertNull(rec(f1).value("_conflict.regionId"))
+        assertEquals(0, r.stats.conflicts)
+        assertTrue(run(s.withField(f1, "regionId", JsonPrimitive("other-heuristic"))).changes.isEmpty())
     }
 
     @Test

@@ -6,7 +6,7 @@ plugins {
 kotlin { jvmToolchain(17) }
 
 dependencies {
-    implementation(libs.kotlinx.serialization.json)
+    api(libs.kotlinx.serialization.json)
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)
 }

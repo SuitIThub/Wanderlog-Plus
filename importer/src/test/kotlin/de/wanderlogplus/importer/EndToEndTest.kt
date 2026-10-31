@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 
 class EndToEndTest {
     private fun realJson(): String {
-        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-rkqpffsjnb.json")
+        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-real.json")
         assumeTrue(f.exists())
         return f.readText()
     }

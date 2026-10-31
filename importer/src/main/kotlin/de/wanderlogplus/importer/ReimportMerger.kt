@@ -66,6 +66,7 @@ class ReimportMerger(private val clock: HlcClock) {
             val fields = entity.fields + ("deleted" to FALSE)
             var entityUpdated = false
             for ((f, w) in fields) {
+                if (f in entity.createOnlyFields) continue
                 val a = rec.get(f)
                 if (f in entity.masterFields) {
                     if (a != w) {

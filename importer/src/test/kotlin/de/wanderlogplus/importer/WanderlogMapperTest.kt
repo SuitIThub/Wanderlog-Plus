@@ -116,7 +116,9 @@ class WanderlogMapperTest {
         val t = s.of(EntityType.TRAIN).single()
         assertEquals("Take the fast train from A to B", t.str("note"))
         assertEquals("mini", s.of(EntityType.TRIP).single().str("wanderlogKey"))
-        assertEquals(id(EntityType.STAY, "block:101"), s.of(EntityType.EXPENSE).single().str("relatedId"))
+        val expenses = s.of(EntityType.EXPENSE).associateBy { it.sourceId }
+        assertEquals(id(EntityType.STAY, "block:101"), expenses.getValue("expense:1").str("relatedId"))
+        assertEquals(id(EntityType.FLIGHT, "block:103"), expenses.getValue("expense:2").str("relatedId"))
     }
 
     @Test
@@ -128,7 +130,7 @@ class WanderlogMapperTest {
 
     @Test
     fun `real export`() {
-        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-rkqpffsjnb.json")
+        val f = File(System.getProperty("repoRoot") ?: ".", "testdata/private/wanderlog-real.json")
         assumeTrue(f.exists())
         val s = WanderlogMapper.map(WanderlogParser.parse(f.readText()))
         val regions = s.of(EntityType.REGION)
@@ -139,8 +141,6 @@ class WanderlogMapperTest {
         val names = regions.associate { it.id to it.str("name") }
         val stays = s.of(EntityType.STAY).sortedBy { it.str("checkIn") }
         val actual = stays.map { names[it.str("regionId")] }
-        println("REAL regions=${regions.map { it.str("name") }}")
-        println("REAL stays=${stays.map { it.str("checkIn") + "->" + names[it.str("regionId")] }}")
         assertEquals(7, stays.size)
         assertEquals(listOf("Tokio", "Kiso", "Gero", "Osaka", "Hiroshima", "Okinawa", "Tokio"), actual)
         assertEquals(6, s.of(EntityType.FLIGHT).size)

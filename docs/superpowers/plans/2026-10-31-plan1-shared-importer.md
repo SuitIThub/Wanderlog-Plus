@@ -380,7 +380,7 @@ Ziffernweise Mittelwertbildung: `before` fehlt → wie `""` behandeln (unterste 
   - `class ImportFormatException(message: String, cause: Throwable? = null) : Exception(message, cause)`
   - `object WanderlogParser { fun parse(json: String): WlResponse }` – wirft `ImportFormatException`, wenn: kein gültiges JSON, `success != true`, Pflichtfelder fehlen (Serialisierungsfehler mit Pfad in der Meldung), Block-`type` `place` ohne `place`, `flight` ohne `depart`/`arrive`, Section `dayPlan` ohne `date`.
 
-- [ ] **Step 1: Fixture `wanderlog-mini.json` anlegen** – anonymisierter Ausschnitt in exakt der echten Struktur (Feldnamen aus `testdata/private/wanderlog-rkqpffsjnb.json` übernehmen), Inhalt:
+- [ ] **Step 1: Fixture `wanderlog-mini.json` anlegen** – anonymisierter Ausschnitt in exakt der echten Struktur (Feldnamen aus `testdata/private/wanderlog-real.json` übernehmen), Inhalt:
   - Trip `key="mini"`, `2027-05-08`..`2027-05-12`.
   - Section `Flights` (type `flights`): 1 Flug FRA→NRT, 05-08 11:15 → 05-09 13:15, Airline „Test Air“ (iata `TA`), Nr. 1.
   - Section `Verkehr` (type `transit`): 1 Zug **ohne** `carrier`, 05-11, Place A → Place B, `text` mit Routentext.
@@ -400,14 +400,14 @@ Ziffernweise Mittelwertbildung: `before` fehlt → wie `""` behandeln (unterste 
 - `rejects missing trip dates`: Fixture-JSON mit entferntem `startDate` (per `JsonObject`-Manipulation im Test) → `ImportFormatException`, Meldung enthält `startDate`.
 - `rejects place block without place`: → `ImportFormatException`.
 - `rejects invalid json`: `"<html>"` → `ImportFormatException`.
-- `real export parses` (nur wenn `testdata/private/wanderlog-rkqpffsjnb.json` existiert, sonst `assumeTrue(false)`; Pfad relativ zum Repo-Root über `System.getProperty("repoRoot")`, in `importer/build.gradle.kts` als `systemProperty("repoRoot", rootDir.path)` gesetzt): 30 Sections, `startDate == "2027-05-08"`.
+- `real export parses` (nur wenn `testdata/private/wanderlog-real.json` existiert, sonst `assumeTrue(false)`; Pfad relativ zum Repo-Root über `System.getProperty("repoRoot")`, in `importer/build.gradle.kts` als `systemProperty("repoRoot", rootDir.path)` gesetzt): 30 Sections, `startDate == "2027-05-08"`.
 
 - [ ] **Step 3: Tests ausführen** → FAIL
 - [ ] **Step 4: DTOs und Parser implementieren**
 - [ ] **Step 5: Tests ausführen** → PASS
 - [ ] **Step 6: Echten Export als lokale Fixture ablegen**
 ```bash
-mkdir -p testdata/private && curl -s -A "Mozilla/5.0" -o testdata/private/wanderlog-rkqpffsjnb.json "https://wanderlog.com/api/tripPlans/rkqpffsjnb?clientSchemaVersion=2&registerView=false"
+mkdir -p testdata/private && curl -s -A "Mozilla/5.0" -o testdata/private/wanderlog-real.json "https://wanderlog.com/api/tripPlans/rkqpffsjnb?clientSchemaVersion=2&registerView=false"
 git status --short testdata
 ```
 Expected: `git status` zeigt **nichts** für `testdata/private` (gitignored). Dann `./gradlew :importer:test --tests "*WanderlogParserTest"` → PASS inkl. `real export parses`.

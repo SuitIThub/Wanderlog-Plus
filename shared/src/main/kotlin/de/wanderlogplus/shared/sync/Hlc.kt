@@ -1,7 +1,13 @@
 package de.wanderlogplus.shared.sync
 
+import java.util.Locale
+
 /** Hybrid Logical Clock timestamp, ordered by (wallMillis, counter, nodeId). */
 data class Hlc(val wallMillis: Long, val counter: Int, val nodeId: String) : Comparable<Hlc> {
+    init {
+        require(wallMillis >= 0 && counter in 0..999_999) { "HLC out of range: wallMillis=$wallMillis counter=$counter" }
+    }
+
     override fun compareTo(other: Hlc): Int {
         val w = wallMillis.compareTo(other.wallMillis)
         if (w != 0) return w
@@ -14,7 +20,7 @@ data class Hlc(val wallMillis: Long, val counter: Int, val nodeId: String) : Com
 }
 
 /** Lexicographically sortable form, equal in order to [Hlc.compareTo]. */
-fun Hlc.encode(): String = "%015d-%06d-%s".format(wallMillis, counter, nodeId)
+fun Hlc.encode(): String = String.format(Locale.ROOT, "%015d-%06d-%s", wallMillis, counter, nodeId)
 
 private val HLC_FORMAT = Regex("""(\d{15})-(\d{6})-(.+)""")
 
