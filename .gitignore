@@ -1,0 +1,12 @@
+# Lokale Tool-Daten
+.remember/
+
+# Echte Wanderlog-Exporte enthalten Buchungsdaten – nie committen
+testdata/private/
+
+# Build / IDE
+.gradle/
+build/
+.idea/
+local.properties
+*.iml
