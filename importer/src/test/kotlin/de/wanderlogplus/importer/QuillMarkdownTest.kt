@@ -49,4 +49,24 @@ class QuillMarkdownTest {
         val o = ops("""[{"insert":"Titel\n","attributes":{"bold":true}},{"insert":"Rest"}]""")
         assertEquals("**Titel**\nRest", QuillMarkdown.convert(o))
     }
+
+    @Test fun `bold with trailing space keeps space outside markers`() {
+        val o = ops("""[{"insert":"🔀 "},{"insert":"Alternative: ","attributes":{"bold":true}},{"insert":"Yanaka\n"}]""")
+        assertEquals("🔀 **Alternative:** Yanaka", QuillMarkdown.convert(o))
+    }
+
+    @Test fun `list followed by plain line gets blank line`() {
+        val o = ops("""[{"insert":"a"},{"insert":"\n","attributes":{"list":"bullet"}},{"insert":"b\n"}]""")
+        assertEquals("- a\n\nb", QuillMarkdown.convert(o))
+    }
+
+    @Test fun `plain followed by list gets blank line`() {
+        val o = ops("""[{"insert":"b\na"},{"insert":"\n","attributes":{"list":"bullet"}}]""")
+        assertEquals("b\n\n- a", QuillMarkdown.convert(o))
+    }
+
+    @Test fun `bullet to ordered gets blank line`() {
+        val o = ops("""[{"insert":"a"},{"insert":"\n","attributes":{"list":"bullet"}},{"insert":"b"},{"insert":"\n","attributes":{"list":"ordered"}}]""")
+        assertEquals("- a\n\n1. b", QuillMarkdown.convert(o))
+    }
 }

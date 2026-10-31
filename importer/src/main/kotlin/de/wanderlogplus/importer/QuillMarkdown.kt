@@ -13,14 +13,23 @@ object QuillMarkdown {
         val out = StringBuilder()
         val line = StringBuilder()
         var firstLine = true
+        var prevKind = ""
+        var prevEmpty = false
 
         fun endLine(attrs: JsonObject?) {
-            val prefix = when ((attrs?.get("list") as? JsonPrimitive)?.contentOrNull) {
+            val kind = (attrs?.get("list") as? JsonPrimitive)?.contentOrNull ?: ""
+            val prefix = when (kind) {
                 "bullet" -> "- "
                 "ordered" -> "1. "
                 else -> ""
             }
-            if (!firstLine) out.append('\n')
+            if (!firstLine) {
+                out.append('\n')
+                // Block type change: separate with a blank line unless one already exists.
+                if (kind != prevKind && !prevEmpty && line.isNotEmpty()) out.append('\n')
+            }
+            prevKind = kind
+            prevEmpty = line.isEmpty()
             out.append(prefix).append(line)
             line.clear()
             firstLine = false
@@ -43,12 +52,16 @@ object QuillMarkdown {
 
     private fun inline(text: String, attrs: JsonObject?): String {
         if (attrs == null) return text
-        var s = text
+        val core = text.trim()
+        if (core.isEmpty()) return text
+        val lead = text.substring(0, text.indexOf(core))
+        val trail = text.substring(lead.length + core.length)
+        var s = core
         if (flag(attrs, "bold")) s = "**$s**"
         if (flag(attrs, "italic")) s = "*$s*"
         val link = (attrs["link"] as? JsonPrimitive)?.contentOrNull
-        if (!link.isNullOrEmpty()) s = if (text == link) link else "[$s]($link)"
-        return s
+        if (!link.isNullOrEmpty()) s = if (core == link) link else "[$s]($link)"
+        return lead + s + trail
     }
 
     private fun flag(attrs: JsonObject, key: String): Boolean =
