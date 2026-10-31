@@ -4,7 +4,9 @@ import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.FieldChange
+import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
+import de.wanderlogplus.shared.sync.parse
 import de.wanderlogplus.shared.sync.change
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -26,6 +28,11 @@ class ReimportMerger(private val clock: HlcClock) {
     }
 
     fun merge(snapshot: ImportSnapshot, store: EntityStore): ImportResult {
+        // Observe stored HLCs so our writes are strictly newer than anything we may overwrite
+        // (otherwise EntityRecord.apply silently drops them, possibly only half of a pair).
+        store.all().asSequence().flatMap { it.fields.values.asSequence() }
+            .maxOfOrNull { Hlc.parse(it.hlc) }?.let { clock.receive(it) }
+
         val changes = ArrayList<FieldChange>()
         var created = 0
         var updated = 0

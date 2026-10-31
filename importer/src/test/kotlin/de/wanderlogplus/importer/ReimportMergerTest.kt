@@ -131,7 +131,6 @@ class ReimportMergerTest {
         run(withMaster(4.0))
         assertFalse(rec(place).fields.containsKey("_base.rating"))
         appSet(place, "rating", JsonPrimitive(1.0))
-        importerTime = 20_000_000L // importer runs after the app edit, so its write wins LWW
         run(withMaster(4.5))
         assertEquals(JsonPrimitive(4.5), rec(place).value("rating"))
         assertFalse(rec(place).fields.containsKey("_base.rating"))
@@ -202,5 +201,34 @@ class ReimportMergerTest {
         assertEquals(appRec, store.get(EntityType.SAVED_PLACE, "app-1"))
         assertTrue(r.changes.isEmpty())
         EntityCodec.decode<SavedPlace>(appRec)
+    }
+
+    @Test
+    fun `wanderlog change is applied although app clock is ahead`() {
+        val s = snapshot()
+        run(s)
+        val f1 = savedFor(s, "PID_F1")
+        appSet(f1, "note", rec(f1).fields["_base.note"]!!.value)
+        val s2 = s.withField(f1, "note", JsonPrimitive("neu"))
+        run(s2)
+        assertEquals(JsonPrimitive("neu"), rec(f1).value("note"))
+        assertEquals(JsonPrimitive("neu"), rec(f1).value("_base.note"))
+        assertTrue(run(s2).changes.isEmpty())
+    }
+
+    @Test
+    fun `new conflict is recorded after app resolved the previous one with a newer clock`() {
+        val s = snapshot()
+        run(s)
+        val f1 = savedFor(s, "PID_F1")
+        appSet(f1, "note", JsonPrimitive("meins"))
+        run(s.withField(f1, "note", JsonPrimitive("deren")))
+        appSet(f1, "_conflict.note", JsonNull)
+        appSet(f1, "note", JsonPrimitive("meins2"))
+        val s3 = s.withField(f1, "note", JsonPrimitive("nochmal"))
+        run(s3)
+        assertEquals(JsonPrimitive("nochmal"), rec(f1).value("_conflict.note"))
+        assertEquals(JsonPrimitive("meins2"), rec(f1).value("note"))
+        assertTrue(run(s3).changes.isEmpty())
     }
 }
