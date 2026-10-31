@@ -15,4 +15,7 @@ dependencies {
     testImplementation(libs.junit.jupiter)
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    systemProperty("repoRoot", rootDir.path)
+}
