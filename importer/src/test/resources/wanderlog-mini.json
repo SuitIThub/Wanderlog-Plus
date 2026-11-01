@@ -1,0 +1,808 @@
+{
+ "success": true,
+ "tripPlan": {
+  "id": 1,
+  "key": "mini",
+  "title": "Mini Trip",
+  "startDate": "2027-05-08",
+  "endDate": "2027-05-12",
+  "viewCount": 0,
+  "itinerary": {
+   "options": {},
+   "sections": [
+    {
+     "id": 1,
+     "type": "flights",
+     "mode": "placeList",
+     "heading": "Flights",
+     "blocks": [
+      {
+       "id": 103,
+       "type": "flight",
+       "flightInfo": {
+        "airline": {
+         "iata": "TA",
+         "icao": "TST",
+         "name": "Test Air"
+        },
+        "number": 1
+       },
+       "depart": {
+        "type": "airport",
+        "date": "2027-05-08",
+        "time": "11:15",
+        "airport": {
+         "iata": "FRA",
+         "name": "Test Airport FRA",
+         "cityName": "Frankfurt"
+        }
+       },
+       "arrive": {
+        "type": "airport",
+        "date": "2027-05-09",
+        "time": "13:15",
+        "airport": {
+         "iata": "NRT",
+         "name": "Test Airport NRT",
+         "cityName": "Tokyo"
+        }
+       },
+       "text": {
+        "ops": [
+         {
+          "insert": "Flight note\n"
+         }
+        ]
+       },
+       "travelerNames": [
+        "Alice Test"
+       ],
+       "confirmationNumber": "CONF-F",
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 2,
+     "type": "transit",
+     "mode": "placeList",
+     "heading": "Verkehr",
+     "blocks": [
+      {
+       "id": 104,
+       "type": "train",
+       "depart": {
+        "date": "2027-05-11",
+        "time": "09:00",
+        "place": {
+         "place_id": "PID_SA",
+         "name": "Station A",
+         "geometry": {
+          "location": {
+           "lat": 35.68,
+           "lng": 139.76
+          },
+          "viewport": {
+           "south": 35.67,
+           "west": 139.75,
+           "north": 35.69,
+           "east": 139.76999999999998
+          }
+         },
+         "formatted_address": "Station A Street 1, Testcity",
+         "rating": 4.5,
+         "user_ratings_total": 100,
+         "website": "https://example.com/PID_SA",
+         "international_phone_number": "+00 000 0000",
+         "address_components": [
+          {
+           "long_name": "Testcity",
+           "short_name": "Testcity",
+           "types": [
+            "locality"
+           ]
+          }
+         ],
+         "vicinity": "x"
+        }
+       },
+       "arrive": {
+        "date": "2027-05-11",
+        "time": "11:30",
+        "place": {
+         "place_id": "PID_SB",
+         "name": "Station B",
+         "geometry": {
+          "location": {
+           "lat": 34.73,
+           "lng": 135.5
+          },
+          "viewport": {
+           "south": 34.72,
+           "west": 135.49,
+           "north": 34.739999999999995,
+           "east": 135.51
+          }
+         },
+         "formatted_address": "Station B Street 1, Testcity",
+         "rating": 4.5,
+         "user_ratings_total": 100,
+         "website": "https://example.com/PID_SB",
+         "international_phone_number": "+00 000 0000",
+         "address_components": [
+          {
+           "long_name": "Testcity",
+           "short_name": "Testcity",
+           "types": [
+            "locality"
+           ]
+          }
+         ],
+         "vicinity": "x"
+        }
+       },
+       "text": {
+        "ops": [
+         {
+          "insert": "Take the fast train from A to B\n"
+         }
+        ]
+       },
+       "attachments": [],
+       "carrier": null
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "Routentext\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 3,
+     "type": "hotels",
+     "mode": "placeList",
+     "heading": "Hotels",
+     "blocks": [
+      {
+       "id": 101,
+       "type": "place",
+       "place": {
+        "place_id": "PID_HT",
+        "name": "Hotel T",
+        "geometry": {
+         "location": {
+          "lat": 35.67,
+          "lng": 139.74
+         },
+         "viewport": {
+          "south": 35.660000000000004,
+          "west": 139.73000000000002,
+          "north": 35.68,
+          "east": 139.75
+         }
+        },
+        "formatted_address": "Hotel T Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_HT",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": [],
+       "hotel": {
+        "checkIn": "2027-05-09",
+        "checkOut": "2027-05-11",
+        "travelerNames": [
+         "Alice Test"
+        ],
+        "confirmationNumber": "CONF-T"
+       },
+       "guests": {
+        "adultCount": 2,
+        "roomCount": 1,
+        "childrenAges": []
+       },
+       "cancellationDeadline": "2027-05-01",
+       "cancellationPolicy": "Free cancellation"
+      },
+      {
+       "id": 102,
+       "type": "place",
+       "place": {
+        "place_id": "PID_HO",
+        "name": "Hotel O",
+        "geometry": {
+         "location": {
+          "lat": 34.67,
+          "lng": 135.5
+         },
+         "viewport": {
+          "south": 34.660000000000004,
+          "west": 135.49,
+          "north": 34.68,
+          "east": 135.51
+         }
+        },
+        "formatted_address": "Hotel O Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_HO",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": [],
+       "hotel": {
+        "checkIn": "2027-05-11",
+        "checkOut": "2027-05-12",
+        "travelerNames": [
+         "Alice Test"
+        ]
+       },
+       "guests": {
+        "adultCount": 2,
+        "roomCount": 1
+       }
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 4,
+     "type": "normal",
+     "mode": "placeList",
+     "heading": "Tokio Sehenswürdigkeiten",
+     "blocks": [
+      {
+       "id": 105,
+       "type": "place",
+       "place": {
+        "place_id": "PID_T1",
+        "name": "Shrine T1",
+        "geometry": {
+         "location": {
+          "lat": 35.71,
+          "lng": 139.79
+         },
+         "viewport": {
+          "south": 35.7,
+          "west": 139.78,
+          "north": 35.72,
+          "east": 139.79999999999998
+         }
+        },
+        "formatted_address": "Shrine T1 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_T1",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": [],
+       "text": {
+        "ops": [
+         {
+          "insert": "Note on T1\n"
+         }
+        ]
+       },
+       "reactions": {
+        "🕖": [
+         1
+        ]
+       }
+      },
+      {
+       "id": 106,
+       "type": "place",
+       "place": {
+        "place_id": "PID_T2",
+        "name": "Shrine T2",
+        "geometry": {
+         "location": {
+          "lat": 35.68,
+          "lng": 139.77
+         },
+         "viewport": {
+          "south": 35.67,
+          "west": 139.76000000000002,
+          "north": 35.69,
+          "east": 139.78
+         }
+        },
+        "formatted_address": "Shrine T2 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_T2",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      },
+      {
+       "id": 107,
+       "type": "note",
+       "text": {
+        "ops": [
+         {
+          "insert": "Tokyo note\n"
+         }
+        ]
+       },
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 5,
+     "type": "normal",
+     "mode": "placeList",
+     "heading": "Kyoto Tagesausflug (Osaka)",
+     "blocks": [
+      {
+       "id": 108,
+       "type": "place",
+       "place": {
+        "place_id": "PID_K1",
+        "name": "Temple K1",
+        "geometry": {
+         "location": {
+          "lat": 35.01,
+          "lng": 135.77
+         },
+         "viewport": {
+          "south": 35.0,
+          "west": 135.76000000000002,
+          "north": 35.019999999999996,
+          "east": 135.78
+         }
+        },
+        "formatted_address": "Temple K1 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_K1",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 6,
+     "type": "normal",
+     "mode": "placeList",
+     "heading": "Osaka Sehenswürdigkeiten",
+     "blocks": [
+      {
+       "id": 109,
+       "type": "place",
+       "place": {
+        "place_id": "PID_O1",
+        "name": "Castle O1",
+        "geometry": {
+         "location": {
+          "lat": 34.69,
+          "lng": 135.52
+         },
+         "viewport": {
+          "south": 34.68,
+          "west": 135.51000000000002,
+          "north": 34.699999999999996,
+          "east": 135.53
+         }
+        },
+        "formatted_address": "Castle O1 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_O1",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 7,
+     "type": "normal",
+     "mode": "placeList",
+     "heading": "Food-Spots",
+     "blocks": [
+      {
+       "id": 110,
+       "type": "place",
+       "place": {
+        "place_id": "PID_F1",
+        "name": "Food F1",
+        "geometry": {
+         "location": {
+          "lat": 35.66,
+          "lng": 139.7
+         },
+         "viewport": {
+          "south": 35.65,
+          "west": 139.69,
+          "north": 35.669999999999995,
+          "east": 139.70999999999998
+         }
+        },
+        "formatted_address": "Food F1 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_F1",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x",
+        "price_level": 2
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      },
+      {
+       "id": 111,
+       "type": "place",
+       "place": {
+        "place_id": "PID_T1",
+        "name": "Shrine T1",
+        "geometry": {
+         "location": {
+          "lat": 35.71,
+          "lng": 139.79
+         },
+         "viewport": {
+          "south": 35.7,
+          "west": 139.78,
+          "north": 35.72,
+          "east": 139.79999999999998
+         }
+        },
+        "formatted_address": "Shrine T1 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_T1",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 8,
+     "type": "normal",
+     "mode": "placeList",
+     "heading": "Useful Apps",
+     "blocks": [
+      {
+       "id": 112,
+       "type": "note",
+       "text": {
+        "ops": [
+         {
+          "insert": "App one\n"
+         }
+        ]
+       },
+       "attachments": []
+      },
+      {
+       "id": 113,
+       "type": "note",
+       "text": {
+        "ops": [
+         {
+          "insert": "App two\n"
+         }
+        ]
+       },
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    },
+    {
+     "id": 9,
+     "type": "normal",
+     "mode": "dayPlan",
+     "heading": "Tokio Tag",
+     "blocks": [
+      {
+       "id": 114,
+       "type": "note",
+       "text": {
+        "ops": [
+         {
+          "insert": "Day note\n"
+         }
+        ]
+       },
+       "attachments": []
+      },
+      {
+       "id": 115,
+       "type": "place",
+       "place": {
+        "place_id": "PID_T2",
+        "name": "Shrine T2",
+        "geometry": {
+         "location": {
+          "lat": 35.68,
+          "lng": 139.77
+         },
+         "viewport": {
+          "south": 35.67,
+          "west": 139.76000000000002,
+          "north": 35.69,
+          "east": 139.78
+         }
+        },
+        "formatted_address": "Shrine T2 Street 1, Testcity",
+        "rating": 4.5,
+        "user_ratings_total": 100,
+        "website": "https://example.com/PID_T2",
+        "international_phone_number": "+00 000 0000",
+        "address_components": [
+         {
+          "long_name": "Testcity",
+          "short_name": "Testcity",
+          "types": [
+           "locality"
+          ]
+         }
+        ],
+        "vicinity": "x"
+       },
+       "imageSize": "large",
+       "upvotedBy": [],
+       "attachments": []
+      }
+     ],
+     "placeMarkerColor": "#000000",
+     "date": "2027-05-10",
+     "text": {
+      "ops": [
+       {
+        "insert": "\n"
+       }
+      ]
+     }
+    }
+   ],
+   "budget": {
+    "expenses": [
+     {
+      "id": 1,
+      "amount": {
+       "amount": 100.0,
+       "currencyCode": "EUR"
+      },
+      "category": "hotel",
+      "description": "Hotel T",
+      "date": "2027-05-01",
+      "blockId": 101,
+      "associatedDate": "2027-05-09"
+     },
+     {
+      "id": 2,
+      "amount": {
+       "amount": 250.0,
+       "currencyCode": "EUR"
+      },
+      "category": "flight",
+      "description": "Flight T",
+      "date": "2027-05-01",
+      "blockId": 103,
+      "associatedDate": "2027-05-08"
+     }
+    ],
+    "payments": []
+   }
+  }
+ },
+ "resources": {
+  "geo": {
+   "x": 1
+  },
+  "placeMetadata": [
+   {
+    "id": 1,
+    "name": "Shrine T1",
+    "placeId": "PID_T1",
+    "description": null,
+    "generatedDescription": "A test shrine",
+    "categories": [
+     "Shrine"
+    ],
+    "minMinutesSpent": 60,
+    "maxMinutesSpent": 90,
+    "rating": 4.5,
+    "numRatings": 100,
+    "imageKeys": [
+     "img1"
+    ],
+    "openingPeriods": [
+     {
+      "open": {
+       "day": 0,
+       "time": "0900"
+      },
+      "close": {
+       "day": 0,
+       "time": "1700"
+      }
+     },
+     {
+      "open": {
+       "day": 1,
+       "time": "0000"
+      }
+     }
+    ]
+   },
+   {
+    "id": 2,
+    "name": "Temple K1",
+    "placeId": "PID_K1",
+    "categories": [],
+    "minMinutesSpent": 120,
+    "openingPeriods": [
+     {
+      "open": {
+       "day": 2,
+       "time": "1000"
+      },
+      "close": {
+       "day": 2,
+       "time": "1600"
+      }
+     }
+    ]
+   }
+  ]
+ },
+ "settings": {}
+}
