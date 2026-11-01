@@ -127,18 +127,44 @@ class SyncEngineServerTest {
         assertEquals(0, a.outbox.size())
 
         engine(a).resetLocalCursor()
-        assertEquals(0L, a.state.since)
+        val r = sync(a)
+        assertTrue(r.pushed > 0)
         assertEquals(epoch, a.state.epoch)
-        val queued = a.outbox.peek(10_000).map { it.change }
-        assertTrue(queued.isNotEmpty())
-        assertTrue(queued.any { it.field == "note" })
-        for (c in queued) {
-            assertTrue(c.field != "_source" && c.field != "_sourceId" && !c.field.startsWith("_base."))
-            assertEquals("dev-aaaaaaaaaaaa", Hlc.parse(c.hlc).nodeId)
-        }
-        // Server-written fields are not re-pushed, so the server accepts the whole state.
-        sync(a)
+        assertTrue(a.state.since > 0)
         assertEquals(0, a.outbox.size())
+        assertEquals(false, a.state.pendingReset)
+        assertEquals("A edited", a.savedPlace("A edited").note)
+    }
+
+    @Test fun resetRepushesServerConflictWinnersRelabelledToDevice() {
+        val a = Device("dev-aaaaaaaaaaaa", tokenA)
+        var id = ""
+        withServer("s1") {
+            api(a).triggerImport()
+            sync(a)
+            id = a.savedPlace(oldNote).id
+            setNote(a, id, "App version")
+            sync(a)
+        }
+        // A fresh server that imports first turns the older device edit into a server-written conflict winner.
+        withServer("s2") {
+            api(a).triggerImport()
+            sync(a)
+            val note = a.store.get(EntityType.SAVED_PLACE, id)!!.fields.getValue("note")
+            assertEquals("server", Hlc.parse(note.hlc).nodeId)
+        }
+        // Another fresh server: the server-node fields must be re-pushed (relabelled), not rejected as reserved.
+        withServer("s3") {
+            api(a).triggerImport()
+            sync(a)
+            val c = Device("dev-cccccccccccc", tokenA)
+            sync(c)
+            for (d in listOf(a, c)) {
+                assertEquals("App version", d.snapshot().savedPlaces.first { it.id == id }.note)
+                val conflict = d.snapshot().conflicts.single { it.id == id && it.field == "note" }
+                assertEquals(JsonPrimitive(oldNote), conflict.wanderlogValue)
+            }
+        }
     }
 
     @Test fun newServerDatabaseTriggersFullRepush() {
@@ -172,6 +198,10 @@ class SyncEngineServerTest {
             val notes = c.snapshot().savedPlaces.associate { it.id to it.note }
             assertEquals("A edited", notes[aId])
             assertEquals("B edited", notes[bId])
+            // The fresh server imported before the devices re-pushed, so both older edits surface as open conflicts
+            // (the edit wins, the imported text is offered as the Wanderlog value).
+            val conflicts = c.snapshot().conflicts.map { it.id to it.field }.toSet()
+            assertEquals(setOf(aId to "note", bId to "note"), conflicts)
             sync(a)
             assertEquals("B edited", a.snapshot().savedPlaces.first { it.id == bId }.note)
             assertEquals("A edited", b.snapshot().savedPlaces.first { it.id == aId }.note)

@@ -216,7 +216,8 @@ class SyncEngineTest {
         assertEquals("e2", failing.state.epoch)
         assertEquals(0L, failing.state.since)
         val queued = failing.outbox.peek(100).map { it.change.field }.sorted()
-        assertEquals(listOf("deleted", "note"), queued)
+        assertEquals(listOf("_removedInSource", "deleted", "note"), queued)
+        assertTrue(failing.outbox.peek(100).all { Hlc.parse(it.change.hlc).nodeId == node })
 
         val ok = Rig { req ->
             when (req.url.encodedPath) {
@@ -228,7 +229,7 @@ class SyncEngineTest {
         seedRecord(ok)
         ok.state.epoch = "e1"
         ok.state.since = 99
-        assertEquals(SyncResult.Ok(2, 0), ok.engine.sync())
+        assertEquals(SyncResult.Ok(3, 0), ok.engine.sync())
         assertEquals(0, ok.outbox.size())
     }
 
@@ -253,7 +254,7 @@ class SyncEngineTest {
         rig.state.epoch = "e1"
         rig.state.since = 500
         val r = rig.engine.sync()
-        assertEquals(SyncResult.Ok(2, 0), r)
+        assertEquals(SyncResult.Ok(3, 0), r)
         assertEquals(3L, rig.state.since)
         assertEquals("e1", rig.state.epoch)
         assertEquals(2, rig.paths().count { it == "/api/sync/pull" })
@@ -286,15 +287,48 @@ class SyncEngineTest {
         assertNull(rig.state.lastSyncAt)
     }
 
-    @Test fun resetLocalCursorKeepsEpoch() = runTest {
-        val rig = Rig { health() }
+    @Test fun resetLocalCursorIsAppliedBySyncAndKeepsEpoch() = runTest {
+        val rig = Rig { req ->
+            when (req.url.encodedPath) {
+                "/api/health" -> health()
+                "/api/sync/push" -> json(HttpStatusCode.OK, pushOk())
+                else -> emptyPull("e1", 4)
+            }
+        }
         seedRecord(rig)
         rig.state.epoch = "e1"
         rig.state.since = 77
         rig.outbox.add(listOf(change("dup")))
         rig.engine.resetLocalCursor()
-        assertEquals(0L, rig.state.since)
+        assertTrue(rig.state.pendingReset)
+        assertEquals(1, rig.outbox.size())
+        assertEquals(SyncResult.Ok(3, 0), rig.engine.sync())
+        assertEquals(false, rig.state.pendingReset)
         assertEquals("e1", rig.state.epoch)
-        assertEquals(listOf("deleted", "note"), rig.outbox.peek(100).map { it.change.field }.sorted())
+        assertEquals(4L, rig.state.since)
+        assertEquals(0, rig.outbox.size())
+        assertEquals(
+            listOf(0L),
+            rig.requests.filter { it.url.encodedPath == "/api/sync/pull" }.map { it.url.parameters["since"]!!.toLong() },
+        )
+    }
+
+    @Test fun unexpectedExceptionBecomesFailedAndKeepsOutbox() = runTest {
+        val rig = Rig { req ->
+            when (req.url.encodedPath) {
+                "/api/health" -> health()
+                "/api/sync/push" -> json(HttpStatusCode.OK, pushOk())
+                else -> json(
+                    HttpStatusCode.OK,
+                    """{"records":[{"type":"NOTE","id":"n","fields":{"text":{"value":"x","hlc":"garbage"}}}],"nextSeq":1,"hasMore":false,"epoch":"e1"}""",
+                )
+            }
+        }
+        rig.outbox.add(listOf(change("a")))
+        val r = assertIs<SyncResult.Failed>(rig.engine.sync())
+        assertEquals(ApiErrorKind.SERVER, r.kind)
+        assertEquals("Unerwarteter Fehler beim Synchronisieren", r.message)
+        assertEquals(r.message, rig.state.lastError)
+        assertEquals(0L, rig.state.since)
     }
 }

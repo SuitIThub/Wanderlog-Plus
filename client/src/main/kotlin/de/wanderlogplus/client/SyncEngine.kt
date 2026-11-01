@@ -5,7 +5,9 @@ import de.wanderlogplus.shared.sync.FieldChange
 import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
 import de.wanderlogplus.shared.sync.applyChanges
+import de.wanderlogplus.shared.sync.encode
 import de.wanderlogplus.shared.sync.parse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -29,6 +31,10 @@ class SyncEngine(
 
     suspend fun sync(): SyncResult = mutex.withLock {
         try {
+            if (state.pendingReset) {
+                resetCursorAndOutbox()
+                state.pendingReset = false
+            }
             val health = api.health()
             val known = state.epoch
             if (known == null) state.epoch = health.epoch
@@ -50,14 +56,27 @@ class SyncEngine(
             state.lastError = null
             SyncResult.Ok(counts.pushed, counts.pulled)
         } catch (e: ApiException) {
-            val message = messageFor(e.kind)
-            state.lastError = message
-            SyncResult.Failed(e.kind, message)
+            failed(e.kind, messageFor(e.kind))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Message omitted on purpose: it could carry field values.
+            failed(ApiErrorKind.SERVER, "Unerwarteter Fehler beim Synchronisieren")
         }
     }
 
-    /** Same as an epoch change, but keeps the stored epoch: the whole local field state is re-pushed. */
-    fun resetLocalCursor() = resetCursorAndOutbox()
+    private fun failed(kind: ApiErrorKind, message: String): SyncResult.Failed {
+        state.lastError = message
+        return SyncResult.Failed(kind, message)
+    }
+
+    /**
+     * Same as an epoch change, but keeps the stored epoch: the whole local field state is re-pushed. Only flags the
+     * reset; the next [sync] performs it under the mutex, so it cannot interleave with a running sync.
+     */
+    fun resetLocalCursor() {
+        state.pendingReset = true
+    }
 
     private fun resetCursorAndOutbox() = tx.run {
         state.since = 0
@@ -71,15 +90,22 @@ class SyncEngine(
     }
 
     /**
-     * Fields written by devices. Importer/server-written fields are skipped: the server rejects those node ids
-     * on push and regenerates them itself.
+     * Device fields as stored. Importer-written fields are skipped (reserved on push; the importer regenerates them).
+     * Server-written fields (conflict winners, `_conflict.*`, revives) are re-labelled to this device's node id,
+     * keeping wallMillis and counter, so they survive on a fresh server.
      */
     private fun localFieldState(): List<FieldChange> = store.all().flatMap { r ->
         r.fields.mapNotNull { (field, fv) ->
             if (field == "_source" || field == "_sourceId" || field.startsWith("_base.")) return@mapNotNull null
             val node = Hlc.parse(fv.hlc).nodeId
-            if (node == "importer" || node == "server") return@mapNotNull null
-            FieldChange(r.type, r.id, field, fv.value, fv.hlc)
+            when (node) {
+                "importer" -> null
+                "server" -> {
+                    val h = Hlc.parse(fv.hlc)
+                    FieldChange(r.type, r.id, field, fv.value, Hlc(h.wallMillis, h.counter, clock.nodeId).encode())
+                }
+                else -> FieldChange(r.type, r.id, field, fv.value, fv.hlc)
+            }
         }
     }
 
@@ -87,8 +113,6 @@ class SyncEngine(
         while (true) {
             val block = outbox.peek(BLOCK).toMutableList()
             if (block.isEmpty()) return
-            var attempts = 0
-            val maxAttempts = block.size
             while (block.isNotEmpty()) {
                 try {
                     val response = api.push(block.map { it.change })
@@ -98,8 +122,7 @@ class SyncEngine(
                     break
                 } catch (e: ApiException) {
                     val n = rejectedIndex(e)
-                    if (n == null || n < 1 || n > block.size || attempts >= maxAttempts) throw e
-                    attempts++
+                    if (n == null || n < 1 || n > block.size) throw e
                     outbox.remove(listOf(block.removeAt(n - 1).seq))
                 }
             }

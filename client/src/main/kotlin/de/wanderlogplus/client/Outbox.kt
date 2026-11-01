@@ -17,6 +17,9 @@ interface SyncStateStore {
     var epoch: String?
     var lastSyncAt: Long?
     var lastError: String?
+
+    /** Set by [SyncEngine.resetLocalCursor]; consumed by the next sync. */
+    var pendingReset: Boolean
 }
 
 class InMemoryOutbox : Outbox {
@@ -43,4 +46,5 @@ class InMemorySyncState : SyncStateStore {
     override var epoch: String? = null
     override var lastSyncAt: Long? = null
     override var lastError: String? = null
+    override var pendingReset: Boolean = false
 }
