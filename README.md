@@ -29,13 +29,24 @@ Begleit-App für Wanderlog mit eigenem Sync-Server: Reiseplan offline ansehen un
 ./gradlew :app:installDebug   # mit angeschlossenem Gerät
 ```
 
+## Screenshots erzeugen
+
+```
+./gradlew :app:testDebugUnitTest --tests '*Screenshot*'
+```
+
+Die Screenshot-Tests (Roborazzi auf Robolectric) rendern jeden Hauptscreen hell und dunkel, auch mit langen Texten, und legen die PNGs nach `app/build/outputs/roborazzi/`. Referenzbilder werden nicht committet. Unter Robolectric erscheinen keine Emoji, Fotos und Karten zeigen ihre Ersatzgrafik.
+
+Liegt der echte Export in `testdata/private/`, entstehen zusätzlich Screenshots mit echten Daten. Diese enthalten Buchungsdaten (Bestätigungsnummern, Reisende) und werden nicht geteilt; sie bleiben unter `app/build/`.
+
 ## Karte
 
 Karten zeigen OpenStreetMap-Daten über [MapLibre](https://maplibre.org/) mit dem freien Stil von [OpenFreeMap](https://openfreemap.org/) (`https://tiles.openfreemap.org/styles/liberty`). Ein API-Key ist nicht nötig.
 
 - **Orte pro Region:** Umschalter „Liste | Karte“, interaktive Karte mit farbigen Punkten nach Status; ein Tipp auf einen Punkt öffnet den Ort. Kacheln landen im Cache von MapLibre.
 - **Routenkarten** für Flüge (Bogen) und Züge (Linie): einmal als Bild gerendert und im App-Cache (`cache/route-maps`) abgelegt, danach offline verfügbar. Ohne Netz und ohne Cache erscheint eine stilisierte Grafik; ohne Koordinaten gibt es keine Karte. Die Route ist eine Luftlinie zwischen den Endpunkten, nicht der echte Verlauf.
-- Attribution „© OpenStreetMap“ ist auf jeder Karte sichtbar.
+- **Flüge ohne Koordinaten** nutzen den IATA-Code der Endpunkte (kleine Flughafen-Tabelle in `RouteGeometry.kt`).
+- Attribution „OpenFreeMap © OpenMapTiles Data from OpenStreetMap“ ist auf jeder Karte sichtbar.
 
 ## Server
 
