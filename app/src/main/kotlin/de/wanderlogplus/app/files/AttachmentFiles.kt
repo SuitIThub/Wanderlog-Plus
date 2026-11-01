@@ -29,7 +29,15 @@ class AttachmentFiles(private val dir: File) {
     /** Destination path, also when the file does not exist yet. */
     fun target(hash: String): File {
         require(HASH.matches(hash)) { "invalid hash" }
+        dir.mkdirs()
         return File(dir, hash)
+    }
+
+    /** Removes `tmp-*` and `*.part` leftovers (process died mid-write) not modified for [olderThanMs]. */
+    fun cleanStale(olderThanMs: Long = 3_600_000L, now: Long = System.currentTimeMillis()) {
+        dir.listFiles()?.forEach {
+            if (it.isFile && (it.name.startsWith("tmp-") || it.name.endsWith(".part")) && now - it.lastModified() > olderThanMs) it.delete()
+        }
     }
 
     /** Called after a file was placed at [target] by someone else (e.g. a download). */

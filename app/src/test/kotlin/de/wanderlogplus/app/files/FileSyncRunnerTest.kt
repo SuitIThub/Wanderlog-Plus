@@ -99,4 +99,41 @@ class FileSyncRunnerTest {
         assertEquals(FileSyncResult(0, 0, 0), runner(null, listOf(Attachment(id = "a1", fileHash = abc))).run())
         assertEquals(1, db.pendingUploads().all().size)
     }
+
+    @Test fun downloadCreatesMissingDirectory() = runBlocking {
+        files = AttachmentFiles(java.io.File(tmp.root, "fresh/attachments"))
+        val r = runner(api { respond("abc".toByteArray(), HttpStatusCode.OK) }, listOf(Attachment(id = "a1", fileHash = abc))).run()
+        assertEquals(FileSyncResult(0, 1, 0), r)
+        assertNotNull(files.fileFor(abc))
+    }
+
+    @Test fun rejectedUploadIsDroppedAndNotRetryable() = runBlocking {
+        val imported = files.importStream("abc".byteInputStream())
+        db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))
+        val r = runner(api { respond("""{"error":"file_too_large"}""", HttpStatusCode.PayloadTooLarge, json) }).run()
+        assertEquals(1, r.failed)
+        assertFalse(r.retryable)
+        assertTrue(db.pendingUploads().all().isEmpty())
+    }
+
+    @Test fun networkFailureKeepsRowAndIsRetryable() = runBlocking {
+        val imported = files.importStream("abc".byteInputStream())
+        db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))
+        val r = runner(api { respond("boom", HttpStatusCode.InternalServerError) }).run()
+        assertEquals(1, r.failed)
+        assertTrue(r.retryable)
+        assertEquals(1, db.pendingUploads().all().size)
+    }
+
+    @Test fun runDeletesOnlyStaleTempFiles() = runBlocking {
+        val dir = tmp.newFolder("stale")
+        files = AttachmentFiles(dir)
+        val old = java.io.File(dir, "tmp-old").also { it.writeText("x"); it.setLastModified(System.currentTimeMillis() - 2 * 3_600_000L) }
+        val oldPart = java.io.File(dir, "$abc.part").also { it.writeText("x"); it.setLastModified(System.currentTimeMillis() - 2 * 3_600_000L) }
+        val fresh = java.io.File(dir, "tmp-new").also { it.writeText("x") }
+        runner(api { respond("{}", HttpStatusCode.OK, json) }).run()
+        assertFalse(old.exists())
+        assertFalse(oldPart.exists())
+        assertTrue(fresh.exists())
+    }
 }

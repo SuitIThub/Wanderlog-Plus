@@ -53,13 +53,18 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
     }
 
-    /** Uploads queued attachment files and downloads missing ones; appended so a running run is never cancelled. */
+    /** Uploads queued attachment files and downloads missing ones; appended only while a run is active, otherwise replaced so a backing-off chain does not grow. */
     fun requestFiles() {
+        val states = try {
+            work.getWorkInfosForUniqueWork(FILES).get().map { it.state }
+        } catch (e: Exception) {
+            emptyList()
+        }
         val request = OneTimeWorkRequestBuilder<FileSyncWorker>()
             .setConstraints(connected)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .build()
-        work.enqueueUniqueWork(FILES, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        work.enqueueUniqueWork(FILES, soonPolicy(states), request)
     }
 
     internal companion object {

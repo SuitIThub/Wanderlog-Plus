@@ -21,6 +21,7 @@ class FileSyncRunner(
 ) {
     suspend fun run(): FileSyncResult = withContext(Dispatchers.IO) {
         val api = api() ?: return@withContext FileSyncResult(0, 0, 0)
+        files.cleanStale()
         var uploaded = 0
         var downloaded = 0
         var failed = 0
@@ -44,6 +45,8 @@ class FileSyncRunner(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // The server will never accept this file (e.g. 413): drop it instead of retrying forever.
+                if (e is ApiException && e.kind == ApiErrorKind.BAD_REQUEST) uploads.delete(p.hash)
                 fail(e)
             }
         }

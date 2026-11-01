@@ -57,6 +57,7 @@ class SyncSchedulerTest {
         scheduler.requestFiles()
         scheduler.requestFiles()
         val all = infos("files")
+        assertEquals(1, all.filter { it.state == WorkInfo.State.ENQUEUED }.size)
         assertTrue(all.isNotEmpty())
         assertTrue(all.all { it.constraints.requiredNetworkType == NetworkType.CONNECTED })
         assertTrue(all.any { it.state == WorkInfo.State.ENQUEUED })
