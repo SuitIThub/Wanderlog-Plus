@@ -34,8 +34,15 @@ fun Hlc.Companion.parse(s: String): Hlc {
     )
 }
 
-/** Not thread-safe by itself; methods are synchronized. */
-class HlcClock(val nodeId: String, private val now: () -> Long = System::currentTimeMillis) {
+/**
+ * Methods are synchronized. A remote wall time more than [maxDriftMillis] ahead of the local clock counts as
+ * exactly `now() + maxDriftMillis` (its counter ignored), so a bogus peer can't push us far ahead.
+ */
+class HlcClock(
+    val nodeId: String,
+    private val maxDriftMillis: Long = 86_400_000,
+    private val now: () -> Long = System::currentTimeMillis,
+) {
     private var lastWall = Long.MIN_VALUE
     private var lastCounter = 0
 
@@ -49,11 +56,15 @@ class HlcClock(val nodeId: String, private val now: () -> Long = System::current
 
     @Synchronized
     fun receive(remote: Hlc): Hlc {
-        val wall = maxOf(now(), lastWall, remote.wallMillis)
+        val local = now()
+        val limit = local + maxDriftMillis
+        val remoteWall = minOf(remote.wallMillis, limit)
+        val remoteCounter = if (remote.wallMillis > limit) 0 else remote.counter
+        val wall = maxOf(local, lastWall, remoteWall)
         lastCounter = when {
-            wall == lastWall && wall == remote.wallMillis -> maxOf(lastCounter, remote.counter) + 1
+            wall == lastWall && wall == remoteWall -> maxOf(lastCounter, remoteCounter) + 1
             wall == lastWall -> lastCounter + 1
-            wall == remote.wallMillis -> remote.counter + 1
+            wall == remoteWall -> remoteCounter + 1
             else -> 0
         }
         lastWall = wall

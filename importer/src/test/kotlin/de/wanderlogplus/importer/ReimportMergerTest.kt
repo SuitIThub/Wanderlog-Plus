@@ -182,6 +182,36 @@ class ReimportMergerTest {
         assertTrue(run(s.without(f1)).changes.isEmpty())
     }
 
+    private fun refsTo(s: ImportSnapshot, place: ImportedEntity) = s.entities.filter {
+        it.type in setOf(EntityType.SAVED_PLACE, EntityType.STAY, EntityType.DAY_ITEM) &&
+            (it.fields["placeId"] as? JsonPrimitive)?.content == place.id
+    }
+
+    @Test
+    fun `placeReferencedByAppDataIsFlaggedNotDeleted`() {
+        val s = snapshot()
+        run(s)
+        val p = savedFor(s, "PID_F1").let { sp -> s.entities.first { it.type == EntityType.PLACE && it.id == (sp.fields["placeId"] as JsonPrimitive).content } }
+        val h = "000000000000001-000000-dev-a"
+        store.put(EntityRecord(EntityType.DAY_ITEM, "app-item", mapOf(
+            "placeId" to FieldValue(JsonPrimitive(p.id), h), "deleted" to FieldValue(JsonPrimitive(false), h))))
+        val gone = refsTo(s, p).toSet() + p
+        val r = run(ImportSnapshot(s.entities.filter { it !in gone }))
+        assertFalse(rec(p).isDeleted)
+        assertEquals(JsonPrimitive(true), rec(p).value("_removedInSource"))
+        assertTrue(r.stats.flaggedRemoved >= 1)
+    }
+
+    @Test
+    fun `unreferencedPlaceIsDeleted`() {
+        val s = snapshot()
+        run(s)
+        val p = savedFor(s, "PID_F1").let { sp -> s.entities.first { it.type == EntityType.PLACE && it.id == (sp.fields["placeId"] as JsonPrimitive).content } }
+        val gone = refsTo(s, p).toSet() + p
+        run(ImportSnapshot(s.entities.filter { it !in gone }))
+        assertTrue(rec(p).isDeleted)
+    }
+
     @Test
     fun `removed edited entity is flagged`() {
         val s = snapshot()

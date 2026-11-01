@@ -103,4 +103,21 @@ class TripQueriesTest {
         val places = listOf(SavedPlace("a", placeId = "pa", regionId = "o"))
         assertTrue(queries(places = places).suggestionsFor("2027-05-08").isEmpty())
     }
+
+    @Test
+    fun emptyStayDatesIgnored() {
+        val q = TripQueries(
+            trip,
+            listOf(Stay("bad", regionId = "o", checkIn = "", checkOut = "x"), stays[0]),
+            emptyList(), regions, emptyList(), emptyList(),
+        )
+        assertEquals("t", q.regionFor("2027-05-10"))
+        assertEquals(22, q.days().size)
+    }
+
+    @Test
+    fun emptyTripDates() {
+        val q = TripQueries(Trip("t"), stays, emptyList(), regions, emptyList(), emptyList())
+        assertTrue(q.days().isEmpty())
+    }
 }

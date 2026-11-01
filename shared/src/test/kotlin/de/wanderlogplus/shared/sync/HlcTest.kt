@@ -19,9 +19,9 @@ class HlcTest {
         assertTrue(clock.tick() > t1)
     }
 
-    @Test fun `receive from far-future remote keeps later local ticks greater`() {
+    @Test fun `receive from remote within drift keeps later local ticks greater`() {
         val clock = HlcClock("a") { 1000L }
-        val remote = Hlc(9_999_999_000L, 3, "b")
+        val remote = Hlc(5_000_000L, 3, "b")
         val r = clock.receive(remote)
         assertTrue(r > remote); assertTrue(clock.tick() > r)
     }
@@ -64,5 +64,18 @@ class HlcTest {
 
     @Test fun `nodeId breaks ties`() {
         assertTrue(Hlc(1, 1, "a") < Hlc(1, 1, "b"))
+    }
+
+    @Test fun receiveCapsFarFutureRemote() {
+        val clock = HlcClock("a") { 1_000L }
+        val r = clock.receive(Hlc(1_000L + 3 * 86_400_000L, 3, "b"))
+        assertEquals(1_000L + 86_400_000L, r.wallMillis)
+        assertTrue(clock.tick() > r)
+    }
+
+    @Test fun receiveWithinDriftUnchanged() {
+        val clock = HlcClock("a") { 1_000L }
+        val r = clock.receive(Hlc(1_000L + 3_600_000L, 5, "b"))
+        assertEquals(1_000L + 3_600_000L, r.wallMillis); assertEquals(6, r.counter)
     }
 }

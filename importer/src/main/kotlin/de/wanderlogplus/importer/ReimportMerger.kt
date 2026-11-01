@@ -25,6 +25,8 @@ class ReimportMerger(private val clock: HlcClock) {
         const val SOURCE = "wanderlog"
         val FALSE: JsonElement = JsonPrimitive(false)
         val TRUE: JsonElement = JsonPrimitive(true)
+        /** Record types whose `placeId` field keeps a PLACE alive. */
+        val REFERRERS = setOf(EntityType.SAVED_PLACE, EntityType.STAY, EntityType.DAY_ITEM)
     }
 
     fun merge(snapshot: ImportSnapshot, store: EntityStore): ImportResult {
@@ -99,12 +101,18 @@ class ReimportMerger(private val clock: HlcClock) {
             if (rec.get("_removedInSource") == TRUE) set(entity.type, entity.id, "_removedInSource", FALSE)
         }
 
+        // Decide the non-place records first, so a place can tell which referrers survive this very pass.
+        val missing = store.all().filter { it.isFromWanderlog() && (it.type to it.id) !in seen && !it.isDeleted }
+        val toDelete = missing.filter { it.type != EntityType.PLACE && !it.isEdited() }.map { it.type to it.id }.toSet()
+        val referenced = HashSet<String>()
         for (rec in store.all()) {
-            if (!rec.isFromWanderlog() || (rec.type to rec.id) in seen || rec.isDeleted) continue
-            // Nutzfelder with a base are the non-master snapshot fields; master fields never carry a base.
-            val nutzfelder = rec.fields.keys.filter { !it.startsWith("_") && it != "deleted" && "_base.$it" in rec.fields } + "deleted"
-            val edited = nutzfelder.any { rec.get(it) != rec.get("_base.$it") }
-            if (!edited) {
+            if (rec.type !in REFERRERS || rec.isDeleted || (rec.type to rec.id) in toDelete) continue
+            (rec.get("placeId") as? JsonPrimitive)?.takeIf { it.isString }?.let { referenced += it.content }
+        }
+
+        for (rec in missing) {
+            val delete = if (rec.type == EntityType.PLACE) rec.id !in referenced && !rec.isEdited() else (rec.type to rec.id) in toDelete
+            if (delete) {
                 set(rec.type, rec.id, "deleted", TRUE)
                 set(rec.type, rec.id, "_base.deleted", TRUE)
                 removed++
@@ -118,6 +126,12 @@ class ReimportMerger(private val clock: HlcClock) {
     }
 
     private fun EntityRecord.get(field: String): JsonElement = fields[field]?.value ?: JsonNull
+
+    /** Nutzfelder with a base are the non-master snapshot fields; master fields never carry a base. */
+    private fun EntityRecord.isEdited(): Boolean {
+        val nutzfelder = fields.keys.filter { !it.startsWith("_") && it != "deleted" && "_base.$it" in fields } + "deleted"
+        return nutzfelder.any { get(it) != get("_base.$it") }
+    }
 
     private fun EntityRecord.isFromWanderlog() = get("_source") == JsonPrimitive(SOURCE)
 }
