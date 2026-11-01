@@ -146,7 +146,10 @@ fun AppNavigation(
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
-    LaunchedEffect(pendingSetup) {
+    val graphReady = backStack != null
+    LaunchedEffect(pendingSetup, graphReady) {
+        // On a cold start the NavHost below has not set its graph yet; navigating then would crash.
+        if (!graphReady) return@LaunchedEffect
         if (pendingSetup != null && nav.currentDestination?.route != SETUP_ROUTE) {
             nav.navigate(SETUP_ROUTE) { launchSingleTop = true }
         }
@@ -214,6 +217,7 @@ fun AppNavigation(
                                 onSyncNow = onRefresh,
                                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
                                 onOpenLink = onOpenLink,
+                                available = attachmentActions?.available ?: { true },
                             )
                         }
                     }

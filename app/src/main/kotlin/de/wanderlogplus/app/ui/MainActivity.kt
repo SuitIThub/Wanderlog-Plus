@@ -108,7 +108,8 @@ class MainActivity : ComponentActivity() {
                 val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
                 val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
-                LaunchedEffect(remindersEnabled) { if (remindersEnabled) requestNotificationPermissionOnce() }
+                // Not on the very first launch before Setup: ask once a server is configured.
+                LaunchedEffect(remindersEnabled, hasServer) { if (remindersEnabled && hasServer == true) requestNotificationPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
                 if (loadFailed) {
@@ -190,7 +191,7 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val tester = SetupViewModel.connectionTester(container.http)
             val cur = current()
-            return SetupViewModel(tester, cur?.url.orEmpty(), cur?.token.orEmpty()) { url, token ->
+            return SetupViewModel(tester, cur?.url.orEmpty(), cur?.token.orEmpty(), savedServer = { container.settings.server.first() }) { url, token ->
                 container.settings.saveServer(ServerSettings(url, token))
                 container.syncScheduler.schedulePeriodic()
                 container.syncScheduler.requestNow()

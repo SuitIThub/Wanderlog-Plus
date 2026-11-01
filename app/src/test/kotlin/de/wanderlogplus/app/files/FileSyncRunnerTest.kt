@@ -116,6 +116,41 @@ class FileSyncRunnerTest {
         assertTrue(db.pendingUploads().all().isEmpty())
     }
 
+    @Test fun proxy413WithoutBodyKeepsRowAndIsNotRetryable() = runBlocking {
+        val imported = files.importStream("abc".byteInputStream())
+        db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))
+        val r = runner(api { respond("", HttpStatusCode.PayloadTooLarge) }).run()
+        assertEquals(1, r.failed)
+        assertFalse(r.retryable)
+        assertEquals(1, db.pendingUploads().all().size)
+    }
+
+    @Test fun tooManyRequestsKeepsRowAndIsRetryable() = runBlocking {
+        val imported = files.importStream("abc".byteInputStream())
+        db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))
+        val r = runner(api { respond("""{"error":"rate_limited"}""", HttpStatusCode.TooManyRequests, json) }).run()
+        assertEquals(1, r.failed)
+        assertTrue(r.retryable)
+        assertEquals(1, db.pendingUploads().all().size)
+    }
+
+    @Test fun otherClientErrorKeepsRowAndIsNotRetryable() = runBlocking {
+        val imported = files.importStream("abc".byteInputStream())
+        db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))
+        val r = runner(api { respond("""{"error":"bad_request"}""", HttpStatusCode.BadRequest, json) }).run()
+        assertEquals(1, r.failed)
+        assertFalse(r.retryable)
+        assertEquals(1, db.pendingUploads().all().size)
+    }
+
+    @Test fun invalidAttachmentHashesAreSkipped() = runBlocking {
+        var requests = 0
+        val atts = listOf(Attachment(id = "a1", fileHash = "../evil"), Attachment(id = "a2", fileHash = "F".repeat(64)))
+        val r = runner(api { requests++; respond("abc".toByteArray(), HttpStatusCode.OK) }, atts).run()
+        assertEquals(FileSyncResult(0, 0, 0), r)
+        assertEquals(0, requests)
+    }
+
     @Test fun networkFailureKeepsRowAndIsRetryable() = runBlocking {
         val imported = files.importStream("abc".byteInputStream())
         db.pendingUploads().insert(PendingUploadEntity(imported.hash, "a.txt", "text/plain", 1))

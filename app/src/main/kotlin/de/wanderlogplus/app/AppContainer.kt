@@ -133,13 +133,13 @@ class AppContainer(context: Context) {
         fileName: String,
         mimeType: String,
     ): String {
-        val imported = withContext(Dispatchers.IO) {
-            attachmentFiles.importStream(input).also {
-                db.pendingUploads().insert(PendingUploadEntity(it.hash, fileName, mimeType, System.currentTimeMillis()))
-            }
-        }
+        val imported = withContext(Dispatchers.IO) { attachmentFiles.importStream(input) }
         val resolvedTarget = targetId()
         val id = edit { e, _ -> e.addAttachment(targetType, resolvedTarget, imported.hash, fileName, mimeType, imported.size) }
+        // Queued only once the record exists, so a failed target or edit leaves no orphan upload.
+        withContext(Dispatchers.IO) {
+            db.pendingUploads().insert(PendingUploadEntity(imported.hash, fileName, mimeType, System.currentTimeMillis()))
+        }
         syncScheduler.requestFiles()
         return id
     }

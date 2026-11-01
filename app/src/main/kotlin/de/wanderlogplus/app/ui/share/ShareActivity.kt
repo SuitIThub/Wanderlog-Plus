@@ -10,6 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +35,7 @@ import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.app.ui.attachments.ContentUriSource
+import de.wanderlogplus.app.ui.attachments.fileProviderAuthority
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.coroutines.CancellationException
@@ -65,7 +69,8 @@ class ShareViewModel(
                 importShared(sink, sources, target)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Also errors (e.g. OutOfMemoryError): the result must always be set so the activity finishes.
                 ShareResult(0, 0, sources.size)
             }
             _result.value = r
@@ -76,7 +81,7 @@ class ShareViewModel(
 class ShareActivity : ComponentActivity() {
     private val container get() = (application as WanderlogPlusApp).container
 
-    private val uris: List<Uri> by lazy { sharedUris(intent) }
+    private val uris: List<Uri> by lazy { sharedUris(intent, fileProviderAuthority(this)) }
 
     private val vm: ShareViewModel by viewModels {
         val c = container
@@ -93,31 +98,35 @@ class ShareActivity : ComponentActivity() {
         setContent {
             WanderlogPlusTheme {
                 Surface(Modifier.fillMaxSize()) {
-                    val hasServer by remember { c.settings.server.map { it != null } }.collectAsState(null)
-                    val snapshot by produceState<TripSnapshot?>(null) {
-                        try {
-                            c.snapshots().snapshot.collect { value = it }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            value = null
+                    Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                        val hasServer by remember { c.settings.server.map { it != null } }.collectAsState(null)
+                        val snapshot by produceState<TripSnapshot?>(null) {
+                            try {
+                                c.snapshots().snapshot.collect { value = it }
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                value = null
+                            }
                         }
-                    }
-                    val importing by vm.importing.collectAsState()
-                    val result by vm.result.collectAsState()
-                    LaunchedEffect(result) {
-                        result?.let {
-                            Toast.makeText(applicationContext, it.message(), Toast.LENGTH_LONG).show()
-                            finish()
+                        val importing by vm.importing.collectAsState()
+                        val result by vm.result.collectAsState()
+                        // Leaving mid-import would hide the outcome; the import finishes on its own.
+                        BackHandler(enabled = importing) { }
+                        LaunchedEffect(result) {
+                            result?.let {
+                                Toast.makeText(applicationContext, it.message(), Toast.LENGTH_LONG).show()
+                                finish()
+                            }
                         }
+                        ShareContent(
+                            hasServer = hasServer,
+                            snapshot = snapshot,
+                            fileCount = uris.size,
+                            importing = importing,
+                            onPick = vm::attach,
+                        )
                     }
-                    ShareContent(
-                        hasServer = hasServer,
-                        snapshot = snapshot,
-                        fileCount = uris.size,
-                        importing = importing,
-                        onPick = vm::attach,
-                    )
                 }
             }
         }
@@ -157,13 +166,14 @@ private fun containerSink(c: AppContainer) = ShareSink { target, input, name, mi
     )
 }
 
-/** EXTRA_STREAM: one Uri for SEND, a list for SEND_MULTIPLE. */
-internal fun sharedUris(intent: Intent): List<Uri> {
+/** EXTRA_STREAM: one Uri for SEND, a list for SEND_MULTIPLE. [ownAuthority] is our FileProvider, whose URIs are rejected. */
+internal fun sharedUris(intent: Intent, ownAuthority: String): List<Uri> {
     val list = if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
         IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
     } else {
         listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
     }
-    // Only content:// - a file:// URI from another app could point at this app's private files.
-    return list.filter { it.scheme == ContentResolver.SCHEME_CONTENT }
+    // Only content:// - a file:// URI from another app could point at this app's private files,
+    // and so could a URI of our own FileProvider (handed back to us).
+    return list.filter { it.scheme == ContentResolver.SCHEME_CONTENT && !it.authority.equals(ownAuthority, ignoreCase = true) }
 }

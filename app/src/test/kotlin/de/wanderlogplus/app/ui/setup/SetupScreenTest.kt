@@ -88,4 +88,57 @@ class SetupScreenTest {
         rule.waitForIdle()
         rule.onNodeWithText("Kein gültiger Einrichtungs-Code").assertIsDisplayed()
     }
+
+    private val old = de.wanderlogplus.app.data.ServerSettings("https://old.example.org", "oldtok")
+
+    private fun showWithSaved(): SetupViewModel {
+        val vm = SetupViewModel({ _, _ -> Result.success("alice") }, old.url, old.token, savedServer = { old }) { url, token -> saved += url to token }
+        rule.setContent { WanderlogPlusTheme { SetupScreen(vm, onSaved = {}) } }
+        return vm
+    }
+
+    @Test fun differentServerShowsWarning() {
+        val vm = showWithSaved()
+        vm.prefill(de.wanderlogplus.app.data.ServerSettings("https://evil.example.com", "x"))
+        rule.waitForIdle()
+        rule.onNodeWithText(
+            "Achtung: Dieser Link richtet einen anderen Server ein (evil.example.com). Beim Speichern werden alle Reisedaten dorthin übertragen.",
+        ).assertIsDisplayed()
+    }
+
+    @Test fun sameServerShowsNoWarning() {
+        val vm = showWithSaved()
+        vm.prefill(de.wanderlogplus.app.data.ServerSettings("https://old.example.org/", "newtok"))
+        rule.waitForIdle()
+        rule.onNodeWithTag("setup-other-server").assertDoesNotExist()
+    }
+
+    @Test fun savingDifferentServerAsksForConfirmation() {
+        val vm = showWithSaved()
+        vm.prefill(de.wanderlogplus.app.data.ServerSettings("https://evil.example.com", "x"))
+        rule.onNodeWithText("Verbindung testen").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Verbunden als alice").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Speichern").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Server wechseln?").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0, saved.size)
+        rule.onNodeWithText("Abbrechen").performClick()
+        rule.waitForIdle()
+        rule.onAllNodesWithText("Server wechseln?").assertCountEquals(0)
+        assertEquals(0, saved.size)
+        rule.onNodeWithText("Speichern").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Wechseln").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Wechseln").performClick()
+        rule.waitUntil(5_000) { saved.isNotEmpty() }
+        assertEquals("https://evil.example.com" to "x", saved.single())
+    }
+
+    @Test fun savingSameServerNeedsNoConfirmation() {
+        val vm = showWithSaved()
+        rule.onNodeWithText("Verbindung testen").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("Verbunden als alice").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Speichern").performClick()
+        rule.waitUntil(5_000) { saved.isNotEmpty() }
+        assertEquals(old.url to old.token, saved.single())
+        assertEquals(false, vm.state.value.confirmSwitch)
+    }
 }

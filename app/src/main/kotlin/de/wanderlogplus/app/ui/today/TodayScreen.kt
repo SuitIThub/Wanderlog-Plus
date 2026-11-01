@@ -57,6 +57,8 @@ fun TodayScreen(
     onOpenAttachment: (Attachment) -> Unit = {},
     /** Null hides the stay link buttons. */
     onOpenLink: ((ExternalLink) -> Unit)? = null,
+    /** Whether a file is stored locally (by hash); unavailable tickets are marked. */
+    available: (hash: String) -> Boolean = { true },
 ) {
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
@@ -91,7 +93,7 @@ fun TodayScreen(
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, modifier)
     }
 }
 
@@ -103,6 +105,7 @@ private fun During(
     onOpenDay: (String) -> Unit,
     onOpenAttachment: (Attachment) -> Unit,
     onOpenLink: ((ExternalLink) -> Unit)?,
+    available: (String) -> Boolean,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -164,7 +167,10 @@ private fun During(
                             tickets.forEach { a ->
                                 AssistChip(
                                     onClick = { onOpenAttachment(a) },
-                                    label = { Text(a.fileName.ifBlank { "Anhang" }) },
+                                    label = {
+                                        val name = a.fileName.ifBlank { "Anhang" }
+                                        Text(if (available(a.fileHash)) name else "$name (nicht offline)")
+                                    },
                                     modifier = Modifier.testTag("ticket-${a.id}"),
                                 )
                             }

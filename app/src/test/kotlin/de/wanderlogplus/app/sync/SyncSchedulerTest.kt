@@ -24,7 +24,9 @@ class SyncSchedulerTest {
 
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor { /* never run workers: keep requests ENQUEUED */ }.build())
+        // Never run workers: keep requests ENQUEUED. The tasks are kept (not dropped) so their pending futures are never
+        // finalized later in the suite, which would resume WorkManager on a closed database and fail an unrelated test.
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor { parked += it }.build())
         scheduler = SyncScheduler(context)
     }
 
@@ -67,5 +69,9 @@ class SyncSchedulerTest {
         assertEquals(androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.RUNNING)))
         assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.ENQUEUED)))
         assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(emptyList()))
+    }
+
+    private companion object {
+        val parked = java.util.Collections.synchronizedList(mutableListOf<Runnable>())
     }
 }

@@ -1,7 +1,9 @@
 package de.wanderlogplus.app.ui.today
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.client.TripSnapshot
@@ -53,5 +55,26 @@ class TicketQuickAccessTest {
         rule.onNodeWithTag("ticket-at1").performClick()
         assertEquals("at1", opened?.id)
         assertEquals("Ticket.pdf", opened?.fileName)
+    }
+
+    @Test fun ticketNotAvailableLocallyIsMarked() {
+        seed(EntityType.TRIP, "t1", Trip("t1", "Japan", "2027-05-18", "2027-05-22"))
+        seed(
+            EntityType.TRAIN, "tr1",
+            Train("tr1", "JR", depart = Endpoint("Kyoto", date = "2027-05-20", time = "09:00"), arrive = Endpoint("Osaka")),
+        )
+        seed(EntityType.ATTACHMENT, "at1", Attachment("at1", EntityType.TRAIN, "tr1", "f".repeat(64), "Ticket.pdf", "application/pdf", 10))
+        seed(EntityType.ATTACHMENT, "at2", Attachment("at2", EntityType.TRAIN, "tr1", "e".repeat(64), "Zweites.pdf", "application/pdf", 10))
+        rule.setContent {
+            WanderlogPlusTheme {
+                TodayScreen(
+                    TripSnapshot.from(store.all()), LocalDateTime.parse("2027-05-20T08:00"),
+                    onOpenDay = {}, onOpenTrip = {}, onSyncNow = {},
+                    available = { it == "e".repeat(64) },
+                )
+            }
+        }
+        rule.onNodeWithText("Ticket.pdf (nicht offline)").assertIsDisplayed()
+        rule.onNodeWithText("Zweites.pdf").assertIsDisplayed()
     }
 }

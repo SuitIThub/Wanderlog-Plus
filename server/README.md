@@ -41,6 +41,16 @@ Für das automatische HTTPS muss `WLP_DOMAIN` per DNS auf den Host zeigen, und d
 
 `.env` steht in `.gitignore`. Der Server ist nur auf `127.0.0.1:8080` veröffentlicht, von außen erreichbar ist er über Caddy (HTTPS).
 
+### Reverse Proxy und Upload-Größe
+
+Caddy begrenzt die Größe einer Anfrage standardmäßig nicht. Ein anderer Reverse Proxy muss Uploads bis `WLP_MAX_FILE_MB` plus etwas Puffer für den Multipart-Rahmen durchlassen, sonst lehnt er große Anhänge mit 413 ab, bevor sie den Server erreichen. Für nginx (Standard 1 MB) zum Beispiel:
+
+```
+client_max_body_size 26m;
+```
+
+Die App behält einen so abgelehnten Upload in der Warteschlange und versucht ihn bei der nächsten Synchronisation erneut. Nur die Antwort `file_too_large` vom Server selbst verwirft ihn.
+
 ## API
 
 Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` und `X-Protocol-Version: 1`.

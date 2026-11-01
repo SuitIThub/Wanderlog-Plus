@@ -17,12 +17,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -37,6 +37,7 @@ import coil.compose.AsyncImage
 import de.wanderlogplus.app.files.AttachmentFiles
 import de.wanderlogplus.shared.model.Attachment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -73,38 +74,55 @@ fun AttachmentViewerScreen(
     }
 }
 
-/** Renders each page as a bitmap of screen width once it becomes visible. */
+private sealed interface PdfState {
+    object Loading : PdfState
+    object Failed : PdfState
+    class Open(val fd: ParcelFileDescriptor, val renderer: PdfRenderer) : PdfState
+}
+
+private fun openPdf(file: File): PdfState.Open? = try {
+    val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    try {
+        PdfState.Open(fd, PdfRenderer(fd))
+    } catch (e: Exception) {
+        fd.close()
+        null
+    }
+} catch (e: Exception) {
+    null
+}
+
+/** Renders each page as a bitmap of screen width once it becomes visible. The PDF is opened off the main thread. */
 @Composable
 private fun PdfPages(file: File, modifier: Modifier = Modifier) {
-    val opened = remember(file) {
-        try {
-            val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
-            try {
-                fd to PdfRenderer(fd)
-            } catch (e: Exception) {
-                fd.close()
-                null
-            }
-        } catch (e: Exception) {
-            null
+    val state by produceState<PdfState>(PdfState.Loading, file) {
+        // Not cancellable, so an opened file is never lost; awaitDispose closes it even when we were cancelled meanwhile.
+        val open = withContext(Dispatchers.IO + NonCancellable) { openPdf(file) }
+        if (open == null) {
+            value = PdfState.Failed
+            return@produceState
         }
-    }
-    DisposableEffect(opened) {
-        onDispose {
+        value = open
+        awaitDispose {
             // Closing synchronizes on the renderer, so it waits for a running render; later renders see the cancelled scope and skip.
-            opened?.let { (fd, renderer) ->
-                synchronized(renderer) {
-                    try { renderer.close() } catch (_: Exception) {}
-                    try { fd.close() } catch (_: Exception) {}
-                }
+            synchronized(open.renderer) {
+                try { open.renderer.close() } catch (_: Exception) {}
+                try { open.fd.close() } catch (_: Exception) {}
             }
         }
     }
-    if (opened == null) {
-        Box(modifier, contentAlignment = Alignment.Center) { Text("PDF kann nicht angezeigt werden") }
-        return
+    val opened = when (val st = state) {
+        PdfState.Loading -> {
+            Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.testTag("viewer-pdf-loading")) }
+            return
+        }
+        PdfState.Failed -> {
+            Box(modifier, contentAlignment = Alignment.Center) { Text("PDF kann nicht angezeigt werden") }
+            return
+        }
+        is PdfState.Open -> st
     }
-    val renderer = opened.second
+    val renderer = opened.renderer
     val pageCount = remember(renderer) { renderer.pageCount }
     BoxWithConstraints(modifier) {
         val widthPx = with(LocalDensity.current) { maxWidth.roundToPx() }

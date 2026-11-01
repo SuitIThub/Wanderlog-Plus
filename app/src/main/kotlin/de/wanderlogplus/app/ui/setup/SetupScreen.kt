@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -55,6 +58,15 @@ fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Mo
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),
         )
+        s.otherServerHost?.let { host ->
+            Text(
+                "Achtung: Dieser Link richtet einen anderen Server ein ($host). Beim Speichern werden alle Reisedaten dorthin übertragen.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.testTag("setup-other-server"),
+            )
+        }
         if (s.insecure) {
             Text(
                 "Unverschlüsselte Verbindung über das Internet – Token und Buchungsdaten sind lesbar.",
@@ -77,5 +89,14 @@ fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Mo
         s.connectedAs?.let { Text("Verbunden als $it", color = MaterialTheme.colorScheme.primary) }
         s.testError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = { vm.save(onSaved) }, enabled = s.canSave) { Text("Speichern") }
+    }
+    if (s.confirmSwitch) {
+        AlertDialog(
+            onDismissRequest = vm::cancelSwitch,
+            title = { Text("Server wechseln?") },
+            text = { s.otherServerHost?.let { Text(it) } },
+            confirmButton = { TextButton(onClick = { vm.confirmSwitch(onSaved) }) { Text("Wechseln") } },
+            dismissButton = { TextButton(onClick = vm::cancelSwitch) { Text("Abbrechen") } },
+        )
     }
 }

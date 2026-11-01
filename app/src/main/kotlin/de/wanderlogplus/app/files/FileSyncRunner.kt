@@ -9,7 +9,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** [retryable] is true when at least one failure was a NETWORK or SERVER error (or not an API error at all). */
+/** [retryable] is true when at least one failure was a NETWORK or SERVER error, a 408/429 (or not an API error at all). */
 data class FileSyncResult(val uploaded: Int, val downloaded: Int, val failed: Int, val retryable: Boolean = false)
 
 /** Uploads queued attachment files, then downloads files referenced by attachments that are missing locally. */
@@ -28,7 +28,9 @@ class FileSyncRunner(
         var retryable = false
         fun fail(e: Exception) {
             failed++
-            if (e !is ApiException || e.kind == ApiErrorKind.NETWORK || e.kind == ApiErrorKind.SERVER) retryable = true
+            if (e !is ApiException || e.kind == ApiErrorKind.NETWORK || e.kind == ApiErrorKind.SERVER || e.status in RETRYABLE_STATUS) {
+                retryable = true
+            }
         }
 
         for (p in uploads.all()) {
@@ -45,13 +47,13 @@ class FileSyncRunner(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // The server will never accept this file (e.g. 413): drop it instead of retrying forever.
-                if (e is ApiException && e.kind == ApiErrorKind.BAD_REQUEST) uploads.delete(p.hash)
+                // Only the server's own verdict drops the file; other 4xx (e.g. a proxy's 413 without a body) stay queued.
+                if (e is ApiException && e.code == "file_too_large") uploads.delete(p.hash)
                 fail(e)
             }
         }
 
-        val missing = attachments().map { it.fileHash }.filter { it.isNotEmpty() }.distinct().filter { files.fileFor(it) == null }
+        val missing = attachments().map { it.fileHash }.filter { HASH.matches(it) }.distinct().filter { files.fileFor(it) == null }
         for (hash in missing) {
             try {
                 api.downloadFile(hash, files.target(hash))
@@ -64,5 +66,13 @@ class FileSyncRunner(
             }
         }
         FileSyncResult(uploaded, downloaded, failed, retryable)
+    }
+
+    private companion object {
+        /** Request timeout and rate limit: worth retrying although they are 4xx. */
+        val RETRYABLE_STATUS = setOf(408, 429)
+
+        /** Hashes that cannot name a file are skipped (neither failed nor retryable). */
+        val HASH = Regex("[0-9a-f]{64}")
     }
 }

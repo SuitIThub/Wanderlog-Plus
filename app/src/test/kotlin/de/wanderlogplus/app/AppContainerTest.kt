@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
+import de.wanderlogplus.shared.sync.EntityType
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -35,5 +36,28 @@ class AppContainerTest {
             container.scope.cancel()
             withContext(Dispatchers.IO) { container.db.close() }
         }
+    }
+
+    private fun withContainer(block: suspend (AppContainer) -> Unit) = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val container = AppContainer(context)
+        try {
+            container.warmUp()
+            block(container)
+        } finally {
+            container.scope.cancel()
+            withContext(Dispatchers.IO) { container.db.close() }
+        }
+    }
+
+    /** The pending upload is queued only once the attachment record was written. */
+    @Test fun addAttachmentQueuesNothingWhenTheTargetCannotBeResolved() = withContainer { c ->
+        val result = runCatching {
+            withTimeout(20_000) {
+                c.addAttachment(EntityType.DAY, { throw IllegalStateException("no day") }, "abc".byteInputStream(), "a.txt", "text/plain")
+            }
+        }
+        assertTrue(result.isFailure)
+        assertTrue(withContext(Dispatchers.IO) { c.db.pendingUploads().all() }.isEmpty())
     }
 }

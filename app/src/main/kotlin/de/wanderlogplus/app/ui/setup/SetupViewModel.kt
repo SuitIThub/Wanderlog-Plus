@@ -9,6 +9,7 @@ import de.wanderlogplus.client.ServerUrl
 import de.wanderlogplus.client.SyncApi
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -26,8 +27,20 @@ data class SetupState(
     val saving: Boolean = false,
     /** Set when a scanned QR code is not a valid setup link. */
     val scanError: String? = null,
+    /** Normalized URL of the server configured right now; null when none is configured (or not loaded yet). */
+    val savedUrl: String? = null,
+    /** Save was pressed for a different server; the switch must be confirmed. */
+    val confirmSwitch: Boolean = false,
 ) {
     val canSave: Boolean get() = connectedAs != null && !saving
+
+    /** Host of the entered server when a server is configured and the entered one differs from it; null otherwise. */
+    val otherServerHost: String? get() {
+        val saved = savedUrl ?: return null
+        val entered = ServerUrl.normalize(url).getOrNull() ?: return null
+        if (entered == saved) return null
+        return try { java.net.URI(entered).rawAuthority } catch (e: Exception) { null } ?: entered
+    }
 }
 
 /** [testConnection] receives the normalized URL and the token and returns the account name. */
@@ -36,10 +49,24 @@ class SetupViewModel(
     /** Prefill when opened from Settings; the connection must be tested again before saving. */
     initialUrl: String = "",
     initialToken: String = "",
+    /** The server configured right now (e.g. `settings.server.first()`); saving a different one needs a confirmation. */
+    savedServer: suspend () -> ServerSettings? = { null },
     private val persist: suspend (url: String, token: String) -> Unit,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SetupState(url = initialUrl, token = initialToken, insecure = isInsecure(initialUrl)))
     val state: StateFlow<SetupState> = _state
+
+    private val saved = viewModelScope.async {
+        val url = try {
+            savedServer()?.url?.let { ServerUrl.normalize(it).getOrNull() ?: it }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        _state.update { it.copy(savedUrl = url) }
+        url
+    }
 
     fun setUrl(v: String) = _state.update {
         it.copy(url = v, urlError = null, connectedAs = null, testError = null, insecure = isInsecure(v))
@@ -91,13 +118,29 @@ class SetupViewModel(
         }
     }
 
-    fun save(onSaved: () -> Unit) {
+    /** Saves the tested input; switching away from a configured server first asks for [confirmSwitch]. */
+    fun save(onSaved: () -> Unit) = save(onSaved, confirmed = false)
+
+    /** The user confirmed switching to another server: saves. */
+    fun confirmSwitch(onSaved: () -> Unit) {
+        _state.update { it.copy(confirmSwitch = false) }
+        save(onSaved, confirmed = true)
+    }
+
+    fun cancelSwitch() = _state.update { it.copy(confirmSwitch = false) }
+
+    private fun save(onSaved: () -> Unit, confirmed: Boolean) {
         val s = _state.value
         if (!s.canSave) return
         val url = ServerUrl.normalize(s.url).getOrNull() ?: return
         _state.update { it.copy(saving = true) }
         viewModelScope.launch {
             try {
+                val current = saved.await()
+                if (!confirmed && current != null && current != url) {
+                    _state.update { it.copy(confirmSwitch = true) }
+                    return@launch
+                }
                 persist(url, s.token.trim())
                 onSaved()
             } catch (e: CancellationException) {

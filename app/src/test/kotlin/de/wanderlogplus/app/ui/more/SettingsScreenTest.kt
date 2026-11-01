@@ -7,6 +7,8 @@ import androidx.compose.ui.test.performClick
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.sync.SyncStatus
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -64,5 +66,51 @@ class SettingsScreenTest {
         }
         rule.onNodeWithText("Gerätezeit verwenden").performClick()
         assertEquals(TripZone.DEVICE, picked)
+    }
+
+    private val hint = "Benachrichtigungen sind für die App ausgeschaltet."
+
+    private fun showReminders(enabled: Boolean, allowed: Boolean?) = rule.setContent {
+        WanderlogPlusTheme {
+            SettingsScreen(
+                SettingsInfo("https://s.example", "supersecret1234", "dev-abc123"),
+                SyncStatus(),
+                onChangeServer = {}, onSyncNow = {}, onResetSync = {},
+                remindersEnabled = enabled,
+                notificationsAllowed = allowed,
+            )
+        }
+    }
+
+    @Test fun remindersOnButNotificationsOffShowsHint() {
+        showReminders(enabled = true, allowed = false)
+        rule.onNodeWithText(hint).assertIsDisplayed()
+    }
+
+    @Test fun noHintWhenRemindersOffOrNotificationsAllowed() {
+        var enabled by androidx.compose.runtime.mutableStateOf(false)
+        var allowed by androidx.compose.runtime.mutableStateOf(false)
+        rule.setContent {
+            WanderlogPlusTheme {
+                SettingsScreen(
+                    SettingsInfo(null, null, ""), SyncStatus(),
+                    onChangeServer = {}, onSyncNow = {}, onResetSync = {},
+                    remindersEnabled = enabled, notificationsAllowed = allowed,
+                )
+            }
+        }
+        rule.onNodeWithText(hint).assertDoesNotExist()
+        enabled = true
+        allowed = true
+        rule.waitForIdle()
+        rule.onNodeWithText(hint).assertDoesNotExist()
+    }
+
+    @Test fun hintFollowsSystemSettingByDefault() {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        org.robolectric.Shadows.shadowOf(nm).setNotificationsEnabled(false)
+        showReminders(enabled = true, allowed = null)
+        rule.onNodeWithText(hint).assertIsDisplayed()
     }
 }

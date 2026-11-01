@@ -23,6 +23,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -53,8 +57,17 @@ fun SettingsScreen(
     onTripZone: (TripZone) -> Unit = {},
     remindersEnabled: Boolean = true,
     onRemindersEnabled: (Boolean) -> Unit = {},
+    /** Null: read from the system (re-checked on resume). */
+    notificationsAllowed: Boolean? = null,
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var systemAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+    LifecycleResumeEffect(context) {
+        systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        onPauseOrDispose { }
+    }
+    val allowed = notificationsAllowed ?: systemAllowed
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -79,6 +92,13 @@ fun SettingsScreen(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Erinnerungen an Fristen")
             Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
+        }
+        if (remindersEnabled && !allowed) {
+            Text(
+                "Benachrichtigungen sind für die App ausgeschaltet.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
 
         Text("Synchronisation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
