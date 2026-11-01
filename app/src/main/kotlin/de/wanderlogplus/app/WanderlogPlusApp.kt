@@ -16,6 +16,7 @@ class WanderlogPlusApp : Application() {
         container.warmUp()
         // A throw here (e.g. WorkManager unavailable) must never crash the process; log the class name only.
         val handler = CoroutineExceptionHandler { _, e -> Log.w("WanderlogPlusApp", "Startup sync scheduling failed: ${e.javaClass.simpleName}") }
+        container.scope.launch(handler) { container.syncScheduler.scheduleReminders() }
         container.scope.launch(handler) {
             if (container.settings.server.first() != null) {
                 container.syncScheduler.schedulePeriodic()

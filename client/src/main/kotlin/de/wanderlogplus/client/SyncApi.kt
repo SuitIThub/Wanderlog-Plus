@@ -30,7 +30,22 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import io.ktor.client.plugins.timeout
+import io.ktor.client.request.forms.InputProvider
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.ContentDisposition
+import io.ktor.http.Headers
+import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.streams.asInput
+import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 
 @Serializable
 data class HealthInfo(val status: String, val protocol: Int, val epoch: String, val serverTime: Long)
@@ -47,6 +62,9 @@ data class ImportLogInfo(
     val flaggedRemoved: Int = 0,
     val error: String? = null,
 )
+
+@Serializable
+data class UploadedFile(val hash: String, val size: Long, val duplicate: Boolean)
 
 @Serializable
 internal data class WhoAmI(val name: String)
@@ -122,6 +140,72 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    suspend fun uploadFile(file: File, fileName: String, mimeType: String): UploadedFile = call {
+        client.post("$base/api/files") {
+            auth()
+            timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "file",
+                            InputProvider(file.length()) { file.inputStream().asInput() },
+                            Headers.build {
+                                append(HttpHeaders.ContentType, mimeType)
+                                append(HttpHeaders.ContentDisposition, ContentDisposition.File.withParameter(ContentDisposition.Parameters.Name, "file").withParameter(ContentDisposition.Parameters.FileName, fileName).toString())
+                            },
+                        )
+                    },
+                ),
+            )
+        }
+    }
+
+    /** Streams to `<dest>.part`, verifies the SHA-256 against [hash], then moves into place. */
+    suspend fun downloadFile(hash: String, dest: File) {
+        val part = dest.resolveSibling(dest.name + ".part")
+        try {
+            client.prepareGet("$base/api/files/$hash") {
+                auth()
+                timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
+            }.execute { response ->
+                val status = response.status.value
+                if (status !in 200..299) throw classify(status, readError(response))
+                val digest = MessageDigest.getInstance("SHA-256")
+                val channel = response.bodyAsChannel()
+                val buf = ByteArray(64 * 1024)
+                part.outputStream().use { out ->
+                    while (true) {
+                        val n = channel.readAvailable(buf, 0, buf.size)
+                        if (n < 0) break
+                        if (n == 0) continue
+                        digest.update(buf, 0, n)
+                        out.write(buf, 0, n)
+                    }
+                }
+                val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                if (actual != hash.lowercase()) throw ApiException(ApiErrorKind.SERVER, message = "Datei beschädigt")
+            }
+            try {
+                Files.move(part.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (e: AtomicMoveNotSupportedException) {
+                Files.move(part.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (e: ApiException) {
+            part.delete()
+            throw e
+        } catch (e: CancellationException) {
+            part.delete()
+            throw e
+        } catch (e: IOException) {
+            part.delete()
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        } catch (e: Throwable) {
+            part.delete()
+            throw e
+        }
+    }
+
     private fun HttpRequestBuilder.auth() {
         header(HttpHeaders.Authorization, "Bearer $token")
         header(PROTOCOL_HEADER, PROTOCOL_VERSION.toString())
@@ -175,5 +259,6 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
 
     private companion object {
         val KNOWN_TYPES: Set<String> = EntityType.entries.map { it.name }.toSet()
+        const val DOWNLOAD_TIMEOUT_MS = 300_000L
     }
 }

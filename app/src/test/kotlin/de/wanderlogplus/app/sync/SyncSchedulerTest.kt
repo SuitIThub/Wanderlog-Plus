@@ -8,6 +8,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,9 @@ class SyncSchedulerTest {
 
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().build())
+        // Never run workers: keep requests ENQUEUED. The tasks are kept (not dropped) so their pending futures are never
+        // finalized later in the suite, which would resume WorkManager on a closed database and fail an unrelated test.
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor { parked += it }.build())
         scheduler = SyncScheduler(context)
     }
 
@@ -52,9 +55,23 @@ class SyncSchedulerTest {
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
     }
 
+    @Test fun requestFilesEnqueuesUniqueWork() {
+        scheduler.requestFiles()
+        scheduler.requestFiles()
+        val all = infos("files")
+        assertEquals(1, all.filter { it.state == WorkInfo.State.ENQUEUED }.size)
+        assertTrue(all.isNotEmpty())
+        assertTrue(all.all { it.constraints.requiredNetworkType == NetworkType.CONNECTED })
+        assertTrue(all.any { it.state == WorkInfo.State.ENQUEUED })
+    }
+
     @Test fun soonPolicyAppendsWhileRunningAndReplacesOtherwise() {
         assertEquals(androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.RUNNING)))
         assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.ENQUEUED)))
         assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(emptyList()))
+    }
+
+    private companion object {
+        val parked = java.util.Collections.synchronizedList(mutableListOf<Runnable>())
     }
 }

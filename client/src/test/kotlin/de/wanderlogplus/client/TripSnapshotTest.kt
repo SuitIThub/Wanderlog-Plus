@@ -45,3 +45,20 @@ class TripSnapshotTest {
         assertEquals("Tempel", c.label)
     }
 }
+
+class TripSnapshotAttachmentsTest {
+    @Test fun attachmentsForFiltersDeletedAndSorts() {
+        val f = EditorFixture()
+        f.seedEntity(EntityType.TRIP, "t1", Trip("t1", "A"))
+        f.seedEntity(EntityType.ATTACHMENT, "a2", Attachment("a2", EntityType.STAY, "s1", "h2", "b.pdf"))
+        f.seedEntity(EntityType.ATTACHMENT, "a1", Attachment("a1", EntityType.STAY, "s1", "h1", "b.pdf"))
+        f.seedEntity(EntityType.ATTACHMENT, "a3", Attachment("a3", EntityType.STAY, "s1", "h3", "a.pdf"))
+        f.seedEntity(EntityType.ATTACHMENT, "a4", Attachment("a4", EntityType.STAY, "s2", "h4", "a.pdf"))
+        f.seedEntity(EntityType.ATTACHMENT, "a5", Attachment("a5", EntityType.FLIGHT, "s1", "h5", "a.pdf"))
+        f.seedEntity(EntityType.ATTACHMENT, "a6", Attachment("a6", EntityType.STAY, "s1", "h6", "0.pdf"))
+        f.editor.delete(EntityType.ATTACHMENT, "a6")
+        val s = f.snapshot()
+        assertEquals(5, s.attachments.size)
+        assertEquals(listOf("a3", "a1", "a2"), s.attachmentsFor(EntityType.STAY, "s1").map { it.id })
+    }
+}

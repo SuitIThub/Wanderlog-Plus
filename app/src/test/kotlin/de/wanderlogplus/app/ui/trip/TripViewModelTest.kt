@@ -75,4 +75,30 @@ class TripViewModelTest {
         vm.consumeError()
         assertEquals(null, vm.error.value)
     }
+
+    @Test fun setRegionOverrideNullWritesJsonNull() {
+        seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
+        seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", regionOverrideId = "r2"))
+        val vm = vm()
+        runBlocking { vm.setRegionOverride("2027-05-09", "r3").join() }
+        assertEquals("r3", TripSnapshot.from(store.all()).days.single().regionOverrideId)
+        runBlocking { vm.setRegionOverride("2027-05-09", null).join() }
+        assertEquals(null, TripSnapshot.from(store.all()).days.single().regionOverrideId)
+        val rec = store.all().first { it.type == EntityType.DAY && it.id == "d1" }
+        assertEquals(kotlinx.serialization.json.JsonNull, rec.fields["regionOverrideId"]?.value)
+    }
+
+    @Test fun titleNoteAndAddNoteWrite() {
+        seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
+        val vm = vm()
+        runBlocking {
+            vm.setDayTitle("2027-05-09", "Titel").join()
+            vm.setDayNote("2027-05-09", "Notiz").join()
+            vm.addNote("2027-05-09", "Bento").join()
+        }
+        val s = TripSnapshot.from(store.all())
+        assertEquals("Titel", s.days.single().title)
+        assertEquals("Notiz", s.days.single().note)
+        assertEquals(listOf("Bento"), s.dayItemsFor(s.days.single().id).map { it.text })
+    }
 }

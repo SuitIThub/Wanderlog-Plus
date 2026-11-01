@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui.today
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -18,13 +20,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.ui.EmptyState
+import de.wanderlogplus.app.ui.LinkButtons
+import de.wanderlogplus.app.ui.stayLinks
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.trip.RegionChip
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.TodayQueries
@@ -46,6 +53,12 @@ fun TodayScreen(
     onOpenTrip: () -> Unit,
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Tapped ticket chip under a trip of today. */
+    onOpenAttachment: (Attachment) -> Unit = {},
+    /** Null hides the stay link buttons. */
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
+    /** Whether a file is stored locally (by hash); unavailable tickets are marked. */
+    available: (hash: String) -> Boolean = { true },
 ) {
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
@@ -80,7 +93,7 @@ fun TodayScreen(
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, modifier)
     }
 }
 
@@ -90,6 +103,9 @@ private fun During(
     state: TodayState.During,
     now: LocalDateTime,
     onOpenDay: (String) -> Unit,
+    onOpenAttachment: (Attachment) -> Unit,
+    onOpenLink: ((ExternalLink) -> Unit)?,
+    available: (String) -> Boolean,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -128,6 +144,11 @@ private fun During(
             }
         }
 
+        val stayPlace = stay?.let { snapshot.places[it.placeId] }
+        if (stayPlace != null && onOpenLink != null) {
+            LinkButtons(stayLinks(stayPlace), onOpenLink, Modifier.padding(horizontal = 16.dp).testTag("today-stay-links"))
+        }
+
         if (state.movements.isNotEmpty()) {
             Section("Fahrten heute") {
                 state.movements.forEachIndexed { i, m ->
@@ -136,6 +157,25 @@ private fun During(
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("movement-$i"),
                     )
+                    val (type, id) = when (m) {
+                        is Movement.FlightMove -> EntityType.FLIGHT to m.flight.id
+                        is Movement.TrainMove -> EntityType.TRAIN to m.train.id
+                    }
+                    val tickets = snapshot.attachmentsFor(type, id)
+                    if (tickets.isNotEmpty()) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            tickets.forEach { a ->
+                                AssistChip(
+                                    onClick = { onOpenAttachment(a) },
+                                    label = {
+                                        val name = a.fileName.ifBlank { "Anhang" }
+                                        Text(if (available(a.fileHash)) name else "$name (nicht offline)")
+                                    },
+                                    modifier = Modifier.testTag("ticket-${a.id}"),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

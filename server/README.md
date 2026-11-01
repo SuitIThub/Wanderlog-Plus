@@ -41,6 +41,16 @@ Für das automatische HTTPS muss `WLP_DOMAIN` per DNS auf den Host zeigen, und d
 
 `.env` steht in `.gitignore`. Der Server ist nur auf `127.0.0.1:8080` veröffentlicht, von außen erreichbar ist er über Caddy (HTTPS).
 
+### Reverse Proxy und Upload-Größe
+
+Caddy begrenzt die Größe einer Anfrage standardmäßig nicht. Ein anderer Reverse Proxy muss Uploads bis `WLP_MAX_FILE_MB` plus etwas Puffer für den Multipart-Rahmen durchlassen, sonst lehnt er große Anhänge mit 413 ab, bevor sie den Server erreichen. Für nginx (Standard 1 MB) zum Beispiel:
+
+```
+client_max_body_size 26m;
+```
+
+Die App behält einen so abgelehnten Upload in der Warteschlange und versucht ihn bei der nächsten Synchronisation erneut. Nur die Antwort `file_too_large` vom Server selbst verwirft ihn.
+
 ## API
 
 Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` und `X-Protocol-Version: 1`.
@@ -59,3 +69,15 @@ Das Volume `wlp-data` sichern (Datenbank und `files/`). Dazu vorher den Containe
 `GET /api/export` ist ein reiner Lese-Export und kein Weg zur Wiederherstellung.
 
 Nach einem Restore behaelt die Datenbank ihre Epoche (nur eine neu angelegte Datenbank bekommt eine neue). Danach muss der Sync-Zustand der App zurueckgesetzt werden (Plan 3 bietet das an).
+
+## QR-Code für die Einrichtung
+
+Die App kann Server-Adresse und Token per QR-Code übernehmen („QR-Code scannen“ auf dem Einrichtungsbildschirm). Der Code enthält einen Link der Form `wlp://setup?url=<url-codiert>&token=<url-codiert>`:
+
+```sh
+qrencode -t ansiutf8 'wlp://setup?url=https%3A%2F%2Fwlp.example.org&token=…'
+```
+
+Wird ein solcher Link in der Android-Kamera oder im Browser geöffnet, startet die App die Einrichtung ebenfalls. Die Felder werden nur ausgefüllt; die App speichert nichts automatisch, die Verbindung muss getestet und bestätigt werden.
+
+**Der Code enthält das Token und ist wie ein Passwort zu behandeln:** nicht teilen, nicht in Chats oder Tickets posten, nach der Einrichtung nicht aufbewahren.

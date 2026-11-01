@@ -1,6 +1,14 @@
 package de.wanderlogplus.app.ui
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.os.Bundle
+import de.wanderlogplus.app.ui.setup.SetupLink
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -28,6 +36,9 @@ import androidx.lifecycle.ViewModelProvider
 import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.data.ServerSettings
+import de.wanderlogplus.app.data.TripZone
+import de.wanderlogplus.app.data.now
+import de.wanderlogplus.app.ui.attachments.AttachmentsViewModel
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
@@ -44,10 +55,38 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    /** Setup link from the deep link; prefill only (never saved automatically). Held in memory only, never logged. */
+    private val pendingSetup = MutableStateFlow<ServerSettings?>(null)
+
+    // launchMode="singleTop": a new wlp:// link reaches the running activity via onNewIntent.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleSetupIntent(intent)
+    }
+
+    private fun handleSetupIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val raw = intent.dataString ?: return
+        SetupLink.parse(raw)?.let { pendingSetup.value = it }
+    }
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Asks for POST_NOTIFICATIONS (API 33+) only once, so a refusal is never nagged about. */
+    private fun requestNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
+        if (prefs.getBoolean("permissionAsked", false)) return
+        prefs.edit().putBoolean("permissionAsked", true).apply()
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as WanderlogPlusApp).container
+        if (savedInstanceState == null) handleSetupIntent(intent)
         setContent {
             WanderlogPlusTheme {
                 val hasServer by remember { container.settings.server.map { it != null } }.collectAsState(null)
@@ -66,7 +105,11 @@ class MainActivity : ComponentActivity() {
                 val nodeId by produceState<String?>(null) {
                     value = try { withContext(Dispatchers.IO) { container.settings.nodeId } } catch (e: CancellationException) { throw e } catch (e: Exception) { loadFailed = true; null }
                 }
+                val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
+                val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
+                // Not on the very first launch before Setup: ask once a server is configured.
+                LaunchedEffect(remindersEnabled, hasServer) { if (remindersEnabled && hasServer == true) requestNotificationPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
                 if (loadFailed) {
@@ -75,7 +118,10 @@ class MainActivity : ComponentActivity() {
                     }
                     return@WanderlogPlusTheme
                 }
+                val pending by pendingSetup.collectAsState()
                 AppNavigation(
+                    pendingSetup = pending,
+                    onPendingSetupConsumed = { pendingSetup.value = null },
                     hasServer = hasServer,
                     snapshot = snapshot,
                     syncStatus = status,
@@ -86,6 +132,13 @@ class MainActivity : ComponentActivity() {
                     moreViewModelFactory = remember { moreFactory(container) },
                     importViewModelFactory = remember { importFactory(container) },
                     settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
+                    tripZone = tripZone,
+                    onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
+                    remindersEnabled = remindersEnabled,
+                    onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
+                    clock = { tripZone.now() },
+                    attachmentsViewModelFactory = remember { attachmentsFactory(container) },
+                    attachmentFiles = container.attachmentFiles,
                     onResetSync = {
                         scope.launch {
                             container.syncRunner.resetCursor()
@@ -115,6 +168,16 @@ class MainActivity : ComponentActivity() {
             MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
     }
 
+    private fun attachmentsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttachmentsViewModel(
+            edit = { block -> container.edit(block) },
+            addAttachment = { type, id, input, name, mime -> container.addAttachment(type, id, input, name, mime) },
+            ensureDay = container::ensureDay,
+            writeScope = container.scope,
+        ) as T
+    }
+
     private fun importFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = ImportViewModel(
@@ -128,7 +191,7 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val tester = SetupViewModel.connectionTester(container.http)
             val cur = current()
-            return SetupViewModel(tester, cur?.url.orEmpty(), cur?.token.orEmpty()) { url, token ->
+            return SetupViewModel(tester, cur?.url.orEmpty(), cur?.token.orEmpty(), savedServer = { container.settings.server.first() }) { url, token ->
                 container.settings.saveServer(ServerSettings(url, token))
                 container.syncScheduler.schedulePeriodic()
                 container.syncScheduler.requestNow()

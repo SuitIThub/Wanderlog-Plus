@@ -14,11 +14,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.app.ui.LinkButtons
 import de.wanderlogplus.app.ui.MarkdownText
+import de.wanderlogplus.app.ui.stayLinks
+import de.wanderlogplus.app.ui.attachments.AttachmentActions
+import de.wanderlogplus.app.ui.attachments.AttachmentsFor
 import de.wanderlogplus.app.ui.dayLabel
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Flight
+import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
 
@@ -59,7 +66,10 @@ fun logisticsEntries(snapshot: TripSnapshot): List<LogisticsEntry> {
 }
 
 @Composable
-fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier) {
+fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier, attachments: AttachmentActions? = null,
+    /** Null hides the stay link buttons. */
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
+) {
     val entries = remember(snapshot) { logisticsEntries(snapshot) }
     if (entries.isEmpty()) {
         Text("Keine Flüge, Züge oder Unterkünfte.", modifier.padding(16.dp).testTag("logistics-empty"))
@@ -71,8 +81,14 @@ fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier) {
                 when (e) {
                     is LogisticsEntry.FlightEntry -> FlightCard(e.flight)
                     is LogisticsEntry.TrainEntry -> TrainCard(e.train)
-                    is LogisticsEntry.StayEntry -> StayCard(e.stay, e.name)
+                    is LogisticsEntry.StayEntry -> StayCard(e.stay, e.name, snapshot.places[e.stay.placeId], onOpenLink)
                 }
+                val type = when (e) {
+                    is LogisticsEntry.FlightEntry -> EntityType.FLIGHT
+                    is LogisticsEntry.TrainEntry -> EntityType.TRAIN
+                    is LogisticsEntry.StayEntry -> EntityType.STAY
+                }
+                AttachmentsFor(snapshot.attachmentsFor(type, e.id), attachments, onAdd = { attachments?.onAdd?.invoke(type, e.id) })
                 Text(
                     "Live-Status: –",
                     style = MaterialTheme.typography.labelMedium,
@@ -91,6 +107,10 @@ private fun endpointText(e: Endpoint): String {
     return listOf(place, whenText).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { "–" }
 }
 
+fun flightTitle(f: Flight): String = "Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).filter { it.isNotBlank() }.joinToString(" ")
+
+fun trainTitle(t: Train): String = "Zug" + (t.carrier?.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+
 @Composable
 private fun Title(text: String) = Text(text, style = MaterialTheme.typography.titleMedium)
 
@@ -106,7 +126,7 @@ private fun Details(confirmation: String?, travelers: List<String>, note: String
 
 @Composable
 private fun FlightCard(f: Flight) {
-    Title("Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).filter { it.isNotBlank() }.joinToString(" "))
+    Title(flightTitle(f))
     Line("Abflug: " + endpointText(f.depart))
     Line("Ankunft: " + endpointText(f.arrive))
     Details(f.confirmationNumber, f.travelerNames, f.note)
@@ -114,7 +134,7 @@ private fun FlightCard(f: Flight) {
 
 @Composable
 private fun TrainCard(t: Train) {
-    Title("Zug" + (t.carrier?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""))
+    Title(trainTitle(t))
     Line("Strecke: ${t.depart.name.ifBlank { "–" }} → ${t.arrive.name.ifBlank { "–" }}")
     Line("Abfahrt: " + endpointText(t.depart))
     Line("Ankunft: " + endpointText(t.arrive))
@@ -122,8 +142,9 @@ private fun TrainCard(t: Train) {
 }
 
 @Composable
-private fun StayCard(s: Stay, name: String) {
+private fun StayCard(s: Stay, name: String, place: Place?, onOpenLink: ((ExternalLink) -> Unit)?) {
     Title(name)
+    if (place != null && onOpenLink != null) LinkButtons(stayLinks(place), onOpenLink, Modifier.padding(vertical = 4.dp))
     Line("Check-in: " + s.checkIn.ifBlank { "–" }.let(::dayLabel))
     Line("Check-out: " + s.checkOut.ifBlank { "–" }.let(::dayLabel))
     s.cancellationDeadline?.takeIf { it.isNotBlank() }?.let { Line("Stornofrist: " + dayLabel(it)) }

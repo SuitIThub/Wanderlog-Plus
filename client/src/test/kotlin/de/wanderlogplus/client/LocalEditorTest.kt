@@ -167,3 +167,56 @@ class LocalEditorTest {
         assertEquals(3, keys.toSet().size)
     }
 }
+
+class LocalEditorPlan4Test {
+    private fun fx() = EditorFixture().also {
+        it.seedEntity(EntityType.TRIP, "t1", Trip("t1", "Reise", "2027-05-01", "2027-05-10"))
+    }
+
+    @Test fun setDayFieldsCreatesDayOnce() {
+        val f = fx()
+        val dayId = Ids.dayId("t1", "2027-05-03")
+        f.editor.setDayFields(f.snapshot(), "2027-05-03", mapOf("title" to JsonPrimitive("Tempeltag"), "note" to JsonPrimitive("n")))
+        val day = f.snapshot().days.single()
+        assertEquals(dayId, day.id)
+        assertEquals("2027-05-03", day.date)
+        assertEquals("Tempeltag", day.title)
+        val before = f.outbox.size()
+        f.editor.setDayFields(f.snapshot(), "2027-05-03", mapOf("note" to JsonPrimitive("neu")))
+        val snap = f.snapshot()
+        assertEquals(1, snap.days.size)
+        assertEquals("neu", snap.days.single().note)
+        assertEquals(before + 1, f.outbox.size())
+    }
+
+    @Test fun setDayFieldsRejectsOtherFields() {
+        val f = fx()
+        assertFailsWith<IllegalArgumentException> {
+            f.editor.setDayFields(f.snapshot(), "2027-05-03", mapOf("date" to JsonPrimitive("2027-05-04")))
+        }
+        assertTrue(f.snapshot().days.isEmpty())
+        assertEquals(0, f.outbox.size())
+    }
+
+    @Test fun addNoteToDayAppendsNoteItem() {
+        val f = fx()
+        f.seedEntity(EntityType.PLACE, "p1", Place("p1", name = "Tempel"))
+        f.seedEntity(EntityType.SAVED_PLACE, "s1", SavedPlace("s1", "p1", status = PlaceStatus.IDEA))
+        f.editor.addSuggestionToDay(f.snapshot(), "2027-05-03", "s1")
+        val id = f.editor.addNoteToDay(f.snapshot(), "2027-05-03", "Sonnencreme")
+        val snap = f.snapshot()
+        val items = snap.dayItemsFor(snap.days.single().id)
+        assertEquals(2, items.size)
+        assertEquals(id, items.last().id)
+        assertEquals(DayItemKind.NOTE, items.last().kind)
+        assertEquals("Sonnencreme", items.last().text)
+        assertEquals(PlaceStatus.PLANNED, snap.savedPlaces.single().status)
+    }
+
+    @Test fun addAttachmentCreatesRecord() {
+        val f = fx()
+        val id = f.editor.addAttachment(EntityType.STAY, "st1", "h", "a.pdf", "application/pdf", 5)
+        val a = f.snapshot().attachmentsFor(EntityType.STAY, "st1").single()
+        assertEquals(Attachment(id, EntityType.STAY, "st1", "h", "a.pdf", "application/pdf", 5), a)
+    }
+}

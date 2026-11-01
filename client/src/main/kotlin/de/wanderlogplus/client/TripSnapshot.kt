@@ -29,7 +29,11 @@ data class TripSnapshot(
     val dayItems: List<DayItem>,
     val notes: List<Note>,
     val conflicts: List<Conflict>,
+    val attachments: List<Attachment> = emptyList(),
 ) {
+    fun attachmentsFor(type: EntityType, id: String): List<Attachment> =
+        attachments.filter { it.targetType == type && it.targetId == id }.sortedWith(compareBy({ it.fileName }, { it.id }))
+
     val isEmpty: Boolean get() = trip == null
 
     fun queries(): TripQueries? = trip?.let { TripQueries(it, stays, days, regions, savedPlaces, dayItems) }
@@ -60,6 +64,7 @@ data class TripSnapshot(
                 dayItems = decoded(EntityType.DAY_ITEM) { EntityCodec.decode<DayItem>(it) },
                 notes = decoded(EntityType.NOTE) { EntityCodec.decode<Note>(it) },
                 conflicts = conflictsOf(live, places),
+                attachments = decoded(EntityType.ATTACHMENT) { EntityCodec.decode<Attachment>(it) },
             )
         }
 

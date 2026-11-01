@@ -19,7 +19,7 @@ object ServerUrl {
         val scheme = uri.scheme?.lowercase()
         if (scheme != "http" && scheme != "https") return fail()
         if (uri.host.isNullOrEmpty()) return fail()
-        if (!uri.rawPath.isNullOrEmpty() || uri.rawQuery != null || uri.rawFragment != null || uri.rawUserInfo != null) return fail()
+        if (uri.rawQuery != null || uri.rawFragment != null || uri.rawUserInfo != null) return fail()
         return Result.success(s)
     }
 

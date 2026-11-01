@@ -44,4 +44,11 @@ class SettingsStoreTest {
         s.saveServer(ServerSettings("http://192.168.1.2:8080", "tok"))
         assertEquals(ServerSettings("http://192.168.1.2:8080", "tok"), s.server.first())
     }
+
+    @Test fun tripZoneDefaultsToJapanAndPersists() = runTest {
+        val s = SettingsStore(ctx)
+        assertEquals(TripZone.JAPAN, s.tripZone.first())
+        s.setTripZone(TripZone.DEVICE)
+        assertEquals(TripZone.DEVICE, SettingsStore(ctx).tripZone.first())
+    }
 }

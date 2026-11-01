@@ -2,6 +2,14 @@ package de.wanderlogplus.app.ui.more
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import de.wanderlogplus.app.data.TripZone
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -15,6 +23,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -41,8 +53,21 @@ fun SettingsScreen(
     onResetSync: () -> Unit,
     modifier: Modifier = Modifier,
     now: Long = System.currentTimeMillis(),
+    tripZone: TripZone = TripZone.JAPAN,
+    onTripZone: (TripZone) -> Unit = {},
+    remindersEnabled: Boolean = true,
+    onRemindersEnabled: (Boolean) -> Unit = {},
+    /** Null: read from the system (re-checked on resume). */
+    notificationsAllowed: Boolean? = null,
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    var systemAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+    LifecycleResumeEffect(context) {
+        systemAllowed = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        onPauseOrDispose { }
+    }
+    val allowed = notificationsAllowed ?: systemAllowed
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -51,6 +76,30 @@ fun SettingsScreen(
         Text("Adresse: ${info.serverUrl ?: "–"}")
         Text("Token: ${maskToken(info.token)}")
         OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
+
+        Text("Zeitzone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+        for ((zone, label) in listOf(TripZone.JAPAN to "Japan (JST)", TripZone.DEVICE to "Gerätezeit verwenden")) {
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = tripZone == zone, role = Role.RadioButton, onClick = { onTripZone(zone) }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = tripZone == zone, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+
+        Text("Erinnerungen", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Erinnerungen an Fristen")
+            Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
+        }
+        if (remindersEnabled && !allowed) {
+            Text(
+                "Benachrichtigungen sind für die App ausgeschaltet.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
 
         Text("Synchronisation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
         Text("Zuletzt synchronisiert: " + (status.lastSyncAt?.let { relativeAgo(it, now) } ?: "noch nie"))

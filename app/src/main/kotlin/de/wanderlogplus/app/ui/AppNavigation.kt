@@ -21,7 +21,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import de.wanderlogplus.app.files.AttachmentFiles
 import de.wanderlogplus.app.sync.SyncStatus
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.app.links.openExternalLink
+import de.wanderlogplus.app.ui.attachments.MSG_NO_APP
+import kotlinx.coroutines.launch
+import de.wanderlogplus.app.ui.attachments.ATTACHMENT_ROUTE
+import de.wanderlogplus.app.ui.attachments.AttachmentActions
+import de.wanderlogplus.app.ui.attachments.AttachmentViewerScreen
+import de.wanderlogplus.app.ui.attachments.AttachmentsViewModel
+import de.wanderlogplus.app.ui.attachments.attachmentRoute
+import de.wanderlogplus.app.ui.attachments.rememberAttachmentActions
 import de.wanderlogplus.app.ui.setup.SetupScreen
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.client.TripSnapshot
@@ -47,6 +60,7 @@ import de.wanderlogplus.app.ui.more.NoteDetailScreen
 import de.wanderlogplus.app.ui.more.NotesScreen
 import de.wanderlogplus.app.ui.more.SETTINGS_ROUTE
 import de.wanderlogplus.app.ui.more.SettingsInfo
+import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.ui.more.SettingsScreen
 import de.wanderlogplus.app.ui.more.noteRoute
 import de.wanderlogplus.app.ui.today.TodayScreen
@@ -58,6 +72,7 @@ import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.app.ui.trip.dayRoute
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import de.wanderlogplus.app.data.ServerSettings
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDateTime
@@ -114,13 +129,31 @@ fun AppNavigation(
     importViewModelFactory: ViewModelProvider.Factory? = null,
     settingsInfo: SettingsInfo = SettingsInfo(null, null, ""),
     onResetSync: () -> Unit = {},
-    /** Device-local "now" for the Heute tab; injectable for tests. */
+    tripZone: TripZone = TripZone.JAPAN,
+    onTripZone: (TripZone) -> Unit = {},
+    remindersEnabled: Boolean = true,
+    onRemindersEnabled: (Boolean) -> Unit = {},
+    /** Trip-zone "now" for the Heute tab; injectable for tests. */
     clock: () -> LocalDateTime = { LocalDateTime.now() },
+    /** Attachments (add, open, delete, viewer); without both, no attachment UI is shown. */
+    attachmentsViewModelFactory: ViewModelProvider.Factory? = null,
+    attachmentFiles: AttachmentFiles? = null,
+    /** Server settings from a setup deep link; shown on the setup screen (prefill only), then [onPendingSetupConsumed]. */
+    pendingSetup: ServerSettings? = null,
+    onPendingSetupConsumed: () -> Unit = {},
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val graphReady = backStack != null
+    LaunchedEffect(pendingSetup, graphReady) {
+        // On a cold start the NavHost below has not set its graph yet; navigating then would crash.
+        if (!graphReady) return@LaunchedEffect
+        if (pendingSetup != null && nav.currentDestination?.route != SETUP_ROUTE) {
+            nav.navigate(SETUP_ROUTE) { launchSingleTop = true }
+        }
+    }
 
     val snackbar = remember { SnackbarHostState() }
     Scaffold(
@@ -143,6 +176,18 @@ fun AppNavigation(
             }
         },
     ) { padding ->
+        val linkContext = LocalContext.current
+        val linkScope = rememberCoroutineScope()
+        val onOpenLink: (ExternalLink) -> Unit = { link ->
+            if (!openExternalLink(linkContext, link)) linkScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+        }
+        val attachmentActions: AttachmentActions? =
+            if (attachmentsViewModelFactory != null && attachmentFiles != null) {
+                val avm: AttachmentsViewModel = viewModel(factory = attachmentsViewModelFactory)
+                rememberAttachmentActions(avm, attachmentFiles, snackbar) { a -> nav.navigate(attachmentRoute(a.id)) }
+            } else {
+                null
+            }
         NavHost(
             nav,
             startDestination = if (hasServer) Tab.HEUTE.route else SETUP_ROUTE,
@@ -150,6 +195,9 @@ fun AppNavigation(
         ) {
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
+                LaunchedEffect(pendingSetup) {
+                    pendingSetup?.let { vm.prefill(it); onPendingSetupConsumed() }
+                }
                 SetupScreen(vm, onSaved = {
                     nav.navigate(Tab.HEUTE.route) { popUpTo(0) { inclusive = true } }
                 })
@@ -167,6 +215,9 @@ fun AppNavigation(
                                 onOpenDay = { nav.navigate(dayRoute(it)) },
                                 onOpenTrip = { nav.navigateToTab(Tab.REISE) },
                                 onSyncNow = onRefresh,
+                                onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
+                                onOpenLink = onOpenLink,
+                                available = attachmentActions?.available ?: { true },
                             )
                         }
                     }
@@ -188,6 +239,7 @@ fun AppNavigation(
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     TripErrors(vm, snackbar)
+                    val dayFailures by vm.failures.collectAsState()
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
@@ -198,6 +250,12 @@ fun AppNavigation(
                                 onAddSuggestion = vm::addSuggestion,
                                 onMove = vm::move,
                                 onRemove = vm::remove,
+                                attachments = attachmentActions,
+                                onSetTitle = vm::setDayTitle,
+                                onSetNote = vm::setDayNote,
+                                onSetRegion = vm::setRegionOverride,
+                                onAddNote = vm::addNote,
+                                failureCount = dayFailures,
                             )
                         }
                     }
@@ -235,7 +293,7 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures)
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory)
                         }
                     }
                 }
@@ -249,7 +307,7 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> LogisticsScreen(s)
+                            else -> LogisticsScreen(s, attachments = attachmentActions, onOpenLink = onOpenLink)
                         }
                     }
                 }
@@ -291,8 +349,18 @@ fun AppNavigation(
                             onChangeServer = { nav.navigate(SETUP_ROUTE) },
                             onSyncNow = onRefresh,
                             onResetSync = onResetSync,
+                            tripZone = tripZone,
+                            onTripZone = onTripZone,
+                            remindersEnabled = remindersEnabled,
+                            onRemindersEnabled = onRemindersEnabled,
                         )
                     }
+                }
+            }
+            if (attachmentFiles != null) {
+                composable(ATTACHMENT_ROUTE) { entry ->
+                    val id = entry.arguments?.getString("attachmentId").orEmpty()
+                    AttachmentViewerScreen(snapshot?.attachments?.firstOrNull { it.id == id }, attachmentFiles, onBack = { nav.popBackStack() })
                 }
             }
             if (importViewModelFactory != null) {

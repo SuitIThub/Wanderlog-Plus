@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
 }
+
+// Optional Google Maps key: read from the gitignored local.properties, empty by default (map toggle hidden).
+val mapsApiKey: String = Properties().also { props ->
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
+}.getProperty("MAPS_API_KEY", "").trim()
 
 android {
     namespace = "de.wanderlogplus.app"
@@ -14,8 +21,10 @@ android {
         applicationId = "de.wanderlogplus.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("boolean", "HAS_MAPS_KEY", mapsApiKey.isNotEmpty().toString())
     }
 
     buildTypes {
@@ -29,10 +38,17 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+    sourceSets {
+        // Robolectric unit tests read the debug variant's merged assets, so the Room schemas must live there (debug APK only).
+        getByName("debug").assets.srcDir("$projectDir/schemas")
     }
 }
 
@@ -56,6 +72,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
+    implementation(libs.zxing.embedded)
+    implementation(libs.maps.compose)
+    implementation(libs.play.services.maps)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
