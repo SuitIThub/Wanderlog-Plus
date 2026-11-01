@@ -36,7 +36,7 @@ class SyncService(
     /** Shared write lock: pushes and imports must not interleave. */
     val lock: Any = Any()
 
-    private val clock = HlcClock(SERVER_NODE, now)
+    private val clock = HlcClock(SERVER_NODE, now = now)
 
     fun <T> withWriteLock(block: () -> T): T = synchronized(lock) { block() }
 

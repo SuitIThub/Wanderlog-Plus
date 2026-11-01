@@ -40,6 +40,15 @@ class TripQueriesTest {
     }
 
     @Test
+    fun `dayFor picks the largest id deterministically`() {
+        val a = Day("d1", date = "2027-05-10")
+        val b = Day("d2", date = "2027-05-10")
+        assertEquals("d2", queries(days = listOf(a, b)).dayFor("2027-05-10")?.id)
+        assertEquals("d2", queries(days = listOf(b, a)).dayFor("2027-05-10")?.id)
+        assertNull(queries(days = listOf(a)).dayFor("2027-05-11"))
+    }
+
+    @Test
     fun `days covers whole trip`() {
         val d = queries().days()
         assertEquals(22, d.size)
@@ -102,5 +111,22 @@ class TripQueriesTest {
     fun `no suggestions without region`() {
         val places = listOf(SavedPlace("a", placeId = "pa", regionId = "o"))
         assertTrue(queries(places = places).suggestionsFor("2027-05-08").isEmpty())
+    }
+
+    @Test
+    fun emptyStayDatesIgnored() {
+        val q = TripQueries(
+            trip,
+            listOf(Stay("bad", regionId = "o", checkIn = "", checkOut = "x"), stays[0]),
+            emptyList(), regions, emptyList(), emptyList(),
+        )
+        assertEquals("t", q.regionFor("2027-05-10"))
+        assertEquals(22, q.days().size)
+    }
+
+    @Test
+    fun emptyTripDates() {
+        val q = TripQueries(Trip("t"), stays, emptyList(), regions, emptyList(), emptyList())
+        assertTrue(q.days().isEmpty())
     }
 }

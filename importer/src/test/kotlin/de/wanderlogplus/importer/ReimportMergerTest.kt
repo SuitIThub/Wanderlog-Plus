@@ -182,6 +182,36 @@ class ReimportMergerTest {
         assertTrue(run(s.without(f1)).changes.isEmpty())
     }
 
+    private fun refsTo(s: ImportSnapshot, place: ImportedEntity) = s.entities.filter {
+        it.type in setOf(EntityType.SAVED_PLACE, EntityType.STAY, EntityType.DAY_ITEM) &&
+            (it.fields["placeId"] as? JsonPrimitive)?.content == place.id
+    }
+
+    @Test
+    fun `placeReferencedByAppDataIsFlaggedNotDeleted`() {
+        val s = snapshot()
+        run(s)
+        val p = savedFor(s, "PID_F1").let { sp -> s.entities.first { it.type == EntityType.PLACE && it.id == (sp.fields["placeId"] as JsonPrimitive).content } }
+        val h = "000000000000001-000000-dev-a"
+        store.put(EntityRecord(EntityType.DAY_ITEM, "app-item", mapOf(
+            "placeId" to FieldValue(JsonPrimitive(p.id), h), "deleted" to FieldValue(JsonPrimitive(false), h))))
+        val gone = refsTo(s, p).toSet() + p
+        val r = run(ImportSnapshot(s.entities.filter { it !in gone }))
+        assertFalse(rec(p).isDeleted)
+        assertEquals(JsonPrimitive(true), rec(p).value("_removedInSource"))
+        assertTrue(r.stats.flaggedRemoved >= 1)
+    }
+
+    @Test
+    fun `unreferencedPlaceIsDeleted`() {
+        val s = snapshot()
+        run(s)
+        val p = savedFor(s, "PID_F1").let { sp -> s.entities.first { it.type == EntityType.PLACE && it.id == (sp.fields["placeId"] as JsonPrimitive).content } }
+        val gone = refsTo(s, p).toSet() + p
+        run(ImportSnapshot(s.entities.filter { it !in gone }))
+        assertTrue(rec(p).isDeleted)
+    }
+
     @Test
     fun `removed edited entity is flagged`() {
         val s = snapshot()
@@ -264,5 +294,41 @@ class ReimportMergerTest {
         assertEquals(JsonPrimitive("nochmal"), rec(f1).value("_conflict.note"))
         assertEquals(JsonPrimitive("meins2"), rec(f1).value("note"))
         assertTrue(run(s3).changes.isEmpty())
+    }
+
+    @Test
+    fun `device-recreated record without source is adopted`() {
+        val s = snapshot()
+        val sp = s.entities.first { it.type == EntityType.SAVED_PLACE && "note" !in it.masterFields }
+        val h = "000000000000001-000000-dev-a"
+        store.put(
+            EntityRecord(
+                sp.type, sp.id,
+                mapOf("note" to FieldValue(JsonPrimitive("meins"), h), "_conflict.note" to FieldValue(JsonPrimitive("alt"), h)),
+            ),
+        )
+        val r = run(s)
+        assertEquals(1, r.stats.updated)
+        assertEquals(s.entities.size - 1, r.stats.created)
+        val rec = rec(sp)
+        assertEquals(JsonPrimitive("wanderlog"), rec.value("_source"))
+        assertEquals(JsonPrimitive(sp.sourceId), rec.value("_sourceId"))
+        assertEquals(JsonPrimitive(false), rec.value("deleted"))
+        assertEquals(JsonPrimitive("meins"), rec.value("note"))
+        sp.fields["note"]?.let { assertEquals(it, rec.value("_base.note")) }
+        sp.fields["placeId"]?.let { assertEquals(it, rec.value("placeId")) }
+        // idempotent
+        assertTrue(run(s).changes.isEmpty())
+    }
+
+    @Test
+    fun `record of another source is not adopted`() {
+        val s = snapshot()
+        val sp = s.entities.first { it.type == EntityType.SAVED_PLACE }
+        val h = "000000000000001-000000-dev-a"
+        val other = EntityRecord(sp.type, sp.id, mapOf("_source" to FieldValue(JsonPrimitive("assistant"), h)))
+        store.put(other)
+        run(s)
+        assertEquals(other, store.get(sp.type, sp.id))
     }
 }

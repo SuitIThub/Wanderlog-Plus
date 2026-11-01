@@ -2,6 +2,7 @@ package de.wanderlogplus.shared.query
 
 import de.wanderlogplus.shared.model.*
 import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 data class DayView(
     val date: String,
@@ -21,19 +22,35 @@ class TripQueries(
 ) {
     private fun parse(date: String): LocalDate = LocalDate.parse(date)
 
-    private fun stayFor(date: String): Stay? {
-        val d = parse(date)
-        stays.firstOrNull { parse(it.checkIn) <= d && d < parse(it.checkOut) }?.let { return it }
-        val last = stays.maxByOrNull { parse(it.checkOut) } ?: return null
-        return if (d >= parse(last.checkOut)) last else null
+    private fun parseOrNull(date: String): LocalDate? = try { LocalDate.parse(date) } catch (_: DateTimeParseException) { null }
+
+    /** Stays with parsable check-in/out dates; others are ignored. */
+    private val datedStays: List<Triple<Stay, LocalDate, LocalDate>> by lazy {
+        stays.mapNotNull { s ->
+            val i = parseOrNull(s.checkIn) ?: return@mapNotNull null
+            val o = parseOrNull(s.checkOut) ?: return@mapNotNull null
+            Triple(s, i, o)
+        }
     }
 
-    // Last Day wins when several share a date; used by both days() and regionFor().
-    private val dayByDate: Map<String, Day> by lazy { days.associateBy { it.date } }
+    private fun stayFor(date: String): Stay? {
+        val d = parse(date)
+        datedStays.firstOrNull { (_, i, o) -> i <= d && d < o }?.let { return it.first }
+        val last = datedStays.maxByOrNull { it.third } ?: return null
+        return if (d >= last.third) last.first else null
+    }
+
+    // Several Days may share a date (e.g. created on two devices); the largest id wins, deterministically.
+    private val dayByDate: Map<String, Day> by lazy {
+        days.groupBy { it.date }.mapValues { (_, v) -> v.maxByOrNull { it.id }!! }
+    }
+
+    /** The one Day that represents [date], or null if there is none. */
+    fun dayFor(date: String): Day? = dayByDate[date]
 
     fun days(): List<DayView> {
-        val start = parse(trip.startDate)
-        val end = parse(trip.endDate)
+        val start = parseOrNull(trip.startDate) ?: return emptyList()
+        val end = parseOrNull(trip.endDate) ?: return emptyList()
         val result = mutableListOf<DayView>()
         var d = start
         while (d <= end) {
