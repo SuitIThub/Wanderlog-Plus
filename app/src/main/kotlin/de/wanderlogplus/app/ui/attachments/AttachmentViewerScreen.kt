@@ -1,0 +1,144 @@
+package de.wanderlogplus.app.ui.attachments
+
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import de.wanderlogplus.app.files.AttachmentFiles
+import de.wanderlogplus.shared.model.Attachment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+
+const val ATTACHMENT_ROUTE = "attachment/{attachmentId}"
+fun attachmentRoute(id: String) = "attachment/$id"
+
+@Composable
+fun AttachmentViewerScreen(
+    attachment: Attachment?,
+    files: AttachmentFiles,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+            Text(attachment?.fileName.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1)
+        }
+        val target = attachment?.let { openTargetFor(it, files) }
+        when (target) {
+            is OpenTarget.Image -> AsyncImage(
+                model = target.file,
+                contentDescription = attachment.fileName,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().testTag("viewer-image"),
+            )
+            is OpenTarget.Pdf -> PdfPages(target.file, Modifier.fillMaxSize().testTag("viewer-pdf"))
+            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Datei nicht verfügbar", style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+/** Renders each page as a bitmap of screen width once it becomes visible. */
+@Composable
+private fun PdfPages(file: File, modifier: Modifier = Modifier) {
+    val opened = remember(file) {
+        try {
+            val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            try {
+                fd to PdfRenderer(fd)
+            } catch (e: Exception) {
+                fd.close()
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+    DisposableEffect(opened) {
+        onDispose {
+            // After the composition left, no page render may be running anymore (they synchronize on the renderer).
+            opened?.let { (fd, renderer) ->
+                synchronized(renderer) {
+                    try { renderer.close() } catch (_: Exception) {}
+                    try { fd.close() } catch (_: Exception) {}
+                }
+            }
+        }
+    }
+    if (opened == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("PDF kann nicht angezeigt werden") }
+        return
+    }
+    val renderer = opened.second
+    val pageCount = remember(renderer) { renderer.pageCount }
+    BoxWithConstraints(modifier) {
+        val widthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
+        LazyColumn(Modifier.fillMaxSize()) {
+            items((0 until pageCount).toList(), key = { it }) { index ->
+                val bitmap by produceState<Bitmap?>(null, renderer, index, widthPx) {
+                    value = withContext(Dispatchers.Default) { renderPage(renderer, index, widthPx) }
+                }
+                val b = bitmap
+                if (b != null) {
+                    Image(
+                        b.asImageBitmap(), contentDescription = "Seite ${index + 1}",
+                        modifier = Modifier.fillMaxWidth().aspectRatio(b.width.toFloat() / b.height),
+                    )
+                } else {
+                    Box(Modifier.fillMaxWidth().aspectRatio(1f / 1.414f))
+                }
+            }
+        }
+    }
+}
+
+private fun renderPage(renderer: PdfRenderer, index: Int, widthPx: Int): Bitmap? = synchronized(renderer) {
+    try {
+        val page = renderer.openPage(index)
+        try {
+            val w = widthPx.coerceAtLeast(1)
+            val h = (w.toFloat() * page.height / page.width).toInt().coerceAtLeast(1)
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            bmp.eraseColor(Color.WHITE)
+            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+            bmp
+        } finally {
+            page.close()
+        }
+    } catch (e: Exception) {
+        null
+    }
+}

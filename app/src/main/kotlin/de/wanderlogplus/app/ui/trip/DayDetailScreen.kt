@@ -31,6 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.MarkdownText
+import de.wanderlogplus.app.ui.attachments.AttachmentActions
+import de.wanderlogplus.app.ui.attachments.AttachmentsFor
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.ratingLabel
@@ -58,6 +61,7 @@ fun DayDetailScreen(
     onMove: (itemId: String, up: Boolean) -> Unit,
     onRemove: (itemId: String) -> Unit,
     modifier: Modifier = Modifier,
+    attachments: AttachmentActions? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -98,6 +102,15 @@ fun DayDetailScreen(
             Column(Modifier.testTag("program-list")) {
                 items.forEachIndexed { i, item -> ProgramRow(item, snapshot, i == 0, i == items.lastIndex, onMove, onRemove) }
             }
+        }
+
+        if (attachments != null) {
+            AttachmentsFor(
+                day?.let { snapshot.attachmentsFor(EntityType.DAY, it.id) }.orEmpty(),
+                attachments,
+                onAdd = { attachments.onAddToDay(date) },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
         }
 
         Section("Vorschläge") {

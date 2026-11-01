@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui.today
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +26,9 @@ import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.trip.RegionChip
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.TodayQueries
@@ -46,6 +50,8 @@ fun TodayScreen(
     onOpenTrip: () -> Unit,
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Tapped ticket chip under a trip of today. */
+    onOpenAttachment: (Attachment) -> Unit = {},
 ) {
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
@@ -80,7 +86,7 @@ fun TodayScreen(
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, modifier)
     }
 }
 
@@ -90,6 +96,7 @@ private fun During(
     state: TodayState.During,
     now: LocalDateTime,
     onOpenDay: (String) -> Unit,
+    onOpenAttachment: (Attachment) -> Unit,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -136,6 +143,22 @@ private fun During(
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("movement-$i"),
                     )
+                    val (type, id) = when (m) {
+                        is Movement.FlightMove -> EntityType.FLIGHT to m.flight.id
+                        is Movement.TrainMove -> EntityType.TRAIN to m.train.id
+                    }
+                    val tickets = snapshot.attachmentsFor(type, id)
+                    if (tickets.isNotEmpty()) {
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            tickets.forEach { a ->
+                                AssistChip(
+                                    onClick = { onOpenAttachment(a) },
+                                    label = { Text(a.fileName.ifBlank { "Anhang" }) },
+                                    modifier = Modifier.testTag("ticket-${a.id}"),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -15,7 +15,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.MarkdownText
+import de.wanderlogplus.app.ui.attachments.AttachmentActions
+import de.wanderlogplus.app.ui.attachments.AttachmentsFor
 import de.wanderlogplus.app.ui.dayLabel
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Flight
@@ -59,7 +62,7 @@ fun logisticsEntries(snapshot: TripSnapshot): List<LogisticsEntry> {
 }
 
 @Composable
-fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier) {
+fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier, attachments: AttachmentActions? = null) {
     val entries = remember(snapshot) { logisticsEntries(snapshot) }
     if (entries.isEmpty()) {
         Text("Keine Flüge, Züge oder Unterkünfte.", modifier.padding(16.dp).testTag("logistics-empty"))
@@ -73,6 +76,12 @@ fun LogisticsScreen(snapshot: TripSnapshot, modifier: Modifier = Modifier) {
                     is LogisticsEntry.TrainEntry -> TrainCard(e.train)
                     is LogisticsEntry.StayEntry -> StayCard(e.stay, e.name)
                 }
+                val type = when (e) {
+                    is LogisticsEntry.FlightEntry -> EntityType.FLIGHT
+                    is LogisticsEntry.TrainEntry -> EntityType.TRAIN
+                    is LogisticsEntry.StayEntry -> EntityType.STAY
+                }
+                AttachmentsFor(snapshot.attachmentsFor(type, e.id), attachments, onAdd = { attachments?.onAdd?.invoke(type, e.id) })
                 Text(
                     "Live-Status: –",
                     style = MaterialTheme.typography.labelMedium,

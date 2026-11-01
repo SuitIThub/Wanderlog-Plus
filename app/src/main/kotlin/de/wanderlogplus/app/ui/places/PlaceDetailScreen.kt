@@ -34,6 +34,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import de.wanderlogplus.app.ui.MarkdownText
+import de.wanderlogplus.app.ui.attachments.AttachmentActions
+import de.wanderlogplus.app.ui.attachments.AttachmentsFor
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.openingHoursLines
 import de.wanderlogplus.app.ui.ratingLabel
@@ -74,6 +77,7 @@ fun PlaceDetailScreen(
     modifier: Modifier = Modifier,
     /** Increases whenever a save failed; the optimistic note is dropped then. */
     failureCount: Int = 0,
+    attachments: AttachmentActions? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -156,5 +160,12 @@ fun PlaceDetailScreen(
                 TextButton(onClick = { draft = pendingNote ?: saved.note; editing = true }) { Text("Bearbeiten") }
             }
         }
+
+        AttachmentsFor(
+            snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id),
+            attachments,
+            onAdd = { attachments?.onAdd?.invoke(EntityType.SAVED_PLACE, saved.id) },
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
     }
 }

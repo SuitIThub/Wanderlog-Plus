@@ -30,7 +30,10 @@ import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.data.now
+import de.wanderlogplus.app.ui.attachments.AttachmentsViewModel
 import de.wanderlogplus.app.ui.setup.SetupViewModel
+import de.wanderlogplus.shared.model.Ids
+import kotlinx.serialization.json.JsonPrimitive
 import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.client.TripSnapshot
@@ -92,6 +95,8 @@ class MainActivity : ComponentActivity() {
                     tripZone = tripZone,
                     onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
                     clock = { tripZone.now() },
+                    attachmentsViewModelFactory = remember { attachmentsFactory(container) },
+                    attachmentFiles = container.attachmentFiles,
                     onResetSync = {
                         scope.launch {
                             container.syncRunner.resetCursor()
@@ -119,6 +124,21 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
+    }
+
+    private fun attachmentsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = AttachmentsViewModel(
+            edit = { block -> container.edit(block) },
+            addAttachment = { type, id, input, name, mime -> container.addAttachment(type, id, input, name, mime) },
+            ensureDay = { date ->
+                container.edit { e, s ->
+                    if (s.queries()?.dayFor(date) == null) e.setDayFields(s, date, mapOf("title" to JsonPrimitive("")))
+                }
+                container.edit { _, s -> s.queries()?.dayFor(date)?.id ?: Ids.dayId(requireNotNull(s.trip).id, date) }
+            },
+            writeScope = container.scope,
+        ) as T
     }
 
     private fun importFactory(container: AppContainer) = object : ViewModelProvider.Factory {
