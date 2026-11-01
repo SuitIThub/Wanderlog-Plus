@@ -19,7 +19,10 @@ fun testConfig(dir: Path): ServerConfig = ServerConfig(
     importFile = null,
 )
 
-fun testServices(dir: Path): Services = Services(testConfig(dir))
+fun testServices(dir: Path): Services {
+    val store = SqliteStore(dir.resolve("wanderlog-plus.db"))
+    return Services(testConfig(dir), store, SyncService(store))
+}
 
 fun HttpRequestBuilder.authed(token: String = TOKEN_A) {
     header(HttpHeaders.Authorization, "Bearer $token")

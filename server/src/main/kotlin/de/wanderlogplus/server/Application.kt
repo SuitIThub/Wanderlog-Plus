@@ -3,6 +3,7 @@ package de.wanderlogplus.server
 import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
 import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
+import de.wanderlogplus.shared.sync.PushRequest
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -21,9 +22,11 @@ import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -33,7 +36,7 @@ import org.slf4j.event.Level
 import java.security.MessageDigest
 
 /** Container for server components; later tasks add store, sync, files, imports. */
-class Services(val config: ServerConfig)
+class Services(val config: ServerConfig, val store: SqliteStore, val sync: SyncService)
 
 @Serializable
 private data class Health(val status: String, val protocol: Int)
@@ -86,6 +89,7 @@ fun Application.module(services: Services) {
     }
     install(StatusPages) {
         // Never echo exception messages: they can contain request data.
+        exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<IllegalArgumentException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<SerializationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -106,6 +110,16 @@ fun Application.module(services: Services) {
         get("/api/health") { call.respond(Health("ok", PROTOCOL_VERSION)) }
         protectedApi {
             get("/api/whoami") { call.respond(WhoAmI(call.author())) }
+            post("/api/sync/push") {
+                val req = call.receive<PushRequest>()
+                call.respond(services.sync.push(call.author(), req.changes))
+            }
+            get("/api/sync/pull") {
+                val q = call.request.queryParameters
+                val since = q["since"]?.let { it.toLongOrNull() ?: throw IllegalArgumentException("since") } ?: 0L
+                val limit = q["limit"]?.let { it.toIntOrNull() ?: throw IllegalArgumentException("limit") } ?: 500
+                call.respond(services.sync.pull(since, limit))
+            }
         }
     }
 }
