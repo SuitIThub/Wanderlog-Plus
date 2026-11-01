@@ -8,9 +8,11 @@ import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.HlcClock
 import de.wanderlogplus.shared.sync.InMemoryEntityStore
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import kotlin.system.exitProcess
@@ -20,6 +22,11 @@ private val stateJson = Json { prettyPrint = false }
 private fun usage(): Nothing {
     System.err.println("Usage: (--key <tripKey> | --file <path>) [--state <path>] [--summary]")
     exitProcess(2)
+}
+
+private fun fail(message: String): Nothing {
+    System.err.println("Import failed: $message")
+    exitProcess(1)
 }
 
 private fun printSummary(store: EntityStore) {
@@ -55,12 +62,30 @@ fun main(args: Array<String>) {
     if ((key == null) == (file == null)) usage()
 
     try {
-        val json = if (key != null) WanderlogClient().fetch(key) else File(file!!).readText()
+        val json = if (key != null) {
+            WanderlogClient().fetch(key)
+        } else {
+            val input = File(file!!)
+            if (!input.isFile) fail("file not found: ${input.path}")
+            try {
+                input.readText()
+            } catch (e: IOException) {
+                fail("cannot read file ${input.path}: ${e.message}")
+            }
+        }
         val store = InMemoryEntityStore()
         val stateFile = state?.let { File(it).absoluteFile }
         if (stateFile != null && stateFile.exists()) {
-            stateJson.decodeFromString(ListSerializer(EntityRecord.serializer()), stateFile.readText())
-                .forEach(store::put)
+            try {
+                stateJson.decodeFromString(ListSerializer(EntityRecord.serializer()), stateFile.readText())
+                    .forEach(store::put)
+            } catch (e: Exception) {
+                when (e) {
+                    is SerializationException, is IllegalArgumentException, is IOException ->
+                        fail("cannot read state ${stateFile.path}: ${e.message}")
+                    else -> throw e
+                }
+            }
         }
         val result = ImportRunner.run(json, store, HlcClock("importer"))
         if (stateFile != null) {
