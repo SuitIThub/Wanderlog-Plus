@@ -140,6 +140,33 @@ class SyncServiceTest {
     }
 
     @Test
+    fun maxHlcReportsHighestWrittenHlc() {
+        seedImporterConflictBase()
+        val r = sync.push("alice", listOf(ch("notes", "Geraet", 200)))
+        assertEquals(field("notes")!!.hlc, r.maxHlc)
+        assertTrue(Hlc.parse(r.maxHlc!!) > Hlc.parse(hlc(200, "dev-a")))
+        assertNull(sync.push("alice", listOf(ch("notes", "old", 1))).maxHlc)
+    }
+
+    @Test
+    fun rejectsReservedFields() {
+        for (f in listOf("_source", "_sourceId", "_base.notes")) {
+            val e = assertFailsWith<PushRejected> { sync.push("a", listOf(ch(f, "v", 1))) }
+            assertEquals("reserved_field", e.code, f)
+        }
+        for (f in listOf("_conflict.notes", "_removedInSource", "deleted", "notes")) {
+            assertEquals(1, sync.push("a", listOf(ch(f, "v", 1))).accepted, f)
+        }
+    }
+
+    @Test
+    fun rejectsHugeHlcCounter() {
+        val e = assertFailsWith<PushRejected> { sync.push("a", listOf(ch("notes", "v", 1, counter = 999_000))) }
+        assertEquals("invalid_hlc", e.code)
+        assertEquals(1, sync.push("a", listOf(ch("notes", "v", 1, counter = 998_999))).accepted)
+    }
+
+    @Test
     fun deviceLosingToImporterSameValueIsQuiet() {
         seedImporterConflictBase()
         val r = sync.push("alice", listOf(ch("notes", "W2", 200)))

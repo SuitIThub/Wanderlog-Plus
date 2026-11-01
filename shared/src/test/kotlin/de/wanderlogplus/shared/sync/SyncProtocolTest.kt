@@ -25,6 +25,7 @@ class SyncProtocolTest {
             ),
             nextSeq = 42,
             hasMore = true,
+            epoch = "e1",
         )
         assertEquals(pull, json.decodeFromString<PullResponse>(json.encodeToString(pull)))
     }

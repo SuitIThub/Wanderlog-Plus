@@ -9,6 +9,7 @@ import java.time.Duration
 
 class WanderlogClient(
     private val send: (HttpRequest) -> HttpResponse<String> = defaultSend(),
+    private val sleep: (Long) -> Unit = Thread::sleep,
 ) {
     /** GETs the public trip plan JSON; one retry on I/O failure or HTTP >= 500, other non-200 -> [ImportFormatException]. */
     fun fetch(tripKey: String): String {
@@ -20,6 +21,7 @@ class WanderlogClient(
         var response: HttpResponse<String>? = null
         var failure: IOException? = null
         for (attempt in 1..2) {
+            if (attempt == 2) sleep(RETRY_DELAY_MILLIS)
             response = null
             try {
                 response = send(request)
@@ -34,6 +36,8 @@ class WanderlogClient(
     }
 
     private companion object {
+        const val RETRY_DELAY_MILLIS = 1000L
+
         fun defaultSend(): (HttpRequest) -> HttpResponse<String> {
             val http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
             return { http.send(it, HttpResponse.BodyHandlers.ofString()) }

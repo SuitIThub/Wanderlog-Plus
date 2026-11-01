@@ -67,6 +67,29 @@ class SyncRoutesTest {
     }
 
     @Test
+    fun cursorAheadIs409AndAtMaxIsEmpty() = app { services ->
+        val c = jsonClient()
+        c.post("/api/sync/push") { authed(); contentType(ContentType.Application.Json); setBody(PushRequest(listOf(change))) }
+        val max = services.store.maxSeq()
+        val ahead = c.get("/api/sync/pull?since=${max + 1}") { authed() }
+        assertEquals(HttpStatusCode.Conflict, ahead.status)
+        assertEquals("""{"error":"cursor_ahead"}""", ahead.bodyAsText())
+        val at = c.get("/api/sync/pull?since=$max") { authed() }
+        assertEquals(HttpStatusCode.OK, at.status)
+        val body = at.body<PullResponse>()
+        assertTrue(body.records.isEmpty())
+        assertEquals(services.store.epoch, body.epoch)
+    }
+
+    @Test
+    fun pushResponseCarriesEpoch() = app { services ->
+        val r = jsonClient().post("/api/sync/push") {
+            authed(); contentType(ContentType.Application.Json); setBody(PushRequest(listOf(change)))
+        }.body<PushResponse>()
+        assertEquals(services.store.epoch, r.epoch)
+    }
+
+    @Test
     fun unknownTypeIs400() = app {
         val c = jsonClient()
         val r = c.post("/api/sync/push") {

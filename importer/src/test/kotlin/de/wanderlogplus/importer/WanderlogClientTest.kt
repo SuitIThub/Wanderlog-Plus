@@ -28,6 +28,8 @@ class WanderlogClientTest {
     /** Each step is an [HttpResponse] or a [Throwable] to throw. */
     private class Script(private vararg val steps: Any) {
         var calls = 0
+        val sleeps = mutableListOf<Long>()
+        val sleep: (Long) -> Unit = { sleeps += it }
         @Suppress("UNCHECKED_CAST")
         val send: (HttpRequest) -> HttpResponse<String> = {
             val step = steps[calls++]
@@ -38,26 +40,28 @@ class WanderlogClientTest {
 
     @Test fun retriesOnceOn5xx() {
         val s = Script(FakeResponse(503, ""), FakeResponse(200, "{}"))
-        assertEquals("{}", WanderlogClient(s.send).fetch("k"))
+        assertEquals("{}", WanderlogClient(s.send, s.sleep).fetch("k"))
         assertEquals(2, s.calls)
+        assertEquals(listOf(1000L), s.sleeps)
     }
 
     @Test fun retriesOnceOnIOException() {
         val s = Script(IOException("boom"), FakeResponse(200, "{}"))
-        assertEquals("{}", WanderlogClient(s.send).fetch("k"))
+        assertEquals("{}", WanderlogClient(s.send, s.sleep).fetch("k"))
         assertEquals(2, s.calls)
+        assertEquals(listOf(1000L), s.sleeps)
     }
 
     @Test fun failsAfterSecond5xx() {
         val s = Script(FakeResponse(500, ""), FakeResponse(502, ""))
-        val e = assertFailsWith<ImportFormatException> { WanderlogClient(s.send).fetch("k") }
+        val e = assertFailsWith<ImportFormatException> { WanderlogClient(s.send, s.sleep).fetch("k") }
         assertTrue("HTTP 502" in e.message!!)
         assertEquals(2, s.calls)
     }
 
     @Test fun doesNotRetry4xx() {
         val s = Script(FakeResponse(404, ""))
-        val e = assertFailsWith<ImportFormatException> { WanderlogClient(s.send).fetch("k") }
+        val e = assertFailsWith<ImportFormatException> { WanderlogClient(s.send, s.sleep).fetch("k") }
         assertTrue("HTTP 404" in e.message!!)
         assertEquals(1, s.calls)
     }

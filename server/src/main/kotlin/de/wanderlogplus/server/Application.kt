@@ -27,6 +27,9 @@ import io.ktor.server.auth.authentication
 import io.ktor.server.auth.bearer
 import io.ktor.server.auth.principal
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.ContentTransformationException
+import io.ktor.server.plugins.PayloadTooLargeException
+import io.ktor.server.plugins.UnsupportedMediaTypeException
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -57,7 +60,7 @@ class Services(
 )
 
 @Serializable
-private data class Health(val status: String, val protocol: Int)
+private data class Health(val status: String, val protocol: Int, val epoch: String, val serverTime: Long)
 
 @Serializable
 private data class WhoAmI(val name: String)
@@ -110,9 +113,17 @@ fun Application.module(services: Services) {
         exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
         exception<ImportNotConfigured> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("import_not_configured")) }
         exception<FileTooLarge> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("file_too_large")) }
+        exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
+        exception<BadInput> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
-        exception<IllegalArgumentException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        exception<ContentTransformationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        exception<UnsupportedMediaTypeException> { call, _ -> call.respond(HttpStatusCode.UnsupportedMediaType, ErrorResponse("unsupported_media_type")) }
+        exception<PayloadTooLargeException> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("payload_too_large")) }
         exception<SerializationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        // Ktor 3.0's bearer provider has no challenge hook; its default 401 (with WWW-Authenticate) gets a JSON body here.
+        status(HttpStatusCode.Unauthorized) { call, _ -> call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized")) }
+        status(HttpStatusCode.UnsupportedMediaType) { call, _ -> call.respond(HttpStatusCode.UnsupportedMediaType, ErrorResponse("unsupported_media_type")) }
+        status(HttpStatusCode.NotFound) { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) }
         exception<Throwable> { call, e ->
             // Class name and path only: messages and stack traces may contain booking data.
             LoggerFactory.getLogger("de.wanderlogplus.server").error("Unhandled {} on {}", e.javaClass.name, call.request.path())
@@ -127,12 +138,13 @@ fun Application.module(services: Services) {
         }
     }
     routing {
-        get("/api/health") { call.respond(Health("ok", PROTOCOL_VERSION)) }
+        get("/api/health") { call.respond(Health("ok", PROTOCOL_VERSION, services.store.epoch, System.currentTimeMillis())) }
         protectedApi {
             get("/api/whoami") { call.respond(WhoAmI(call.author())) }
             post("/api/sync/push") {
                 val req = call.receive<PushRequest>()
-                call.respond(services.sync.push(call.author(), req.changes))
+                val author = call.author()
+                call.respond(withContext(Dispatchers.IO) { services.sync.push(author, req.changes) })
             }
             post("/api/files") {
                 var stored: StoredFile? = null
@@ -144,7 +156,7 @@ fun Application.module(services: Services) {
                     multipart.forEachPart { part ->
                         try {
                             if (part is PartData.FileItem && part.name == "file") {
-                                require(stored == null) { "multiple files" }
+                                if (stored != null) throw BadInput()
                                 stored = withContext(Dispatchers.IO) {
                                     part.provider().toInputStream().use { services.files.save(it) }
                                 }
@@ -158,11 +170,11 @@ fun Application.module(services: Services) {
                     if (e.message?.startsWith("Multipart content length exceeds limit") == true) throw FileTooLarge()
                     throw e
                 }
-                call.respond(stored ?: throw IllegalArgumentException("missing file part"))
+                call.respond(stored ?: throw BadInput())
             }
             get("/api/files/{hash}") {
                 val hash = call.parameters["hash"].orEmpty()
-                require(FileStore.isValidHash(hash)) { "hash" }
+                if (!FileStore.isValidHash(hash)) throw BadInput()
                 val path = services.files.open(hash)
                 if (path == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
@@ -177,8 +189,8 @@ fun Application.module(services: Services) {
                 else call.respond(HttpStatusCode.BadGateway, ErrorResponse("import_failed", entry.error))
             }
             get("/api/import/status") {
-                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw IllegalArgumentException("limit") } ?: 20
-                require(limit in 1..100) { "limit" }
+                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
+                if (limit !in 1..100) throw BadInput()
                 call.respond(withContext(Dispatchers.IO) { services.store.importLog(limit) })
             }
             get("/api/export") {
@@ -188,9 +200,9 @@ fun Application.module(services: Services) {
             }
             get("/api/sync/pull") {
                 val q = call.request.queryParameters
-                val since = q["since"]?.let { it.toLongOrNull() ?: throw IllegalArgumentException("since") } ?: 0L
-                val limit = q["limit"]?.let { it.toIntOrNull() ?: throw IllegalArgumentException("limit") } ?: 500
-                call.respond(services.sync.pull(since, limit))
+                val since = q["since"]?.let { it.toLongOrNull() ?: throw BadInput() } ?: 0L
+                val limit = q["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 500
+                call.respond(withContext(Dispatchers.IO) { services.sync.pull(since, limit) })
             }
         }
     }

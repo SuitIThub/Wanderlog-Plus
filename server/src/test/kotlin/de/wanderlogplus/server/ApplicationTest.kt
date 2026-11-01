@@ -35,7 +35,43 @@ class ApplicationTest {
     fun healthWithoutAuth() = app {
         val r = client.get("/api/health")
         assertEquals(HttpStatusCode.OK, r.status)
-        assertTrue(r.bodyAsText().contains("\"protocol\":1"))
+        val body = r.bodyAsText()
+        assertTrue(body.contains("\"protocol\":1"))
+        assertTrue(Regex(""""epoch":"[0-9a-f-]{36}"""").containsMatchIn(body), body)
+        assertTrue(Regex(""""serverTime":\d{13}""").containsMatchIn(body), body)
+    }
+
+    @Test
+    fun unauthorizedBodyIsJson() = app {
+        val r = client.get("/api/whoami") { header(PROTOCOL_HEADER, "1") }
+        assertEquals("""{"error":"unauthorized"}""", r.bodyAsText())
+    }
+
+    @Test
+    fun unknownRouteIsJson404() = app {
+        val r = client.get("/api/nope") { authed() }
+        assertEquals(HttpStatusCode.NotFound, r.status)
+        assertEquals("""{"error":"not_found"}""", r.bodyAsText())
+    }
+
+    @Test
+    fun pushWithoutContentTypeIs415Json() = app {
+        val r = client.post("/api/sync/push") { authed(); setBody("{}") }
+        assertEquals(HttpStatusCode.UnsupportedMediaType, r.status)
+        assertEquals("""{"error":"unsupported_media_type"}""", r.bodyAsText())
+    }
+
+    @Test
+    fun foreignIllegalArgumentIs500() {
+        testApplication {
+            application {
+                module(testServices(tmp))
+                routing { protectedApi { get("/api/test-iae") { throw IllegalArgumentException("secret") } } }
+            }
+            val r = client.get("/api/test-iae") { authed() }
+            assertEquals(HttpStatusCode.InternalServerError, r.status)
+            assertEquals("""{"error":"internal"}""", r.bodyAsText())
+        }
     }
 
     @Test

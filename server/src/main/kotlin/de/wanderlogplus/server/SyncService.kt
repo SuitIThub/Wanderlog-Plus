@@ -16,11 +16,18 @@ import kotlinx.serialization.json.JsonPrimitive
 
 const val MAX_CLOCK_DRIFT_MILLIS = 86_400_000L
 const val MAX_PUSH_CHANGES = 5000
+const val MAX_PUSH_COUNTER = 999_000
 const val IMPORTER_NODE = "importer"
 const val SERVER_NODE = "server"
 
 /** A push batch was refused as a whole; [message] is fixed text and never contains request data. */
 class PushRejected(val code: String, message: String) : RuntimeException(message)
+
+/** Our own request validation failed (query parameters, multipart parts); maps to 400 `bad_request` without a message. */
+class BadInput : RuntimeException()
+
+/** The client's pull cursor is beyond the server's sequence (database was recreated or restored); maps to 409. */
+class CursorAhead : RuntimeException()
 
 class SyncService(
     private val store: SqliteStore,
@@ -34,8 +41,8 @@ class SyncService(
     fun <T> withWriteLock(block: () -> T): T = synchronized(lock) { block() }
 
     fun pull(since: Long, limit: Int): PullResponse {
-        require(since >= 0) { "since must be >= 0" }
-        require(limit in 1..1000) { "limit must be in 1..1000" }
+        if (since < 0 || limit !in 1..1000) throw BadInput()
+        if (since > store.maxSeq()) throw CursorAhead()
         return store.pull(since, limit)
     }
 
@@ -43,8 +50,9 @@ class SyncService(
         validate(changes)
         return withWriteLock {
             store.transaction(author) {
-                val accepted = apply(changes)
-                PushResponse(accepted, store.maxSeq())
+                val max = MaxHlc()
+                val accepted = apply(changes, max)
+                PushResponse(accepted, store.maxSeq(), max.value?.encode(), store.epoch)
             }
         }
     }
@@ -60,8 +68,26 @@ class SyncService(
             } catch (e: IllegalArgumentException) {
                 throw PushRejected("invalid_hlc", "change #$n: invalid HLC")
             }
+            if (h.counter >= MAX_PUSH_COUNTER) throw PushRejected("invalid_hlc", "change #$n: invalid HLC")
+            if (c.field == "_source" || c.field == "_sourceId" || c.field.startsWith("_base.")) {
+                throw PushRejected("reserved_field", "change #$n: reserved field")
+            }
             if (h.wallMillis > limit) throw PushRejected("clock_drift", "change #$n: HLC is too far in the future")
             if (h.nodeId == IMPORTER_NODE || h.nodeId == SERVER_NODE) throw PushRejected("reserved_node", "change #$n: reserved node id")
+        }
+    }
+
+    /** Tracks the highest HLC among fields actually written during one push. */
+    private inner class MaxHlc {
+        var value: Hlc? = null
+
+        fun write(changes: List<FieldChange>): List<FieldChange> {
+            val accepted = store.applyChanges(changes)
+            for (c in accepted) {
+                val h = Hlc.parse(c.hlc)
+                if (value.let { it == null || h > it }) value = h
+            }
+            return accepted
         }
     }
 
@@ -79,7 +105,7 @@ class SyncService(
     }
 
     /** Applies the validated batch inside the caller's transaction; returns the number of device changes written. */
-    private fun apply(batch: List<FieldChange>): Int {
+    private fun apply(batch: List<FieldChange>, max: MaxHlc): Int {
         val changes = collapse(batch)
         val deletedInBatch = changes.filter { it.field == "deleted" }.map { it.type to it.id }.toSet()
         var accepted = 0
@@ -88,17 +114,17 @@ class SyncService(
             val record = store.get(c.type, c.id)
             val stored = record?.fields?.get(c.field)
             val wrote = if (stored != null && isImporterConflict(c, record, stored)) {
-                writeConflict(c, stored.hlc, stored.value)
+                writeConflict(c, stored.hlc, stored.value, max)
                 true
             } else {
-                store.applyChanges(listOf(c)).isNotEmpty()
+                max.write(listOf(c)).isNotEmpty()
             }
             if (wrote) {
                 accepted++
                 if (isEdit(c.field)) edited += c.type to c.id
             }
         }
-        for ((type, id) in edited) if ((type to id) !in deletedInBatch) reviveIfDeletedByImport(type, id)
+        for ((type, id) in edited) if ((type to id) !in deletedInBatch) reviveIfDeletedByImport(type, id, max)
         return accepted
     }
 
@@ -109,12 +135,13 @@ class SyncService(
         return record.fields.containsKey("_base.${c.field}")
     }
 
-    private fun writeConflict(c: FieldChange, storedHlc: String, storedValue: JsonElement) {
+    private fun writeConflict(c: FieldChange, storedHlc: String, storedValue: JsonElement, max: MaxHlc) {
         clock.receive(Hlc.parse(storedHlc))
         catchUp(c.type, c.id, "_conflict.${c.field}")
-        val winner = FieldChange(c.type, c.id, c.field, c.value, clock.tick().encode())
+        // The winning field gets the later tick, so maxHlc of the push equals the winner's stored HLC.
         val conflict = FieldChange(c.type, c.id, "_conflict.${c.field}", storedValue, clock.tick().encode())
-        store.applyChanges(listOf(winner, conflict))
+        val winner = FieldChange(c.type, c.id, c.field, c.value, clock.tick().encode())
+        max.write(listOf(winner, conflict))
     }
 
     /** Moves the server clock past an existing value of [field], so a generated write is strictly newer than it. */
@@ -122,13 +149,13 @@ class SyncService(
         store.get(type, id)?.fields?.get(field)?.let { clock.receive(Hlc.parse(it.hlc)) }
     }
 
-    private fun reviveIfDeletedByImport(type: EntityType, id: String) {
+    private fun reviveIfDeletedByImport(type: EntityType, id: String, max: MaxHlc) {
         val record: EntityRecord = store.get(type, id) ?: return
         val deleted = record.fields["deleted"] ?: return
         if (!record.isDeleted || Hlc.parse(deleted.hlc).nodeId != IMPORTER_NODE) return
         clock.receive(Hlc.parse(deleted.hlc))
         catchUp(type, id, "_removedInSource")
-        store.applyChanges(
+        max.write(
             listOf(
                 FieldChange(type, id, "deleted", JsonPrimitive(false), clock.tick().encode()),
                 FieldChange(type, id, "_removedInSource", JsonPrimitive(true), clock.tick().encode()),

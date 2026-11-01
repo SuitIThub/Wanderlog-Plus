@@ -54,4 +54,8 @@ Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` un
 
 ## Backup
 
-Das Volume `wlp-data` sichern (Datenbank und `files/`), oder die Daten per `GET /api/export` herunterladen.
+Das Volume `wlp-data` sichern (Datenbank und `files/`). Dazu vorher den Container stoppen oder die Datenbank mit `sqlite3 wanderlog-plus.db ".backup backup.db"` kopieren; eine einfache Dateikopie der laufenden WAL-Datenbank kann inkonsistent sein.
+
+`GET /api/export` ist ein reiner Lese-Export und kein Weg zur Wiederherstellung.
+
+Nach einem Restore behaelt die Datenbank ihre Epoche (nur eine neu angelegte Datenbank bekommt eine neue). Danach muss der Sync-Zustand der App zurueckgesetzt werden (Plan 3 bietet das an).

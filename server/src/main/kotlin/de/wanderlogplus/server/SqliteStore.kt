@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonElement
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
+import java.util.UUID
 
 /** One run of the Wanderlog importer; times are ISO-8601 UTC. */
 @Serializable
@@ -34,6 +35,9 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
     private val conn: Connection = DriverManager.getConnection("jdbc:sqlite:${dbFile.toAbsolutePath()}")
     private var maxSeq: Long = 0
 
+    /** Random id of this database file, created on first open; changes only if the DB is recreated. */
+    val epoch: String
+
     /** Author recorded for subsequent puts; set via [transaction]. */
     @Volatile
     var currentAuthor: String = "server"
@@ -56,6 +60,15 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
                         created INTEGER, updated INTEGER, conflicts INTEGER, removed INTEGER,
                         flagged_removed INTEGER, error TEXT)""",
                 )
+            }
+            conn.createStatement().use { st ->
+                st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            }
+            conn.prepareStatement("INSERT OR IGNORE INTO meta(key, value) VALUES ('db_epoch', ?)").use { ps ->
+                ps.setString(1, UUID.randomUUID().toString()); ps.executeUpdate()
+            }
+            epoch = conn.createStatement().use { st ->
+                st.executeQuery("SELECT value FROM meta WHERE key = 'db_epoch'").use { it.next(); it.getString(1) }
             }
             maxSeq = loadMaxSeq()
         } catch (e: Throwable) {
@@ -180,7 +193,6 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
     /** Objects whose highest field seq is > [since], ordered by that seq, at most [limit], each with all fields. */
     @Synchronized
     fun pull(since: Long, limit: Int): PullResponse {
-        require(limit > 0) { "limit must be positive" }
         class Head(val type: String, val id: String, val seq: Long)
         val heads = ArrayList<Head>()
         conn.prepareStatement(
@@ -196,7 +208,7 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             val type = EntityType.valueOf(h.type)
             EntityRecord(type, h.id, readFields(type, h.id))
         }
-        return PullResponse(records, page.lastOrNull()?.seq ?: since, hasMore)
+        return PullResponse(records, page.lastOrNull()?.seq ?: since, hasMore, epoch)
     }
 
     @Synchronized

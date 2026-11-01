@@ -1,5 +1,7 @@
 .git
 **/build
+**/.env
+server/Caddyfile
 .gradle
 testdata
 .remember

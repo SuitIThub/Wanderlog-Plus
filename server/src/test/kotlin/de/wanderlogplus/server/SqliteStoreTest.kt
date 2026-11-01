@@ -29,6 +29,14 @@ class SqliteStoreTest {
     )
 
     @Test
+    fun epochStableAcrossReopenAndDiffersForNewFile() {
+        val first = open().use { it.epoch }
+        assertEquals(first, open().use { it.epoch })
+        val other = SqliteStore(dir.resolve("other.db")).use { it.epoch }
+        assertTrue(first != other)
+    }
+
+    @Test
     fun putAndGetRoundTrip() {
         val r = EntityRecord(
             EntityType.PLACE, "p1",
