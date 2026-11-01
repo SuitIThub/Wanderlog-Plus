@@ -80,11 +80,15 @@ fun distanceLabel(meters: Long): String = when {
     else -> "${(meters + 500) / 1000} km"
 }
 
-/** One-line summary of a leg result. */
-fun legSummary(r: LegResult?): String = when (r) {
+/**
+ * One-line summary of a leg result. Google's API has no transit timetables for Japan, so a missing transit route points
+ * to the Google Maps app, which does have them.
+ */
+fun legSummary(r: LegResult?, mode: TravelMode = TravelMode.WALK): String = when (r) {
     null -> "Weg wird berechnet …"
     is LegResult.Route -> durationLabel(r.durationSeconds) + " · " + distanceLabel(r.distanceMeters)
-    LegResult.NoRoute -> "Keine Route mit diesem Verkehrsmittel"
+    LegResult.NoRoute ->
+        if (mode == TravelMode.TRANSIT) "ÖPNV-Zeiten nur in Google Maps (aufklappen)" else "Keine Route mit diesem Verkehrsmittel"
     LegResult.NotConfigured -> "Wegzeiten brauchen einen Routen-Key auf dem Server"
     LegResult.Offline -> "Offline – Weg noch nicht geladen"
     LegResult.Failed -> "Weg konnte nicht berechnet werden"
@@ -148,7 +152,7 @@ fun LegRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(modeIcon(mode), contentDescription = modeLabel(mode), tint = accent, modifier = Modifier.size(20.dp))
-                Text(legSummary(result), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("leg-summary"))
+                Text(legSummary(result, mode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("leg-summary"))
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Weg zuklappen" else "Weg aufklappen",
