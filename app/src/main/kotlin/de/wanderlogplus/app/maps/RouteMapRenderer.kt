@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CancellationException
@@ -42,8 +44,16 @@ const val MAP_ATTRIBUTION = "© OpenStreetMap"
  * Renders a route once with MapLibre's [MapSnapshotter] and keeps the PNG in [cacheDir], so it stays available offline.
  * The cache lookup comes before any MapLibre call, so a cache hit never initializes MapLibre (testable under Robolectric).
  */
-class RouteMapRenderer(context: Context, private val cacheDir: File = File(context.cacheDir, "route-maps")) {
-    private val appContext = context.applicationContext
+class RouteMapRenderer(
+    context: Context,
+    private val cacheDir: File = File(context.cacheDir, "route-maps"),
+    /** Only render with a validated internet connection: an offline snapshot would cache missing tiles for good. */
+    private val isOnline: () -> Boolean = { hasValidatedInternet(context.applicationContext) },
+    /** The MapLibre snapshot (main thread); injectable so tests can verify it is never reached. */
+    private val snapshot: suspend (RouteGeometry, Int, Int) -> Bitmap? = { route, w, h ->
+        RouteSnapshots.snapshot(context.applicationContext, route, w, h)
+    },
+) {
     private val mutex = Mutex() // one snapshotter at a time: they are memory-heavy
 
     private fun fileFor(route: RouteGeometry, widthPx: Int, heightPx: Int) = File(cacheDir, route.cacheKey(widthPx, heightPx) + ".png")
@@ -57,10 +67,11 @@ class RouteMapRenderer(context: Context, private val cacheDir: File = File(conte
         if (widthPx <= 0 || heightPx <= 0) return null
         cachedFile(route, widthPx, heightPx)?.let { return it }
         return try {
+            if (!isOnline()) return null // fallback now; rendered on a later composition once online
             mutex.withLock {
                 cachedFile(route, widthPx, heightPx)?.let { return@withLock it }
                 val bitmap = withTimeoutOrNull(RENDER_TIMEOUT_MS) {
-                    withContext(Dispatchers.Main) { RouteSnapshots.snapshot(appContext, route, widthPx, heightPx) }
+                    withContext(Dispatchers.Main) { snapshot(route, widthPx, heightPx) }
                 } ?: return@withLock null
                 withContext(Dispatchers.IO) { writeAtomically(bitmap, fileFor(route, widthPx, heightPx)) }
             }
@@ -86,6 +97,14 @@ class RouteMapRenderer(context: Context, private val cacheDir: File = File(conte
     private companion object {
         const val RENDER_TIMEOUT_MS = 30_000L
     }
+}
+
+/** True when the active network has validated internet access (not just a captive portal or a dead Wi-Fi). */
+private fun hasValidatedInternet(context: Context): Boolean {
+    val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
+    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
 
 /** All MapLibre calls of the renderer; a separate class, so loading [RouteMapRenderer] never touches MapLibre. */

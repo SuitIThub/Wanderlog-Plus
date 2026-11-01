@@ -17,6 +17,8 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
+        // MapLibre ships ~10 MB of native code per ABI; both target phones are arm64 (no emulator in use).
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {

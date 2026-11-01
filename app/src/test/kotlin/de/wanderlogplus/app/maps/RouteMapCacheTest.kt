@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import android.content.Context
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,10 +20,21 @@ class RouteMapCacheTest {
         val dir = File(context.cacheDir, "route-maps-test").apply { deleteRecursively(); mkdirs() }
         val route = RouteGeometry(LatLngD(34.98, 135.75), LatLngD(34.70, 135.49), arc = false)
         val cached = File(dir, route.cacheKey(640, 240) + ".png").apply { writeBytes(byteArrayOf(1, 2, 3)) }
-        val renderer = RouteMapRenderer(context, dir)
-        // A cache hit must return before MapLibre is touched (its native libs cannot load under Robolectric).
+        val renderer = RouteMapRenderer(context, dir, isOnline = { false }, snapshot = { _, _, _ -> error("must not render") })
+        // A cache hit (also offline) must return before MapLibre is touched (its native libs cannot load under Robolectric).
         val result = renderer.render(route, 640, 240)
         assertEquals(cached.absolutePath, result?.absolutePath)
         assertTrue(renderer.cachedFile(route, 640, 240)!!.isFile)
+    }
+
+    @Test fun offlineWithoutCacheReturnsNullAndRendersNothing() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dir = File(context.cacheDir, "route-maps-offline").apply { deleteRecursively(); mkdirs() }
+        val route = RouteGeometry(LatLngD(35.55, 139.78), LatLngD(34.43, 135.23), arc = true)
+        var renders = 0
+        val renderer = RouteMapRenderer(context, dir, isOnline = { false }, snapshot = { _, _, _ -> renders++; null })
+        assertNull(renderer.render(route, 640, 240))
+        assertEquals(0, renders)
+        assertEquals(0, dir.listFiles()!!.size)
     }
 }
