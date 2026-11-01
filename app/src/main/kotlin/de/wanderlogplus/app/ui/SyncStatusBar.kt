@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
@@ -59,12 +60,17 @@ fun SyncedScreen(
     status: SyncStatus,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    scrollable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     Column(modifier.fillMaxSize()) {
         SyncStatusBar(status)
         PullToRefreshBox(isRefreshing = status.running, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { content() }
+            if (scrollable) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) { content() }
+            } else {
+                Box(Modifier.fillMaxSize()) { content() }
+            }
         }
     }
 }

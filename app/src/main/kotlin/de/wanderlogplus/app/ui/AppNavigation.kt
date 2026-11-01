@@ -25,6 +25,12 @@ import de.wanderlogplus.app.sync.SyncStatus
 import de.wanderlogplus.app.ui.setup.SetupScreen
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.app.ui.trip.DAY_ROUTE
+import de.wanderlogplus.app.ui.trip.DayDetailScreen
+import de.wanderlogplus.app.ui.trip.TripScreen
+import de.wanderlogplus.app.ui.trip.TripViewModel
+import de.wanderlogplus.app.ui.trip.dayRoute
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -57,6 +63,7 @@ fun AppNavigation(
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
     setupViewModelFactory: ViewModelProvider.Factory? = null,
+    tripViewModelFactory: ViewModelProvider.Factory? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -68,8 +75,12 @@ fun AppNavigation(
             if (current != SETUP_ROUTE) NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
-                        selected = current == tab.route,
+                        selected = current == tab.route || (tab == Tab.REISE && current == DAY_ROUTE),
                         onClick = {
+                            if (tab == Tab.REISE && current == DAY_ROUTE) {
+                                nav.popBackStack(Tab.REISE.route, inclusive = false)
+                                return@NavigationBarItem
+                            }
                             nav.navigate(tab.route) {
                                 popUpTo(Tab.HEUTE.route) { saveState = true }
                                 launchSingleTop = true
@@ -94,7 +105,35 @@ fun AppNavigation(
                     nav.navigate(Tab.HEUTE.route) { popUpTo(0) { inclusive = true } }
                 })
             }
-            Tab.entries.forEach { tab ->
+            if (tripViewModelFactory != null) {
+                composable(Tab.REISE.route) {
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory)
+                    val snap by vm.snapshot.collectAsState()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty == false) {
+                        val s = snap
+                        if (s == null || s.isEmpty) EmptyState(onSyncNow = onRefresh)
+                        else TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) })
+                    }
+                }
+                composable(DAY_ROUTE) { entry ->
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.getBackStackEntry(Tab.REISE.route))
+                    val snap by vm.snapshot.collectAsState()
+                    val date = entry.arguments?.getString("date").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let {
+                            DayDetailScreen(
+                                snapshot = it,
+                                date = date,
+                                onBack = { nav.popBackStack() },
+                                onAddSuggestion = vm::addSuggestion,
+                                onMove = vm::move,
+                                onRemove = vm::remove,
+                            )
+                        }
+                    }
+                }
+            }
+            Tab.entries.filter { it != Tab.REISE || tripViewModelFactory == null }.forEach { tab ->
                 composable(tab.route) {
                     SyncedScreen(syncStatus, onRefresh) {
                         if (tab in EMPTY_AWARE_TABS && snapshot?.isEmpty == true) {
