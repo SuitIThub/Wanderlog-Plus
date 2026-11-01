@@ -152,7 +152,7 @@ class ImportRoutesTest {
     @Test
     fun parseErrorDoesNotLeakInput() {
         val sentinel = "SENTINEL-BOOKING-4711"
-        val bad = fixture().replaceFirst("\"id\": 1,", "\"id\": \"$sentinel\",")
+        val bad = fixture().replaceFirst("\"id\": 103,", "\"id\": \"$sentinel\",")
         // Precondition: the raw kotlinx message really contains the input.
         val cause = runCatching { de.wanderlogplus.importer.WanderlogParser.parse(bad) }.exceptionOrNull()
         assertTrue(cause?.cause?.message.orEmpty().contains(sentinel), "raw cause must contain sentinel")
