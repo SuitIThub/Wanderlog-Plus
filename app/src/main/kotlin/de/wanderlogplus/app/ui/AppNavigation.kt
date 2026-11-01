@@ -47,6 +47,7 @@ import de.wanderlogplus.app.ui.more.NoteDetailScreen
 import de.wanderlogplus.app.ui.more.NotesScreen
 import de.wanderlogplus.app.ui.more.SETTINGS_ROUTE
 import de.wanderlogplus.app.ui.more.SettingsInfo
+import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.ui.more.SettingsScreen
 import de.wanderlogplus.app.ui.more.noteRoute
 import de.wanderlogplus.app.ui.today.TodayScreen
@@ -114,7 +115,9 @@ fun AppNavigation(
     importViewModelFactory: ViewModelProvider.Factory? = null,
     settingsInfo: SettingsInfo = SettingsInfo(null, null, ""),
     onResetSync: () -> Unit = {},
-    /** Device-local "now" for the Heute tab; injectable for tests. */
+    tripZone: TripZone = TripZone.JAPAN,
+    onTripZone: (TripZone) -> Unit = {},
+    /** Trip-zone "now" for the Heute tab; injectable for tests. */
     clock: () -> LocalDateTime = { LocalDateTime.now() },
 ) {
     if (hasServer == null) return
@@ -291,6 +294,8 @@ fun AppNavigation(
                             onChangeServer = { nav.navigate(SETUP_ROUTE) },
                             onSyncNow = onRefresh,
                             onResetSync = onResetSync,
+                            tripZone = tripZone,
+                            onTripZone = onTripZone,
                         )
                     }
                 }

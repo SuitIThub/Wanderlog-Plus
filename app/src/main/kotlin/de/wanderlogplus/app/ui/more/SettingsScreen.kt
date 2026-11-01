@@ -2,6 +2,13 @@ package de.wanderlogplus.app.ui.more
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
+import de.wanderlogplus.app.data.TripZone
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +48,8 @@ fun SettingsScreen(
     onResetSync: () -> Unit,
     modifier: Modifier = Modifier,
     now: Long = System.currentTimeMillis(),
+    tripZone: TripZone = TripZone.JAPAN,
+    onTripZone: (TripZone) -> Unit = {},
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -51,6 +60,17 @@ fun SettingsScreen(
         Text("Adresse: ${info.serverUrl ?: "–"}")
         Text("Token: ${maskToken(info.token)}")
         OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
+
+        Text("Zeitzone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+        for ((zone, label) in listOf(TripZone.JAPAN to "Japan (JST)", TripZone.DEVICE to "Gerätezeit verwenden")) {
+            Row(
+                Modifier.fillMaxWidth().selectable(selected = tripZone == zone, role = Role.RadioButton, onClick = { onTripZone(zone) }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = tripZone == zone, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
 
         Text("Synchronisation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
         Text("Zuletzt synchronisiert: " + (status.lastSyncAt?.let { relativeAgo(it, now) } ?: "noch nie"))

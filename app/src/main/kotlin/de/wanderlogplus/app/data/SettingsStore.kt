@@ -30,6 +30,16 @@ class SettingsStore(context: Context) : SyncStateStore {
         if (url.isNullOrBlank() || token == null) null else ServerSettings(url, token)
     }
 
+    private val tripZoneKey = stringPreferencesKey("trip_zone")
+
+    val tripZone: Flow<TripZone> = appContext.serverDataStore.data.map { p ->
+        p[tripZoneKey]?.let { n -> TripZone.entries.firstOrNull { it.name == n } } ?: TripZone.JAPAN
+    }
+
+    suspend fun setTripZone(z: TripZone) {
+        appContext.serverDataStore.edit { it[tripZoneKey] = z.name }
+    }
+
     suspend fun saveServer(s: ServerSettings) {
         appContext.serverDataStore.edit {
             it[urlKey] = s.url

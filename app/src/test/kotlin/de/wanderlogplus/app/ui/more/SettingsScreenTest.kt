@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.sync.SyncStatus
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import org.junit.Assert.assertEquals
@@ -48,5 +49,20 @@ class SettingsScreenTest {
         rule.onNodeWithText("Sync-Zustand zurücksetzen").performClick()
         rule.onNodeWithText("Zurücksetzen").performClick()
         assertEquals(1, resets)
+    }
+
+    @Test fun tripZoneToggleCallsCallback() {
+        var picked: TripZone? = null
+        rule.setContent {
+            WanderlogPlusTheme {
+                SettingsScreen(
+                    SettingsInfo(null, null, ""), SyncStatus(),
+                    onChangeServer = {}, onSyncNow = {}, onResetSync = {},
+                    tripZone = TripZone.JAPAN, onTripZone = { picked = it },
+                )
+            }
+        }
+        rule.onNodeWithText("Gerätezeit verwenden").performClick()
+        assertEquals(TripZone.DEVICE, picked)
     }
 }

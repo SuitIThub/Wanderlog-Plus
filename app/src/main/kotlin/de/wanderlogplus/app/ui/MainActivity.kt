@@ -28,6 +28,8 @@ import androidx.lifecycle.ViewModelProvider
 import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.data.ServerSettings
+import de.wanderlogplus.app.data.TripZone
+import de.wanderlogplus.app.data.now
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
@@ -66,6 +68,7 @@ class MainActivity : ComponentActivity() {
                 val nodeId by produceState<String?>(null) {
                     value = try { withContext(Dispatchers.IO) { container.settings.nodeId } } catch (e: CancellationException) { throw e } catch (e: Exception) { loadFailed = true; null }
                 }
+                val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
@@ -86,6 +89,9 @@ class MainActivity : ComponentActivity() {
                     moreViewModelFactory = remember { moreFactory(container) },
                     importViewModelFactory = remember { importFactory(container) },
                     settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
+                    tripZone = tripZone,
+                    onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
+                    clock = { tripZone.now() },
                     onResetSync = {
                         scope.launch {
                             container.syncRunner.resetCursor()
