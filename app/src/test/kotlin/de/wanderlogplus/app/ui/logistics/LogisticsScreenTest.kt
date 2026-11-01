@@ -62,6 +62,14 @@ class LogisticsScreenTest {
         assertEquals(3, rule.onAllNodesWithText("Live-Status: –").fetchSemanticsNodes().size)
     }
 
+    @Test fun stayShowsNavigateAndTransitOnly() {
+        val snap = snapshot()
+        rule.setContent { WanderlogPlusTheme { LogisticsScreen(snap, onOpenLink = {}) } }
+        rule.onNodeWithTag("link-NAVIGATE").assertExists()
+        rule.onNodeWithTag("link-TRANSIT").assertExists()
+        rule.onNodeWithTag("link-TABELOG").assertDoesNotExist()
+    }
+
     @Test fun sortKeyPutsMissingTimeAfterTimedAndMissingDateLast() {
         val untimed = Flight("a", depart = Endpoint(date = "2027-05-08"))
         val timed = Flight("b", depart = Endpoint(date = "2027-05-08", time = "23:00"))

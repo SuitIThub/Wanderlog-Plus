@@ -33,6 +33,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.app.links.GoogleExternalLinks
+import de.wanderlogplus.app.ui.LinkButtons
 import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
 import de.wanderlogplus.app.ui.attachments.AttachmentsFor
@@ -78,6 +81,8 @@ fun PlaceDetailScreen(
     /** Increases whenever a save failed; the optimistic note is dropped then. */
     failureCount: Int = 0,
     attachments: AttachmentActions? = null,
+    /** Null hides the link buttons. */
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -116,6 +121,11 @@ fun PlaceDetailScreen(
             if (saved.tags.isNotEmpty()) Text(saved.tags.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
             place?.address?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
             place?.let(::durationText)?.let { Text("Dauer: $it", style = MaterialTheme.typography.bodyMedium) }
+        }
+
+        if (place != null && onOpenLink != null) {
+            val links = remember(place, saved.category) { GoogleExternalLinks.linksFor(place, saved.category) }
+            LinkButtons(links, onOpenLink, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
         }
 
         place?.description?.takeIf { it.isNotBlank() }?.let { Section("Beschreibung") { Text(it, style = MaterialTheme.typography.bodyMedium) } }

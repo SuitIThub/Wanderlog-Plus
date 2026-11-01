@@ -149,6 +149,30 @@ class PlaceDetailTest {
         rule.onNode(hasText("geschlossen") and hasAnyAncestor(hasTestTag("hours-Di"))).assertExists()
     }
 
+    @Test fun showsNavigationButtons() {
+        seedPlace(Place("p1", name = "Schrein Alpha", lat = 34.9, lng = 135.7))
+        val opened = mutableListOf<de.wanderlogplus.app.links.ExternalLink>()
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(
+                    TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> },
+                    onOpenLink = { opened += it },
+                )
+            }
+        }
+        rule.onNodeWithTag("link-NAVIGATE").assertExists()
+        rule.onNodeWithTag("link-TRANSIT").assertExists()
+        rule.onNodeWithTag("link-TABELOG").assertDoesNotExist()
+        rule.onNodeWithTag("link-TRANSIT").performClick()
+        assertEquals(de.wanderlogplus.app.links.LinkKind.TRANSIT, opened.single().kind)
+    }
+
+    @Test fun noLinkButtonsWithoutHandler() {
+        seedPlace(Place("p1", name = "Schrein Alpha", lat = 34.9, lng = 135.7))
+        show()
+        rule.onNodeWithTag("link-NAVIGATE").assertDoesNotExist()
+    }
+
     @Test fun openingHoursLinesRules() {
         val lines = openingHoursLines(
             listOf(

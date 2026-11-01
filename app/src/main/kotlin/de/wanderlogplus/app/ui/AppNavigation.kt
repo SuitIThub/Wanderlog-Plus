@@ -23,6 +23,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import de.wanderlogplus.app.files.AttachmentFiles
 import de.wanderlogplus.app.sync.SyncStatus
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.app.links.openExternalLink
+import de.wanderlogplus.app.ui.attachments.MSG_NO_APP
+import kotlinx.coroutines.launch
 import de.wanderlogplus.app.ui.attachments.ATTACHMENT_ROUTE
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
 import de.wanderlogplus.app.ui.attachments.AttachmentViewerScreen
@@ -156,6 +162,11 @@ fun AppNavigation(
             }
         },
     ) { padding ->
+        val linkContext = LocalContext.current
+        val linkScope = rememberCoroutineScope()
+        val onOpenLink: (ExternalLink) -> Unit = { link ->
+            if (!openExternalLink(linkContext, link)) linkScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+        }
         val attachmentActions: AttachmentActions? =
             if (attachmentsViewModelFactory != null && attachmentFiles != null) {
                 val avm: AttachmentsViewModel = viewModel(factory = attachmentsViewModelFactory)
@@ -188,6 +199,7 @@ fun AppNavigation(
                                 onOpenTrip = { nav.navigateToTab(Tab.REISE) },
                                 onSyncNow = onRefresh,
                                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
+                                onOpenLink = onOpenLink,
                             )
                         }
                     }
@@ -257,7 +269,7 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions)
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink)
                         }
                     }
                 }
@@ -271,7 +283,7 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> LogisticsScreen(s, attachments = attachmentActions)
+                            else -> LogisticsScreen(s, attachments = attachmentActions, onOpenLink = onOpenLink)
                         }
                     }
                 }

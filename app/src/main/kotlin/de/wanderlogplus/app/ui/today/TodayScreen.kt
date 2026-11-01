@@ -20,7 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.ui.EmptyState
+import de.wanderlogplus.app.ui.LinkButtons
+import de.wanderlogplus.app.ui.stayLinks
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
@@ -52,6 +55,8 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     /** Tapped ticket chip under a trip of today. */
     onOpenAttachment: (Attachment) -> Unit = {},
+    /** Null hides the stay link buttons. */
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
 ) {
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
@@ -86,7 +91,7 @@ fun TodayScreen(
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, modifier)
     }
 }
 
@@ -97,6 +102,7 @@ private fun During(
     now: LocalDateTime,
     onOpenDay: (String) -> Unit,
     onOpenAttachment: (Attachment) -> Unit,
+    onOpenLink: ((ExternalLink) -> Unit)?,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -133,6 +139,11 @@ private fun During(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+
+        val stayPlace = stay?.let { snapshot.places[it.placeId] }
+        if (stayPlace != null && onOpenLink != null) {
+            LinkButtons(stayLinks(stayPlace), onOpenLink, Modifier.padding(horizontal = 16.dp).testTag("today-stay-links"))
         }
 
         if (state.movements.isNotEmpty()) {
