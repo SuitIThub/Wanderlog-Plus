@@ -4,6 +4,7 @@ import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
 import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
 import de.wanderlogplus.shared.sync.PushRequest
+import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -57,6 +58,7 @@ class Services(
     val sync: SyncService,
     val files: FileStore,
     val imports: ImportService,
+    val routes: RoutesService = RoutesService(store, null),
 )
 
 @Serializable
@@ -114,6 +116,9 @@ fun Application.module(services: Services) {
         exception<ImportNotConfigured> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("import_not_configured")) }
         exception<FileTooLarge> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("file_too_large")) }
         exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
+        exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
+        exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }
+        exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<BadInput> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<ContentTransformationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -182,6 +187,10 @@ fun Application.module(services: Services) {
                     call.response.headers.append("X-Content-Type-Options", "nosniff")
                     call.respond(LocalFileContent(path.toFile(), ContentType.Application.OctetStream))
                 }
+            }
+            post("/api/routes") {
+                val req = call.receive<RouteRequest>()
+                call.respond(withContext(Dispatchers.IO) { services.routes.compute(req) })
             }
             post("/api/import/wanderlog") {
                 val entry = withContext(Dispatchers.IO) { services.imports.runImport() }

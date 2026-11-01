@@ -77,6 +77,8 @@ fun DayTimeline(
     moveTagPrefix: String = "movement-",
     itemActions: (@Composable (DayItem) -> Unit)? = null,
     emptyProgram: (@Composable () -> Unit)? = null,
+    /** The way to a place from the previous place of the program (notes in between are skipped); null shows none. */
+    legs: (@Composable (from: DayItem, to: DayItem) -> Unit)? = null,
 ) {
     val dow = now?.let { it.dayOfWeek.value % 7 } // 0 = Sunday
     val time = now?.format(HH_MM)
@@ -94,7 +96,9 @@ fun DayTimeline(
                 val tag = Modifier.testTag(itemTagPrefix + item.id)
                 val actions: (@Composable () -> Unit)? = itemActions?.let { a -> { a(item) } }
                 when (item.kind) {
-                    DayItemKind.PLACE -> {
+                    DayItemKind.PLACE -> Column {
+                        val prevPlace = if (legs == null) null else items.subList(0, i).lastOrNull { it.kind == DayItemKind.PLACE }
+                        if (legs != null && prevPlace != null) legs(prevPlace, item)
                         val place = item.placeId?.let { snapshot.places[it] }
                         val saved = snapshot.savedPlaces.firstOrNull { it.placeId == item.placeId }
                         val open = dow != null && time != null && place != null && isOpenAt(place.openingPeriods, dow, time) == true
@@ -145,6 +149,16 @@ fun Movement.routeTitle(): String {
         is Movement.FlightMove -> "${e(flight.depart.name, flight.depart.code)} → ${e(flight.arrive.name, flight.arrive.code)}"
         is Movement.TrainMove -> "${e(train.depart.name, train.depart.code)} → ${e(train.arrive.name, train.arrive.code)}"
     }
+}
+
+/** "über Frankfurt Hbf, Nagoya" for a leg with stopovers; null without. */
+fun Movement.viaLine(): String? {
+    val via = when (this) {
+        is Movement.FlightMove -> flight.via
+        is Movement.TrainMove -> train.via
+    }
+    val names = via.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } ?: it.code?.takeIf { c -> c.isNotBlank() } }
+    return names.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "über ")
 }
 
 /**
@@ -207,6 +221,9 @@ private fun MoveCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            m.viaLine()?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("move-via"))
+            }
             m.timesLine().takeIf { it.isNotEmpty() }?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }

@@ -1,6 +1,7 @@
 package de.wanderlogplus.client
 
 import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Ids
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.*
@@ -23,7 +24,7 @@ class LocalEditor(
     private val onChange: () -> Unit = {},
 ) {
     private companion object {
-        val DAY_FIELDS = setOf("title", "note", "regionOverrideId")
+        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs")
     }
 
     private fun isReserved(field: String) = field == "_source" || field == "_sourceId" || field.startsWith("_base.")
@@ -115,6 +116,66 @@ class LocalEditor(
             }
         }
         onChange()
+    }
+
+    /** Writes only the fields whose value differs between [before] and [after] (e.g. `EntityCodec.fields` of an edit). */
+    fun setChanged(type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) {
+        val changed = after.filter { (k, v) -> before[k] != v }
+        if (changed.isEmpty()) return
+        set(type, id, changed)
+    }
+
+    /**
+     * Joins two legs of one journey (both trains or both flights): the first keeps its start and gets the second's
+     * destination, the first's destination becomes a stopover, the second is deleted and its attachments move to the
+     * first. Booking number, travelers and notes are combined.
+     */
+    fun mergeMoves(snapshot: TripSnapshot, type: EntityType, firstId: String, secondId: String) {
+        require(firstId != secondId) { "Cannot merge a leg with itself" }
+        val (before, after) = when (type) {
+            EntityType.TRAIN -> {
+                val a = requireNotNull(snapshot.trains.firstOrNull { it.id == firstId }) { "Unknown leg" }
+                val b = requireNotNull(snapshot.trains.firstOrNull { it.id == secondId }) { "Unknown leg" }
+                EntityCodec.fields(a) to EntityCodec.fields(
+                    a.copy(
+                        carrier = a.carrier?.takeIf { it.isNotBlank() } ?: b.carrier,
+                        arrive = b.arrive,
+                        via = a.via + a.arrive + b.via,
+                        confirmationNumber = mergedText(a.confirmationNumber, b.confirmationNumber, ", "),
+                        travelerNames = (a.travelerNames + b.travelerNames).distinct(),
+                        note = mergedText(a.note, b.note, "\n\n").orEmpty(),
+                    ),
+                )
+            }
+            EntityType.FLIGHT -> {
+                val a = requireNotNull(snapshot.flights.firstOrNull { it.id == firstId }) { "Unknown leg" }
+                val b = requireNotNull(snapshot.flights.firstOrNull { it.id == secondId }) { "Unknown leg" }
+                EntityCodec.fields(a) to EntityCodec.fields(
+                    a.copy(
+                        arrive = b.arrive,
+                        via = a.via + a.arrive + b.via,
+                        confirmationNumber = mergedText(a.confirmationNumber, b.confirmationNumber, ", "),
+                        travelerNames = (a.travelerNames + b.travelerNames).distinct(),
+                        note = mergedText(a.note, b.note, "\n\n").orEmpty(),
+                    ),
+                )
+            }
+            else -> throw IllegalArgumentException("Only trains and flights can be merged")
+        }
+        tx.run {
+            val changed = after.filter { (k, v) -> before[k] != v }
+            if (changed.isNotEmpty()) write(type, firstId, changed)
+            snapshot.attachmentsFor(type, secondId).forEach {
+                write(EntityType.ATTACHMENT, it.id, mapOf("targetId" to JsonPrimitive(firstId)))
+            }
+            write(type, secondId, mapOf("deleted" to JsonPrimitive(true)))
+        }
+        onChange()
+    }
+
+    private fun mergedText(a: String?, b: String?, sep: String): String? {
+        val parts = listOfNotNull(a?.takeIf { it.isNotBlank() }, b?.takeIf { it.isNotBlank() }).distinct()
+        return if (parts.isEmpty()) a else parts.joinToString(sep)
     }
 
     fun addNoteToDay(snapshot: TripSnapshot, date: String, text: String): String {

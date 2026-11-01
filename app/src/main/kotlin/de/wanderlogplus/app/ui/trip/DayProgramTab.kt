@@ -1,6 +1,17 @@
 package de.wanderlogplus.app.ui.trip
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.ui.Alignment
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.app.maps.LatLngD
+import de.wanderlogplus.app.ui.design.LegRow
+import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.sync.TravelMode
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -41,8 +52,21 @@ internal fun DayProgramTab(
     onMove: (itemId: String, up: Boolean) -> Unit,
     onRemove: (itemId: String) -> Unit,
     attachments: AttachmentActions?,
+    showLegs: Boolean = false,
+    onShowLegs: ((Boolean) -> Unit)? = null,
+    onLegMode: (itemId: String, mode: TravelMode) -> Unit = { _, _ -> },
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
 ) {
-    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
+        if (onShowLegs != null && items.count { it.kind == DayItemKind.PLACE } >= 2) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Wege zwischen den Zielen", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Switch(checked = showLegs, onCheckedChange = onShowLegs, modifier = Modifier.testTag("legs-toggle"))
+            }
+        }
         DayTimeline(
             snapshot = snapshot,
             date = date,
@@ -62,9 +86,26 @@ internal fun DayProgramTab(
             emptyProgram = {
                 EmptyHint("Noch nichts geplant – füge Orte aus den Vorschlägen hinzu.", Modifier.testTag("program-empty"))
             },
+            legs = if (!showLegs) null else { from, to ->
+                LegRow(
+                    tag = to.id,
+                    from = placeCoords(snapshot, from),
+                    to = placeCoords(snapshot, to),
+                    mode = to.legMode ?: TravelMode.WALK,
+                    onMode = { m -> onLegMode(to.id, m) },
+                    accent = accent,
+                    onOpenLink = onOpenLink,
+                )
+            },
             modifier = Modifier.testTag("program-list"),
         )
     }
+}
+
+/** Coordinates of a program place; null for notes and places without position. */
+internal fun placeCoords(snapshot: TripSnapshot, item: DayItem): LatLngD? {
+    val p = item.placeId?.let { snapshot.places[it] } ?: return null
+    return if (p.lat == 0.0 && p.lng == 0.0) null else LatLngD(p.lat, p.lng)
 }
 
 /** ⋮ menu of a program item; entries tagged `item-up-<id>`, `item-down-<id>`, `item-remove-<id>`. */

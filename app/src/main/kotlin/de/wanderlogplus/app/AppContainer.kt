@@ -21,6 +21,8 @@ import de.wanderlogplus.app.data.SnapshotRepository
 import de.wanderlogplus.app.data.roomTransactor
 import de.wanderlogplus.app.sync.SyncRunner
 import de.wanderlogplus.app.sync.SyncScheduler
+import de.wanderlogplus.app.maps.LegRepository
+import de.wanderlogplus.client.GeoSearch
 import de.wanderlogplus.client.LocalEditor
 import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
@@ -63,6 +65,8 @@ class AppContainer(context: Context) {
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }
     val syncRunner: SyncRunner by lazy { SyncRunner(this) }
     val http: HttpClient by lazy { HttpClient(OkHttp) }
+    /** Place search for stopovers; a third-party service, so it never gets the server token. */
+    val geoSearch: GeoSearch by lazy { GeoSearch(http) }
 
     val attachmentFiles: AttachmentFiles by lazy { AttachmentFiles(File(appContext.filesDir, "attachments")) }
 
@@ -76,6 +80,12 @@ class AppContainer(context: Context) {
         api?.let { if (apiFor == server) return it }
         return SyncApi(http, server.url, server.token).also { api = it; apiFor = server }
     }
+
+    /** API for the current server (null without one); for callers on coroutines. */
+    suspend fun syncApi(): SyncApi? = withContext(Dispatchers.IO) { currentApi() }
+
+    /** Ways between a day's places (cached on disk, so legs seen once work offline). */
+    val legs: LegRepository by lazy { LegRepository(api = { syncApi() }, dir = File(appContext.filesDir, "legs")) }
 
     val fileSyncRunner: FileSyncRunner by lazy {
         FileSyncRunner(

@@ -15,12 +15,29 @@ data class LatLngD(val lat: Double, val lng: Double)
  */
 const val RENDER_VERSION = 1
 
-/** Straight line (train) or arc (flight) between two endpoints; an "as the crow flies" route, not real track geometry. */
-data class RouteGeometry(val from: LatLngD, val to: LatLngD, val arc: Boolean) {
+/**
+ * Route through [stops] (start, stopovers, destination): straight segments (train) or one arc per segment (flight),
+ * unless a real [path] is known (a computed walking/transit route), which is then drawn instead. Without a path this is
+ * an "as the crow flies" picture, not real track geometry.
+ */
+data class RouteGeometry(val stops: List<LatLngD>, val arc: Boolean, val path: List<LatLngD>? = null) {
+    init {
+        require(stops.size >= 2) { "A route needs at least two stops" }
+    }
 
-    /** 2 points for a straight route; 32 points on a quadratic Bézier arc for a flight. */
+    constructor(from: LatLngD, to: LatLngD, arc: Boolean) : this(listOf(from, to), arc)
+
+    val from: LatLngD get() = stops.first()
+    val to: LatLngD get() = stops.last()
+
+    /** The [path] if known; else the stops joined by straight lines, or 32-point quadratic Bézier arcs per segment for a flight. */
     fun points(): List<LatLngD> {
-        if (!arc) return listOf(from, to)
+        path?.takeIf { it.size >= 2 }?.let { return it }
+        if (!arc) return stops
+        return stops.zipWithNext().flatMapIndexed { seg, (a, b) -> arcPoints(a, b).let { if (seg == 0) it else it.drop(1) } }
+    }
+
+    private fun arcPoints(from: LatLngD, to: LatLngD): List<LatLngD> {
         val dLat = to.lat - from.lat
         val dLng = to.lng - from.lng
         // Control point: midpoint, offset perpendicular by 20 % of the distance (perpendicular of (dLng, dLat) is (-dLat, dLng)).
@@ -36,11 +53,11 @@ data class RouteGeometry(val from: LatLngD, val to: LatLngD, val arc: Boolean) {
         }
     }
 
-    /** SHA-256 hex of the render [version], the coordinates (rounded to 5 decimals), [arc] and the pixel size. */
+    /** SHA-256 hex of the render [version], all stops and path points (rounded to 5 decimals), [arc] and the pixel size. */
     fun cacheKey(widthPx: Int, heightPx: Int, version: Int = RENDER_VERSION): String {
         fun r(v: Double) = String.format(Locale.ROOT, "%.5f", v + 0.0) // + 0.0 folds -0.0 into 0.0
-        val raw = listOf("v$version", r(from.lat), r(from.lng), r(to.lat), r(to.lng), arc.toString(), widthPx.toString(), heightPx.toString())
-            .joinToString("|")
+        val coords = (stops + listOf(LatLngD(Double.NaN, Double.NaN)) + path.orEmpty()).flatMap { listOf(r(it.lat), r(it.lng)) }
+        val raw = (listOf("v$version") + coords + listOf(arc.toString(), widthPx.toString(), heightPx.toString())).joinToString("|")
         return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
@@ -50,7 +67,11 @@ data class RouteGeometry(val from: LatLngD, val to: LatLngD, val arc: Boolean) {
     }
 }
 
-private fun Endpoint.coords(snapshot: TripSnapshot): LatLngD? {
+/** The endpoint's own coordinates (picked in the app) or its place's; null without usable coordinates. */
+fun Endpoint.coords(snapshot: TripSnapshot): LatLngD? {
+    val la = lat
+    val ln = lng
+    if (la != null && ln != null && !(la == 0.0 && ln == 0.0)) return LatLngD(la, ln)
     val p = placeId?.let { snapshot.places[it] } ?: return null
     if (p.lat == 0.0 && p.lng == 0.0) return null
     return LatLngD(p.lat, p.lng)
@@ -80,21 +101,20 @@ internal val AIRPORTS: Map<String, LatLngD> = mapOf(
 /** The airport of [Endpoint.code] from [AIRPORTS] (case-insensitive), or null. */
 private fun Endpoint.airportCoords(): LatLngD? = code?.trim()?.uppercase(Locale.ROOT)?.let { AIRPORTS[it] }
 
-private fun route(depart: Endpoint, arrive: Endpoint, snapshot: TripSnapshot, arc: Boolean): RouteGeometry? {
-    val from = depart.coords(snapshot) ?: return null
-    val to = arrive.coords(snapshot) ?: return null
-    return RouteGeometry(from, to, arc)
-}
-
 /**
- * Arc between the flight's endpoints: each end uses its place's coordinates, otherwise its IATA code from [AIRPORTS];
- * null when an end has neither.
+ * Arc through the flight's airports: each end and stopover uses its own coordinates, its place's, or its IATA code from
+ * [AIRPORTS]; stopovers without any are skipped, null when start or destination has none.
  */
 fun routeFor(flight: Flight, snapshot: TripSnapshot): RouteGeometry? {
-    val from = flight.depart.coords(snapshot) ?: flight.depart.airportCoords() ?: return null
-    val to = flight.arrive.coords(snapshot) ?: flight.arrive.airportCoords() ?: return null
-    return RouteGeometry(from, to, arc = true)
+    fun c(e: Endpoint) = e.coords(snapshot) ?: e.airportCoords()
+    val from = c(flight.depart) ?: return null
+    val to = c(flight.arrive) ?: return null
+    return RouteGeometry(listOf(from) + flight.via.mapNotNull { c(it) } + listOf(to), arc = true)
 }
 
-/** Straight line between the train's endpoint places; null when a coordinate is missing or (0,0). */
-fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? = route(train.depart, train.arrive, snapshot, arc = false)
+/** Straight lines through the train's start, stopovers and destination; stopovers without coordinates are skipped. */
+fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? {
+    val from = train.depart.coords(snapshot) ?: return null
+    val to = train.arrive.coords(snapshot) ?: return null
+    return RouteGeometry(listOf(from) + train.via.mapNotNull { it.coords(snapshot) } + listOf(to), arc = false)
+}

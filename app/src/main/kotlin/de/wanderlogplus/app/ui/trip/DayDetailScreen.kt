@@ -33,6 +33,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.shared.sync.TravelMode
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -84,6 +86,10 @@ fun DayDetailScreen(
     onAddNote: (date: String, text: String) -> Unit = { _, _ -> },
     /** Increases whenever a save failed; optimistic note/title are dropped then. */
     failureCount: Int = 0,
+    /** Null hides the "Wege" switch. */
+    onShowLegs: ((date: String, show: Boolean) -> Unit)? = null,
+    onLegMode: (itemId: String, mode: TravelMode) -> Unit = { _, _ -> },
+    onOpenLink: ((ExternalLink) -> Unit)? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -154,6 +160,10 @@ fun DayDetailScreen(
                     onMove = onMove,
                     onRemove = onRemove,
                     attachments = attachments,
+                    showLegs = day?.showLegs == true,
+                    onShowLegs = onShowLegs?.let { f -> { show: Boolean -> f(date, show) } },
+                    onLegMode = onLegMode,
+                    onOpenLink = onOpenLink,
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,

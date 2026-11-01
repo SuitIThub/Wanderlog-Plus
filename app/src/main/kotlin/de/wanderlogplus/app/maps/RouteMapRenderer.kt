@@ -148,7 +148,7 @@ private object RouteSnapshots {
             .withSource(
                 GeoJsonSource(
                     "route-ends",
-                    FeatureCollection.fromFeatures(listOf(Feature.fromGeometry(points.first()), Feature.fromGeometry(points.last()))),
+                    FeatureCollection.fromFeatures(route.stops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) }),
                 ),
             )
             .withLayer(

@@ -9,6 +9,8 @@ data class ServerConfig(
     val maxFileBytes: Long,
     val tripKey: String?,
     val importFile: Path?,
+    /** Google Routes API key; without it, route computation answers `routes_not_configured`. */
+    val googleRoutesKey: String? = null,
 ) {
     companion object {
         const val MIN_TOKEN_LENGTH = 16
@@ -48,6 +50,7 @@ data class ServerConfig(
                 maxFileBytes = maxMb * 1024 * 1024,
                 tripKey = env["WLP_TRIP_KEY"]?.takeIf { it.isNotBlank() },
                 importFile = env["WLP_IMPORT_FILE"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
+                googleRoutesKey = env["WLP_GOOGLE_ROUTES_KEY"]?.takeIf { it.isNotBlank() },
             )
         }
     }

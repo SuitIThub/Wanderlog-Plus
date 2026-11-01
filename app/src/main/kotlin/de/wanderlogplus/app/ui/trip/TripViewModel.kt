@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import de.wanderlogplus.shared.sync.EntityType
+import de.wanderlogplus.shared.sync.TravelMode
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -63,4 +65,9 @@ class TripViewModel(
         write { e, s -> e.setDayFields(s, date, mapOf("regionOverrideId" to (regionId?.let { JsonPrimitive(it) } ?: JsonNull))) }
 
     fun addNote(date: String, text: String) = write { e, s -> e.addNoteToDay(s, date, text) }
+
+    fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
+
+    fun setLegMode(itemId: String, mode: TravelMode) =
+        write { e, _ -> e.set(EntityType.DAY_ITEM, itemId, mapOf("legMode" to JsonPrimitive(mode.name))) }
 }

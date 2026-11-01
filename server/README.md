@@ -13,6 +13,7 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_MAX_FILE_MB` | `25` | Maximale Dateigröße beim Upload. |
 | `WLP_TRIP_KEY` | – | Optional; Reise-Schlüssel für `POST /api/import/wanderlog`. |
 | `WLP_IMPORT_FILE` | – | Optional; Pfad zu einer Wanderlog-JSON-Datei statt Abruf (hat Vorrang vor `WLP_TRIP_KEY`). |
+| `WLP_GOOGLE_ROUTES_KEY` | – | Optional; API-Key der Google Routes API für die Wegzeiten zwischen den Zielen eines Tages. Ohne Key zeigt die App „Wegzeiten brauchen einen Routen-Key“. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
 
 Ohne `WLP_TRIP_KEY` und `WLP_IMPORT_FILE` antwortet der Import mit `400 import_not_configured`.
@@ -59,6 +60,7 @@ Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` un
 - `GET /api/whoami`
 - `POST /api/sync/push`, `GET /api/sync/pull?since=&limit=`
 - `POST /api/files` (multipart `file`), `GET /api/files/{sha256}`
+- `POST /api/routes` (`{fromLat, fromLng, toLat, toLng, mode}` mit `mode` = WALK/BICYCLE/DRIVE/TRANSIT) → `{durationSeconds, distanceMeters, polyline}`; 404 `no_route`, 503 `routes_not_configured`
 - `POST /api/import/wanderlog`, `GET /api/import/status`
 - `GET /api/export`
 
@@ -81,3 +83,13 @@ qrencode -t ansiutf8 'wlp://setup?url=https%3A%2F%2Fwlp.example.org&token=…'
 Wird ein solcher Link in der Android-Kamera oder im Browser geöffnet, startet die App die Einrichtung ebenfalls. Die Felder werden nur ausgefüllt; die App speichert nichts automatisch, die Verbindung muss getestet und bestätigt werden.
 
 **Der Code enthält das Token und ist wie ein Passwort zu behandeln:** nicht teilen, nicht in Chats oder Tickets posten, nach der Einrichtung nicht aufbewahren.
+
+## Wegzeiten (Google Routes API)
+
+Die App fragt Wegzeiten und Routen zwischen den Zielen eines Tages beim Server an. Der Server leitet die Anfrage an die Google Routes API weiter (`routes.googleapis.com/directions/v2:computeRoutes`), damit der Key nicht in der App steckt. Jede Strecke wird in der Datenbank (Tabelle `route_cache`) zwischengespeichert. Beide Geräte teilen sich so den Cache, und jede Strecke kostet nur einmal Kontingent. ÖPNV-Routen verfallen nach 7 Tagen, weil sich Fahrpläne ändern.
+
+Einrichtung:
+
+1. In der Google Cloud Console ein Projekt anlegen und die **Routes API** aktivieren. Für das Freikontingent ist ein Zahlungsprofil nötig.
+2. Einen API-Key erstellen und auf die Routes API beschränken.
+3. `WLP_GOOGLE_ROUTES_KEY=<key>` in `.env` eintragen und den Container neu starten.

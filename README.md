@@ -16,6 +16,8 @@ Begleit-App für Wanderlog mit eigenem Sync-Server: Reiseplan offline ansehen un
 - **Bearbeiten**: Tagestitel, Tagesnotiz, Region eines Tages (Override), Notizen im Programm; bei Orten Notiz, Status, Tags (⭐/⚠️), Region und Kategorie.
 - **Anhänge**: Tickets und Buchungsbestätigungen an Flügen, Zügen, Unterkünften, Orten und Tagen. Bilder und PDFs werden in der App angezeigt, alles andere über eine externe App. Alle Anhänge werden im Hintergrund heruntergeladen und sind offline verfügbar (max. 25 MB pro Datei).
 - **Teilen-Menü**: Eine Datei aus einer anderen App teilen → Ziel wählen → angehängt.
+- **Fahrten mit Zwischenhalten**: Züge und Flüge lassen sich bearbeiten. Zwischenhalte wählst du per Ortssuche (OpenStreetMap), und sie erscheinen auf der Routenkarte. Zwei Teilstrecken lassen sich zu einer Fahrt zusammenführen, überflüssige löschen.
+- **Wege im Tagesprogramm**: Ein Schalter blendet zwischen den Zielen Wegzeit und Strecke ein. Aufgeklappt zeigen sie die Route auf der Karte, das Verkehrsmittel ist pro Abschnitt wählbar. Das braucht einen Google-Routes-Key auf dem Server (siehe `server/README.md`).
 - **Links**: Navigation und ÖPNV (Google Maps), Website, Anrufen, Tabelog-Suche (nur Essen).
 - **Einrichtung per QR-Code** oder Link `wlp://setup?url=…&token=…` (siehe `server/README.md`).
 - **Zeitzone**: „Heute“ und „Jetzt geöffnet“ rechnen standardmäßig in japanischer Zeit (JST); in den Einstellungen auf Gerätezeit umstellbar.

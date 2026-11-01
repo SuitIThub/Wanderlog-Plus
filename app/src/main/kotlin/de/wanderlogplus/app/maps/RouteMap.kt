@@ -94,7 +94,7 @@ fun RouteMap(
     }
 }
 
-/** Stylized route picture without map tiles: accent gradient, two points and a line or an arc. Tag `route-fallback`. */
+/** Stylized route picture without map tiles: accent gradient, the stops and the line, arcs or path. Tag `route-fallback`. */
 @Composable
 fun RouteMapFallback(route: RouteGeometry, accent: Color, modifier: Modifier = Modifier) {
     Box(
@@ -127,9 +127,12 @@ fun RouteMapFallback(route: RouteGeometry, accent: Color, modifier: Modifier = M
             }
             val stroke = 3.dp.toPx()
             drawPath(path, Color.White.copy(alpha = 0.9f), style = Stroke(width = stroke, cap = StrokeCap.Round))
-            listOf(offsets.first(), offsets.last()).forEach { o ->
-                drawCircle(Color.White, radius = 6.dp.toPx(), center = o)
-                drawCircle(accent, radius = 3.5.dp.toPx(), center = o)
+            // Stops in the same projection; start and destination larger than stopovers.
+            route.stops.forEachIndexed { i, st ->
+                val o = Offset(size.width / 2 + ((st.lng * k).toFloat() - cx) * scale, size.height / 2 + ((-st.lat).toFloat() - cy) * scale)
+                val end = i == 0 || i == route.stops.lastIndex
+                drawCircle(Color.White, radius = (if (end) 6f else 4.5f).dp.toPx(), center = o)
+                drawCircle(accent, radius = (if (end) 3.5f else 2.5f).dp.toPx(), center = o)
             }
         }
     }

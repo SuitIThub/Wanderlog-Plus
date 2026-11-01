@@ -39,6 +39,7 @@ import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.data.now
 import de.wanderlogplus.app.maps.LocalMapsEnabled
+import de.wanderlogplus.app.maps.LocalLegRepository
 import de.wanderlogplus.app.maps.LocalRouteMapRenderer
 import de.wanderlogplus.app.maps.RouteMapRenderer
 import androidx.compose.runtime.CompositionLocalProvider
@@ -125,11 +126,12 @@ class MainActivity : ComponentActivity() {
                 val pending by pendingSetup.collectAsState()
                 // Real maps only here: MapLibre is initialized lazily on first use, never in tests (they keep the defaults).
                 val routeMaps = remember { RouteMapRenderer(applicationContext) }
-                CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps) {
+                CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs) {
                     AppNavigation(
                         pendingSetup = pending,
                         onPendingSetupConsumed = { pendingSetup.value = null },
                         hasServer = hasServer,
+                        placeSearch = { q, near -> container.geoSearch.search(q, near) },
                         snapshot = snapshot,
                         syncStatus = status,
                         onRefresh = container.syncScheduler::requestNow,

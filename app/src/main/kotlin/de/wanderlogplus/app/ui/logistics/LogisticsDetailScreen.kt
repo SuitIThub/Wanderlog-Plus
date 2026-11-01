@@ -11,7 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +45,7 @@ import de.wanderlogplus.app.ui.places.linkIcon
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.stayLinks
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.sync.EntityType
 
@@ -77,6 +81,12 @@ fun LogisticsDetailScreen(
     onOpenLink: ((ExternalLink) -> Unit)? = null,
     /** ISO date (trip zone); a passed cancellation deadline is marked "abgelaufen". Null marks none. */
     today: String? = null,
+    /** Trains and flights only; null hides the action. */
+    onEdit: ((EntityType, String) -> Unit)? = null,
+    /** Joins this leg with the next one of the same kind ([nextLegOf]); null hides the action. */
+    onMerge: ((type: EntityType, firstId: String, secondId: String) -> Unit)? = null,
+    /** Deletes this train or flight (after confirmation); the caller navigates back. Null hides the action. */
+    onDelete: ((EntityType, String) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -104,6 +114,9 @@ fun LogisticsDetailScreen(
             onTitleOverflow = { titleCut = it },
         )
         RouteMap(view.route, view.accent, height = 160.dp)
+        if (type == EntityType.TRAIN || type == EntityType.FLIGHT) {
+            MoveActions(snapshot, type, id, onEdit, onMerge, onDelete)
+        }
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             if (titleCut) {
@@ -165,6 +178,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 route = routeFor(f, snapshot),
                 details = listOfNotNull(
                     "Strecke" to Movement.FlightMove(f).routeTitle(),
+                    viaDetail(f.via),
                     "Abflug" to endpointText(f.depart),
                     "Ankunft" to endpointText(f.arrive),
                     f.airline?.takeIf { it.isNotBlank() }?.let { "Airline" to it },
@@ -181,8 +195,9 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 imageUrl = null,
                 accent = primary,
                 route = routeFor(t, snapshot),
-                details = listOf(
+                details = listOfNotNull(
                     "Strecke" to Movement.TrainMove(t).routeTitle(),
+                    viaDetail(t.via),
                     "Abfahrt" to endpointText(t.depart),
                     "Ankunft" to endpointText(t.arrive),
                 ) + booking(t.confirmationNumber, t.travelerNames),
@@ -222,6 +237,81 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
         }
         else -> null
     }
+
+/** "Zwischenhalte" row: one line per stop with its time; null without stopovers. */
+private fun viaDetail(via: List<Endpoint>): Pair<String, String>? =
+    via.takeIf { it.isNotEmpty() }?.let { stops ->
+        "Zwischenhalte" to stops.joinToString("\n") { e -> listOfNotNull(e.name.ifBlank { e.code ?: "?" }, e.time?.takeIf { it.isNotBlank() }).joinToString(" · ") }
+    }
+
+/** The next train (or flight) after [id] in chronological order, the natural partner for "Zusammenführen"; null if none. */
+fun nextLegOf(snapshot: TripSnapshot, type: EntityType, id: String): String? {
+    val sameKind = logisticsEntries(snapshot).filter {
+        (type == EntityType.TRAIN && it is LogisticsEntry.TrainEntry) || (type == EntityType.FLIGHT && it is LogisticsEntry.FlightEntry)
+    }
+    val i = sameKind.indexOfFirst { it.id == id }
+    return if (i < 0) null else sameKind.getOrNull(i + 1)?.id
+}
+
+private fun legLabel(snapshot: TripSnapshot, type: EntityType, id: String): String = when (type) {
+    EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let { Movement.TrainMove(it).routeTitle() + (it.depart.time?.let { t -> " ($t)" } ?: "") }
+    EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let { Movement.FlightMove(it).routeTitle() + (it.depart.time?.let { t -> " ($t)" } ?: "") }
+    else -> null
+} ?: "?"
+
+/** Bearbeiten / Zusammenführen / Löschen for a train or flight; merging and deleting ask first. */
+@Composable
+private fun MoveActions(
+    snapshot: TripSnapshot,
+    type: EntityType,
+    id: String,
+    onEdit: ((EntityType, String) -> Unit)?,
+    onMerge: ((EntityType, String, String) -> Unit)?,
+    onDelete: ((EntityType, String) -> Unit)?,
+) {
+    val next = remember(snapshot, type, id) { nextLegOf(snapshot, type, id) }
+    var confirmMerge by remember(type, id) { mutableStateOf(false) }
+    var confirmDelete by remember(type, id) { mutableStateOf(false) }
+    if (onEdit == null && onMerge == null && onDelete == null) return
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        onEdit?.let { e -> OutlinedButton(onClick = { e(type, id) }, modifier = Modifier.testTag("move-edit")) { Text("Bearbeiten") } }
+        if (onMerge != null && next != null) {
+            OutlinedButton(onClick = { confirmMerge = true }, modifier = Modifier.testTag("move-merge")) { Text("Mit nächster zusammenführen") }
+        }
+        onDelete?.let { OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.testTag("move-delete")) { Text("Löschen") } }
+    }
+    if (confirmMerge && onMerge != null && next != null) {
+        AlertDialog(
+            onDismissRequest = { confirmMerge = false },
+            title = { Text("Zusammenführen?") },
+            text = {
+                Text(
+                    "„${legLabel(snapshot, type, id)}“ und „${legLabel(snapshot, type, next)}“ werden eine Fahrt; " +
+                        "das bisherige Ziel wird zum Zwischenhalt. Anhänge wandern mit.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmMerge = false; onMerge(type, id, next) }, modifier = Modifier.testTag("merge-confirm")) { Text("Zusammenführen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmMerge = false }) { Text("Abbrechen") } },
+        )
+    }
+    if (confirmDelete && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(if (type == EntityType.FLIGHT) "Flug löschen?" else "Fahrt löschen?") },
+            text = { Text("„${legLabel(snapshot, type, id)}“ wird entfernt. Ein Wanderlog-Import stellt sie nicht wieder her.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDelete(type, id) }, modifier = Modifier.testTag("delete-confirm")) { Text("Löschen") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
+        )
+    }
+}
+
 
 private fun booking(confirmation: String?, travelers: List<String>): List<Pair<String, String>> = listOfNotNull(
     confirmation?.takeIf { it.isNotBlank() }?.let { "Bestätigungsnummer" to it },

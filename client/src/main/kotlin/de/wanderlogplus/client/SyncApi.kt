@@ -8,6 +8,8 @@ import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
 import de.wanderlogplus.shared.sync.PullResponse
 import de.wanderlogplus.shared.sync.PushRequest
 import de.wanderlogplus.shared.sync.PushResponse
+import de.wanderlogplus.shared.sync.RouteInfo
+import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -140,6 +142,19 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Route between two coordinates via the server (Google Routes API); null when there is no route for this mode. */
+    suspend fun computeRoute(req: RouteRequest): RouteInfo? = try {
+        call<RouteInfo> {
+            client.post("$base/api/routes") {
+                auth()
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+        }
+    } catch (e: ApiException) {
+        if (e.status == 404 && e.code == "no_route") null else throw e
+    }
+
     suspend fun uploadFile(file: File, fileName: String, mimeType: String): UploadedFile = call {
         client.post("$base/api/files") {
             auth()
@@ -251,6 +266,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             status == 409 && code == "cursor_ahead" -> ApiErrorKind.CURSOR_AHEAD
             status == 400 && code == "clock_drift" -> ApiErrorKind.CLOCK_DRIFT
             status == 400 && code == "import_not_configured" -> ApiErrorKind.NOT_CONFIGURED
+            status == 503 && code == "routes_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status in 400..499 -> ApiErrorKind.BAD_REQUEST
             else -> ApiErrorKind.SERVER
         }
