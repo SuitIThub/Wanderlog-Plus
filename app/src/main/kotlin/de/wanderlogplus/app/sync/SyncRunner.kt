@@ -53,6 +53,12 @@ class SyncRunner(private val container: AppContainer) {
         container.scope.launch { try { refresh() } catch (e: CancellationException) { throw e } catch (e: Exception) { /* status stays as is */ } }
     }
 
+    /**
+     * Marks the local sync cursor for reset (same effect as SyncEngine.resetLocalCursor); the next sync performs
+     * it under the engine's mutex. Works before any engine exists.
+     */
+    suspend fun resetCursor() = withContext(Dispatchers.IO) { container.settings.pendingReset = true }
+
     /** Null when no server is configured. */
     suspend fun runOnce(): SyncResult? = withContext(Dispatchers.IO) {
         val server = container.settings.server.first() ?: return@withContext null

@@ -71,6 +71,7 @@ dependencies {
     testImplementation(libs.androidx.room.testing)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
 }
 
 // Compose UI tests need ui-test-manifest, which is debug-only; run unit tests for debug only.

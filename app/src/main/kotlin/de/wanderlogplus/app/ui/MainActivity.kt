@@ -18,7 +18,16 @@ import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.client.TripSnapshot
+import androidx.compose.runtime.rememberCoroutineScope
+import de.wanderlogplus.app.ui.more.ImportViewModel
+import de.wanderlogplus.app.ui.more.MoreViewModel
+import de.wanderlogplus.app.ui.more.SettingsInfo
+import de.wanderlogplus.client.SyncApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,6 +40,9 @@ class MainActivity : ComponentActivity() {
                 val snapshot by produceState<TripSnapshot?>(null) {
                     container.snapshots().snapshot.collect { value = it }
                 }
+                val server by remember { container.settings.server }.collectAsState(null)
+                val nodeId by produceState<String?>(null) { value = withContext(Dispatchers.IO) { container.settings.nodeId } }
+                val scope = rememberCoroutineScope()
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
                 AppNavigation(
@@ -41,6 +53,15 @@ class MainActivity : ComponentActivity() {
                     setupViewModelFactory = remember { setupFactory(container) },
                     tripViewModelFactory = remember { tripFactory(container) },
                     placesViewModelFactory = remember { placesFactory(container) },
+                    moreViewModelFactory = remember { moreFactory(container) },
+                    importViewModelFactory = remember { importFactory(container) },
+                    settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
+                    onResetSync = {
+                        scope.launch {
+                            container.syncRunner.resetCursor()
+                            container.syncScheduler.requestNow()
+                        }
+                    },
                 )
             }
         }
@@ -56,6 +77,20 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+    }
+
+    private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+    }
+
+    private fun importFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = ImportViewModel(
+            api = { container.settings.server.first()?.let { SyncApi(container.http, it.url, it.token) } },
+            onImported = container.syncScheduler::requestNow,
+        ) as T
     }
 
     private fun setupFactory(container: AppContainer) = object : ViewModelProvider.Factory {

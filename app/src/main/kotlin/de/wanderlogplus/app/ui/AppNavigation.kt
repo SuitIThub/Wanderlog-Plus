@@ -33,6 +33,22 @@ import de.wanderlogplus.app.ui.places.REGION_ROUTE
 import de.wanderlogplus.app.ui.places.RegionPlacesScreen
 import de.wanderlogplus.app.ui.places.placeRoute
 import de.wanderlogplus.app.ui.places.regionRoute
+import de.wanderlogplus.app.ui.logistics.LogisticsScreen
+import de.wanderlogplus.app.ui.more.CONFLICTS_ROUTE
+import de.wanderlogplus.app.ui.more.ConflictsScreen
+import de.wanderlogplus.app.ui.more.IMPORT_ROUTE
+import de.wanderlogplus.app.ui.more.ImportScreen
+import de.wanderlogplus.app.ui.more.ImportViewModel
+import de.wanderlogplus.app.ui.more.MoreScreen
+import de.wanderlogplus.app.ui.more.MoreViewModel
+import de.wanderlogplus.app.ui.more.NOTES_ROUTE
+import de.wanderlogplus.app.ui.more.NOTE_ROUTE
+import de.wanderlogplus.app.ui.more.NoteDetailScreen
+import de.wanderlogplus.app.ui.more.NotesScreen
+import de.wanderlogplus.app.ui.more.SETTINGS_ROUTE
+import de.wanderlogplus.app.ui.more.SettingsInfo
+import de.wanderlogplus.app.ui.more.SettingsScreen
+import de.wanderlogplus.app.ui.more.noteRoute
 import de.wanderlogplus.app.ui.today.TodayScreen
 import de.wanderlogplus.app.ui.today.rememberMinuteNow
 import de.wanderlogplus.app.ui.trip.DAY_ROUTE
@@ -70,6 +86,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
             else -> emptySet()
         }
 }
@@ -92,6 +109,11 @@ fun AppNavigation(
     setupViewModelFactory: ViewModelProvider.Factory? = null,
     tripViewModelFactory: ViewModelProvider.Factory? = null,
     placesViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Logistik and Mehr (notes, conflicts); without it these tabs show placeholders. */
+    moreViewModelFactory: ViewModelProvider.Factory? = null,
+    importViewModelFactory: ViewModelProvider.Factory? = null,
+    settingsInfo: SettingsInfo = SettingsInfo(null, null, ""),
+    onResetSync: () -> Unit = {},
     /** Device-local "now" for the Heute tab; injectable for tests. */
     clock: () -> LocalDateTime = { LocalDateTime.now() },
 ) {
@@ -217,10 +239,72 @@ fun AppNavigation(
                     }
                 }
             }
+            if (moreViewModelFactory != null) {
+                composable(Tab.LOGISTIK.route) {
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
+                    val snap by vm.snapshot.collectAsState()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
+                        val s = snap
+                        when {
+                            s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                            else -> LogisticsScreen(s)
+                        }
+                    }
+                }
+                composable(Tab.MEHR.route) {
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
+                    val snap by vm.snapshot.collectAsState()
+                    SyncedScreen(syncStatus, onRefresh) {
+                        MoreScreen(snap?.conflicts?.size ?: 0, onOpen = { nav.navigate(it) })
+                    }
+                }
+                composable(NOTES_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s -> NotesScreen(s, onOpen = { id -> nav.navigate(noteRoute(id)) }) }
+                    }
+                }
+                composable(NOTE_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val id = entry.arguments?.getString("noteId").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s -> NoteDetailScreen(s, id, onBack = { nav.popBackStack() }) }
+                    }
+                }
+                composable(CONFLICTS_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    ErrorSnack(vm.error, vm::consumeError, snackbar)
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s -> ConflictsScreen(s, onKeepApp = vm::keepApp, onTakeWanderlog = vm::takeWanderlog) }
+                    }
+                }
+                composable(SETTINGS_ROUTE) {
+                    SyncedScreen(syncStatus, onRefresh) {
+                        SettingsScreen(
+                            info = settingsInfo,
+                            status = syncStatus,
+                            onChangeServer = { nav.navigate(SETUP_ROUTE) },
+                            onSyncNow = onRefresh,
+                            onResetSync = onResetSync,
+                        )
+                    }
+                }
+            }
+            if (importViewModelFactory != null) {
+                composable(IMPORT_ROUTE) {
+                    val vm: ImportViewModel = viewModel(factory = importViewModelFactory)
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) { ImportScreen(vm) }
+                }
+            }
             Tab.entries.filter {
                 !(it == Tab.REISE && tripViewModelFactory != null) &&
                     !(it == Tab.HEUTE && tripViewModelFactory != null) &&
-                    !(it == Tab.ORTE && placesViewModelFactory != null)
+                    !(it == Tab.ORTE && placesViewModelFactory != null) &&
+                    !((it == Tab.LOGISTIK || it == Tab.MEHR) && moreViewModelFactory != null)
             }.forEach { tab ->
                 composable(tab.route) {
                     SyncedScreen(syncStatus, onRefresh) {
