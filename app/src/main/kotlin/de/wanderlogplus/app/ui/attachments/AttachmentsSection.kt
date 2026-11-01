@@ -76,10 +76,12 @@ fun AttachmentsSection(
     onOpen: (Attachment) -> Unit,
     onDelete: (Attachment) -> Unit,
     modifier: Modifier = Modifier,
+    /** False when the screen already shows its own "Anhänge" label above the section. */
+    showTitle: Boolean = true,
 ) {
     var confirm by remember { mutableStateOf<Attachment?>(null) }
     Column(modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Anhänge", style = MaterialTheme.typography.titleSmall)
+        if (showTitle) Text("Anhänge", style = MaterialTheme.typography.titleSmall)
         attachments.forEach { a ->
             var menu by remember(a.id) { mutableStateOf(false) }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -127,7 +129,8 @@ fun AttachmentsFor(
     actions: AttachmentActions?,
     onAdd: () -> Unit,
     modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
 ) {
     if (actions == null) return
-    AttachmentsSection(attachments, actions.available, onAdd, actions.onOpen, actions.onDelete, modifier)
+    AttachmentsSection(attachments, actions.available, onAdd, actions.onOpen, actions.onDelete, modifier, showTitle)
 }

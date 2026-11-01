@@ -46,7 +46,11 @@ import de.wanderlogplus.app.ui.places.REGION_ROUTE
 import de.wanderlogplus.app.ui.places.RegionPlacesScreen
 import de.wanderlogplus.app.ui.places.placeRoute
 import de.wanderlogplus.app.ui.places.regionRoute
+import de.wanderlogplus.app.ui.logistics.LOGISTICS_DETAIL_ROUTE
+import de.wanderlogplus.app.ui.logistics.LogisticsDetailScreen
 import de.wanderlogplus.app.ui.logistics.LogisticsScreen
+import de.wanderlogplus.app.ui.logistics.logisticsDetailRoute
+import de.wanderlogplus.app.ui.logistics.logisticsTypeOf
 import de.wanderlogplus.app.ui.more.CONFLICTS_ROUTE
 import de.wanderlogplus.app.ui.more.ConflictsScreen
 import de.wanderlogplus.app.ui.more.IMPORT_ROUTE
@@ -101,6 +105,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
             else -> emptySet()
         }
@@ -307,7 +312,30 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> LogisticsScreen(s, attachments = attachmentActions, onOpenLink = onOpenLink)
+                            else -> LogisticsScreen(
+                                s,
+                                onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
+                                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                            )
+                        }
+                    }
+                }
+                composable(LOGISTICS_DETAIL_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val type = logisticsTypeOf(entry.arguments?.getString("type"))
+                    val id = entry.arguments?.getString("id").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            if (type != null) {
+                                LogisticsDetailScreen(
+                                    s, type, id,
+                                    onBack = { nav.popBackStack() },
+                                    attachments = attachmentActions,
+                                    onOpenLink = onOpenLink,
+                                    today = rememberMinuteNow(clock).toLocalDate().toString(),
+                                )
+                            }
                         }
                     }
                 }

@@ -25,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,6 +56,7 @@ import de.wanderlogplus.app.ui.design.Badge
 import de.wanderlogplus.app.ui.design.EditSheet
 import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.HeroHeader
+import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.SectionLabel
 import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.ratingLabel
@@ -102,7 +102,7 @@ internal fun durationText(place: Place): String? {
     }
 }
 
-private fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
+internal fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
     LinkKind.NAVIGATE -> Icons.Filled.Directions
     LinkKind.TRANSIT -> Icons.Filled.DirectionsTransit
     LinkKind.WEBSITE -> Icons.Filled.Language
@@ -210,9 +210,9 @@ fun PlaceDetailScreen(
         }
 
         PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp)) {
-            PlaceTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
-            PlaceTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
-            PlaceTab(if (fileCount > 0) "Dateien ($fileCount)" else "Dateien", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
+            ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
+            ScreenTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
+            ScreenTab(if (fileCount > 0) "Dateien ($fileCount)" else "Dateien", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
         }
 
         when (tab) {
@@ -247,16 +247,6 @@ fun PlaceDetailScreen(
             PlaceEditForm(snapshot, saved, onSetTags, onSetRegion, onSetCategory, onDone = { editingTags = false })
         }
     }
-}
-
-@Composable
-private fun PlaceTab(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
-    Tab(
-        selected = selected,
-        onClick = onClick,
-        text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        modifier = Modifier.testTag(tag),
-    )
 }
 
 /** Notiz tab: the place note (Markdown), edited inline. */

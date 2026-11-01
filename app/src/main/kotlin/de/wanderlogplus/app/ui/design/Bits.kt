@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -114,6 +115,17 @@ fun ActionCircle(icon: ImageVector, label: String, onClick: () -> Unit, tag: Str
             textAlign = TextAlign.Center,
         )
     }
+}
+
+/** One tab of a screen's `PrimaryTabRow` (day detail, place detail, Logistik); [tag] goes on the tab. */
+@Composable
+fun ScreenTab(label: String, selected: Boolean, tag: String, maxLines: Int = 1, onClick: () -> Unit) {
+    Tab(
+        selected = selected,
+        onClick = onClick,
+        text = { Text(label, maxLines = maxLines, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.testTag(tag),
+    )
 }
 
 /** Quiet placeholder for an empty section. */

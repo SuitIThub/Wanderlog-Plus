@@ -21,7 +21,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.LabeledDropdown
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
@@ -44,6 +42,7 @@ import de.wanderlogplus.app.ui.dayKicker
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.design.EditSheet
 import de.wanderlogplus.app.ui.design.HeroHeader
+import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.dayHeroImage
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
@@ -136,11 +135,11 @@ fun DayDetailScreen(
             titleMaxLines = 1,
         )
         PrimaryTabRow(selectedTabIndex = tab) {
-            DayTab("Programm", tab == TAB_PROGRAM, "tab-program") { tab = TAB_PROGRAM }
-            DayTab(if (hasSuggestions) "Vorschläge (${shown.size})" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions") {
+            ScreenTab("Programm", tab == TAB_PROGRAM, "tab-program", maxLines = 2) { tab = TAB_PROGRAM }
+            ScreenTab(if (hasSuggestions) "Vorschläge (${shown.size})" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions", maxLines = 2) {
                 tab = TAB_SUGGESTIONS
             }
-            DayTab("Notizen & Dateien", tab == TAB_NOTES, "tab-notes") { tab = TAB_NOTES }
+            ScreenTab("Notizen & Dateien", tab == TAB_NOTES, "tab-notes", maxLines = 2) { tab = TAB_NOTES }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
@@ -219,16 +218,6 @@ fun DayDetailScreen(
             }
         }
     }
-}
-
-@Composable
-private fun DayTab(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
-    Tab(
-        selected = selected,
-        onClick = onClick,
-        text = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-        modifier = Modifier.testTag(tag),
-    )
 }
 
 @Composable
