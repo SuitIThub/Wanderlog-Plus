@@ -18,15 +18,33 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.testTag
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import com.google.zxing.BarcodeFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
 
 @Composable
 fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Modifier) {
     val s by vm.state.collectAsState()
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { vm.onScanned(it.contents) }
     Column(
         modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
     ) {
         Text("Server einrichten", style = MaterialTheme.typography.headlineSmall)
+        OutlinedButton(
+            onClick = {
+                scanner.launch(
+                    ScanOptions()
+                        .setDesiredBarcodeFormats(BarcodeFormat.QR_CODE.name)
+                        .setBeepEnabled(false)
+                        .setPrompt("QR-Code der Einrichtung scannen"),
+                )
+            },
+            modifier = Modifier.testTag("setup-scan"),
+        ) { Text("QR-Code scannen") }
+        s.scanError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         OutlinedTextField(
             value = s.url,
             onValueChange = vm::setUrl,

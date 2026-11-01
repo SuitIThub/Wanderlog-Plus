@@ -1,6 +1,9 @@
 package de.wanderlogplus.app.ui
 
+import android.content.Intent
 import android.os.Bundle
+import de.wanderlogplus.app.ui.setup.SetupLink
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,10 +50,26 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    /** Setup link from the deep link; prefill only (never saved automatically). Held in memory only, never logged. */
+    private val pendingSetup = MutableStateFlow<ServerSettings?>(null)
+
+    // launchMode="singleTop": a new wlp:// link reaches the running activity via onNewIntent.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleSetupIntent(intent)
+    }
+
+    private fun handleSetupIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val raw = intent.dataString ?: return
+        SetupLink.parse(raw)?.let { pendingSetup.value = it }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as WanderlogPlusApp).container
+        if (savedInstanceState == null) handleSetupIntent(intent)
         setContent {
             WanderlogPlusTheme {
                 val hasServer by remember { container.settings.server.map { it != null } }.collectAsState(null)
@@ -79,7 +98,10 @@ class MainActivity : ComponentActivity() {
                     }
                     return@WanderlogPlusTheme
                 }
+                val pending by pendingSetup.collectAsState()
                 AppNavigation(
+                    pendingSetup = pending,
+                    onPendingSetupConsumed = { pendingSetup.value = null },
                     hasServer = hasServer,
                     snapshot = snapshot,
                     syncStatus = status,

@@ -2,6 +2,7 @@ package de.wanderlogplus.app.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.client.ApiErrorKind
 import de.wanderlogplus.client.ApiException
 import de.wanderlogplus.client.ServerUrl
@@ -23,6 +24,8 @@ data class SetupState(
     val connectedAs: String? = null,
     val testError: String? = null,
     val saving: Boolean = false,
+    /** Set when a scanned QR code is not a valid setup link. */
+    val scanError: String? = null,
 ) {
     val canSave: Boolean get() = connectedAs != null && !saving
 }
@@ -43,6 +46,22 @@ class SetupViewModel(
     }
 
     fun setToken(v: String) = _state.update { it.copy(token = v, connectedAs = null, testError = null) }
+
+    /** Fills the fields from a setup link; neither saves nor tests, the user must test again. */
+    fun prefill(s: ServerSettings) = _state.update {
+        it.copy(
+            url = s.url, token = s.token, urlError = null, connectedAs = null, testError = null,
+            scanError = null, insecure = isInsecure(s.url),
+        )
+    }
+
+    /** Result of a QR scan; null means cancelled and changes nothing. */
+    fun onScanned(contents: String?) {
+        if (contents == null) return
+        val parsed = SetupLink.parse(contents)
+        if (parsed != null) prefill(parsed)
+        else _state.update { it.copy(scanError = "Kein gültiger Einrichtungs-Code") }
+    }
 
     fun test() {
         val s = _state.value

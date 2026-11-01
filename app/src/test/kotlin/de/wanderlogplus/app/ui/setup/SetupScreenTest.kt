@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
@@ -62,5 +64,28 @@ class SetupScreenTest {
         rule.onNodeWithText("Speichern").assertIsEnabled().performClick()
         rule.waitUntil(5_000) { saved.isNotEmpty() }
         assertEquals("https://sync.example.org" to "secret", saved.single())
+    }
+
+    @Test fun prefillFillsFieldsWithoutSaving() {
+        val vm = SetupViewModel({ _, _ -> Result.success("alice") }) { url, token -> saved += url to token }
+        rule.setContent { WanderlogPlusTheme { SetupScreen(vm, onSaved = {}) } }
+        vm.prefill(de.wanderlogplus.app.data.ServerSettings("https://wlp.example.org", "secret"))
+        rule.waitForIdle()
+        rule.onNodeWithText("https://wlp.example.org").assertIsDisplayed()
+        assertEquals("secret", vm.state.value.token)
+        assertEquals(false, vm.state.value.canSave)
+        assertEquals(0, saved.size)
+    }
+
+    @Test fun invalidScanShowsMessageAndCancelDoesNothing() {
+        val vm = SetupViewModel({ _, _ -> Result.success("alice") }) { _, _ -> }
+        rule.setContent { WanderlogPlusTheme { SetupScreen(vm, onSaved = {}) } }
+        rule.onNodeWithTag("setup-scan").assertIsDisplayed()
+        vm.onScanned(null)
+        rule.waitForIdle()
+        rule.onAllNodesWithText("Kein gültiger Einrichtungs-Code").assertCountEquals(0)
+        vm.onScanned("hello")
+        rule.waitForIdle()
+        rule.onNodeWithText("Kein gültiger Einrichtungs-Code").assertIsDisplayed()
     }
 }

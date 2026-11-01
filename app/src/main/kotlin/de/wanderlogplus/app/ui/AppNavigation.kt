@@ -72,6 +72,7 @@ import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.app.ui.trip.dayRoute
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import de.wanderlogplus.app.data.ServerSettings
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDateTime
@@ -135,11 +136,19 @@ fun AppNavigation(
     /** Attachments (add, open, delete, viewer); without both, no attachment UI is shown. */
     attachmentsViewModelFactory: ViewModelProvider.Factory? = null,
     attachmentFiles: AttachmentFiles? = null,
+    /** Server settings from a setup deep link; shown on the setup screen (prefill only), then [onPendingSetupConsumed]. */
+    pendingSetup: ServerSettings? = null,
+    onPendingSetupConsumed: () -> Unit = {},
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    LaunchedEffect(pendingSetup) {
+        if (pendingSetup != null && nav.currentDestination?.route != SETUP_ROUTE) {
+            nav.navigate(SETUP_ROUTE) { launchSingleTop = true }
+        }
+    }
 
     val snackbar = remember { SnackbarHostState() }
     Scaffold(
@@ -181,6 +190,9 @@ fun AppNavigation(
         ) {
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
+                LaunchedEffect(pendingSetup) {
+                    pendingSetup?.let { vm.prefill(it); onPendingSetupConsumed() }
+                }
                 SetupScreen(vm, onSaved = {
                     nav.navigate(Tab.HEUTE.route) { popUpTo(0) { inclusive = true } }
                 })
