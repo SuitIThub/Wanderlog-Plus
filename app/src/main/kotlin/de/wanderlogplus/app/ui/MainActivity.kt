@@ -1,6 +1,11 @@
 package de.wanderlogplus.app.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import de.wanderlogplus.app.ui.setup.SetupLink
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +70,18 @@ class MainActivity : ComponentActivity() {
         SetupLink.parse(raw)?.let { pendingSetup.value = it }
     }
 
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    /** Asks for POST_NOTIFICATIONS (API 33+) only once, so a refusal is never nagged about. */
+    private fun requestNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
+        if (prefs.getBoolean("permissionAsked", false)) return
+        prefs.edit().putBoolean("permissionAsked", true).apply()
+        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -90,6 +107,8 @@ class MainActivity : ComponentActivity() {
                 }
                 val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
+                val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
+                LaunchedEffect(remindersEnabled) { if (remindersEnabled) requestNotificationPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
                 if (loadFailed) {
@@ -114,6 +133,8 @@ class MainActivity : ComponentActivity() {
                     settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
                     tripZone = tripZone,
                     onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
+                    remindersEnabled = remindersEnabled,
+                    onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
                     clock = { tripZone.now() },
                     attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                     attachmentFiles = container.attachmentFiles,

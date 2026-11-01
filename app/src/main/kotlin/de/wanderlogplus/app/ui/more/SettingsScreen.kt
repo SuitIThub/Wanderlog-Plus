@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.Role
 import de.wanderlogplus.app.data.TripZone
@@ -50,6 +51,8 @@ fun SettingsScreen(
     now: Long = System.currentTimeMillis(),
     tripZone: TripZone = TripZone.JAPAN,
     onTripZone: (TripZone) -> Unit = {},
+    remindersEnabled: Boolean = true,
+    onRemindersEnabled: (Boolean) -> Unit = {},
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     Column(
@@ -70,6 +73,12 @@ fun SettingsScreen(
                 RadioButton(selected = tripZone == zone, onClick = null)
                 Text(label, modifier = Modifier.padding(start = 8.dp))
             }
+        }
+
+        Text("Erinnerungen", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Erinnerungen an Fristen")
+            Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
         }
 
         Text("Synchronisation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))

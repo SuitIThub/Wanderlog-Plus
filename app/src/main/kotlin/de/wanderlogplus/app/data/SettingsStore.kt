@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -38,6 +39,14 @@ class SettingsStore(context: Context) : SyncStateStore {
 
     suspend fun setTripZone(z: TripZone) {
         appContext.serverDataStore.edit { it[tripZoneKey] = z.name }
+    }
+
+    private val remindersKey = booleanPreferencesKey("reminders_enabled")
+
+    val remindersEnabled: Flow<Boolean> = appContext.serverDataStore.data.map { it[remindersKey] ?: true }
+
+    suspend fun setRemindersEnabled(v: Boolean) {
+        appContext.serverDataStore.edit { it[remindersKey] = v }
     }
 
     suspend fun saveServer(s: ServerSettings) {

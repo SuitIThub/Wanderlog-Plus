@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import de.wanderlogplus.app.reminders.DeadlineWorker
 import java.util.concurrent.TimeUnit
 
 /** Plans background syncs. WorkManager is looked up lazily so construction never touches it. */
@@ -67,6 +68,12 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(FILES, soonPolicy(states), request)
     }
 
+    /** Daily check for upcoming cancellation deadlines; independent of any server. */
+    fun scheduleReminders() {
+        val request = PeriodicWorkRequestBuilder<DeadlineWorker>(1, TimeUnit.DAYS).build()
+        work.enqueueUniquePeriodicWork(REMINDERS, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
     internal companion object {
         /** APPEND_OR_REPLACE while a sync is running, REPLACE (debounce) otherwise. */
         fun soonPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy =
@@ -76,6 +83,7 @@ class SyncScheduler(context: Context) {
         const val SOON = "sync-soon"
         const val NOW = "sync-now"
         const val FILES = "files"
+        const val REMINDERS = "reminders"
         const val BACKOFF_SECONDS = 30L
     }
 }

@@ -131,6 +131,8 @@ fun AppNavigation(
     onResetSync: () -> Unit = {},
     tripZone: TripZone = TripZone.JAPAN,
     onTripZone: (TripZone) -> Unit = {},
+    remindersEnabled: Boolean = true,
+    onRemindersEnabled: (Boolean) -> Unit = {},
     /** Trip-zone "now" for the Heute tab; injectable for tests. */
     clock: () -> LocalDateTime = { LocalDateTime.now() },
     /** Attachments (add, open, delete, viewer); without both, no attachment UI is shown. */
@@ -345,6 +347,8 @@ fun AppNavigation(
                             onResetSync = onResetSync,
                             tripZone = tripZone,
                             onTripZone = onTripZone,
+                            remindersEnabled = remindersEnabled,
+                            onRemindersEnabled = onRemindersEnabled,
                         )
                     }
                 }
