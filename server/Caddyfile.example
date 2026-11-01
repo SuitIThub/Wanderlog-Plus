@@ -1,0 +1,4 @@
+# Kopieren nach Caddyfile; WLP_DOMAIN steht in .env
+{$WLP_DOMAIN} {
+    reverse_proxy server:8080
+}

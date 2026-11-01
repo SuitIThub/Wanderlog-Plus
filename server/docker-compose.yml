@@ -1,0 +1,31 @@
+# Start aus dem Verzeichnis server/: docker compose up -d --build
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    env_file: .env
+    volumes:
+      - wlp-data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    # Nur die Domain, nicht die Tokens: Compose liest WLP_DOMAIN aus server/.env.
+    environment:
+      - WLP_DOMAIN=${WLP_DOMAIN:?WLP_DOMAIN in .env setzen}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  wlp-data:
+  caddy-data:

@@ -165,21 +165,25 @@ object WanderlogParser {
         coerceInputValues = true
     }
 
+    /** Fixed text only: kotlinx messages embed excerpts of the input (booking data). */
+    private fun decodeError(e: Exception) =
+        ImportFormatException("Invalid Wanderlog JSON (decode error: ${e.javaClass.simpleName})", e)
+
     fun parse(json: String): WlResponse {
         val success = try {
             (this.json.parseToJsonElement(json) as? JsonObject)?.get("success")?.jsonPrimitive?.booleanOrNull
         } catch (e: SerializationException) {
-            throw ImportFormatException("Invalid Wanderlog JSON: ${e.message}", e)
+            throw decodeError(e)
         } catch (e: IllegalArgumentException) {
-            throw ImportFormatException("Invalid Wanderlog JSON: ${e.message}", e)
+            throw decodeError(e)
         }
         if (success != true) throw ImportFormatException("Wanderlog response has success != true")
         val response = try {
             this.json.decodeFromString<WlResponse>(json)
         } catch (e: SerializationException) {
-            throw ImportFormatException("Invalid Wanderlog JSON: ${e.message}", e)
+            throw decodeError(e)
         } catch (e: IllegalArgumentException) {
-            throw ImportFormatException("Invalid Wanderlog JSON: ${e.message}", e)
+            throw decodeError(e)
         }
         if (!response.success) throw ImportFormatException("Wanderlog response has success != true")
         for (section in response.tripPlan.itinerary.sections) {

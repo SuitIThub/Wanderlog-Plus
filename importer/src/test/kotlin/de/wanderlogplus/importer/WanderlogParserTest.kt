@@ -48,7 +48,8 @@ class WanderlogParserTest {
         val trip = obj["tripPlan"] as JsonObject
         val broken = JsonObject(obj + ("tripPlan" to JsonObject(trip - "startDate")))
         val ex = assertFailsWith<ImportFormatException> { WanderlogParser.parse(broken.toString()) }
-        assertTrue(ex.message!!.contains("startDate"), ex.message)
+        assertTrue(ex.message!!.contains("decode error"), ex.message)
+        assertTrue(ex.cause!!.message!!.contains("startDate"))
     }
 
     @Test

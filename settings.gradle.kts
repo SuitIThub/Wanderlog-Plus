@@ -5,4 +5,4 @@ dependencyResolutionManagement {
     repositories { mavenCentral() }
 }
 
-include("shared", "importer")
+include("shared", "importer", "server")

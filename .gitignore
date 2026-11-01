@@ -10,3 +10,7 @@ build/
 .idea/
 local.properties
 *.iml
+
+# Server-Secrets
+server/.env
+server/Caddyfile
