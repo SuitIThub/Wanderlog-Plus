@@ -21,6 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import de.wanderlogplus.app.sync.SyncStatus
+import de.wanderlogplus.app.ui.setup.SetupScreen
+import de.wanderlogplus.app.ui.setup.SetupViewModel
+import de.wanderlogplus.client.TripSnapshot
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,21 +41,37 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     MEHR("mehr", "Mehr", Icons.Filled.MoreHoriz),
 }
 
+/** Route of the server setup screen; "Mehr" (Task 9) navigates here to change the server. */
+const val SETUP_ROUTE = "setup"
+
+private val EMPTY_AWARE_TABS = setOf(Tab.HEUTE, Tab.REISE, Tab.ORTE, Tab.LOGISTIK)
+
+/**
+ * [hasServer] is null while the settings are loading (nothing is shown yet), false when Setup must be shown first.
+ * [setupViewModelFactory] creates the [SetupViewModel] when the setup route is shown.
+ */
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    hasServer: Boolean? = true,
+    snapshot: TripSnapshot? = null,
+    syncStatus: SyncStatus = SyncStatus(),
+    onRefresh: () -> Unit = {},
+    setupViewModelFactory: ViewModelProvider.Factory? = null,
+) {
+    if (hasServer == null) return
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            if (current != SETUP_ROUTE) NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = current == tab.route,
                         onClick = {
                             nav.navigate(tab.route) {
-                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                popUpTo(Tab.HEUTE.route) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -61,9 +83,27 @@ fun AppNavigation() {
             }
         },
     ) { padding ->
-        NavHost(nav, startDestination = Tab.HEUTE.route, modifier = Modifier.padding(padding)) {
+        NavHost(
+            nav,
+            startDestination = if (hasServer) Tab.HEUTE.route else SETUP_ROUTE,
+            modifier = Modifier.padding(padding),
+        ) {
+            composable(SETUP_ROUTE) {
+                val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
+                SetupScreen(vm, onSaved = {
+                    nav.navigate(Tab.HEUTE.route) { popUpTo(0) { inclusive = true } }
+                })
+            }
             Tab.entries.forEach { tab ->
-                composable(tab.route) { PlaceholderScreen(tab.label) }
+                composable(tab.route) {
+                    SyncedScreen(syncStatus, onRefresh) {
+                        if (tab in EMPTY_AWARE_TABS && snapshot?.isEmpty == true) {
+                            EmptyState(onSyncNow = onRefresh)
+                        } else {
+                            PlaceholderScreen(tab.label)
+                        }
+                    }
+                }
             }
         }
     }

@@ -8,10 +8,14 @@ import de.wanderlogplus.app.data.RoomOutbox
 import de.wanderlogplus.app.data.SettingsStore
 import de.wanderlogplus.app.data.SnapshotRepository
 import de.wanderlogplus.app.data.roomTransactor
+import de.wanderlogplus.app.sync.SyncRunner
+import de.wanderlogplus.app.sync.SyncScheduler
 import de.wanderlogplus.client.LocalEditor
 import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
 import de.wanderlogplus.shared.sync.parse
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -37,8 +41,9 @@ class AppContainer(context: Context) {
     val outbox: RoomOutbox by lazy { RoomOutbox(db) }
     val settings: SettingsStore by lazy { SettingsStore(appContext) }
 
-    /** Hook for the sync scheduler (Task 6). */
-    @Volatile var onLocalChange: () -> Unit = {}
+    val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }
+    val syncRunner: SyncRunner by lazy { SyncRunner(this) }
+    val http: HttpClient by lazy { HttpClient(OkHttp) }
 
     /**
      * The clock is advanced past the highest stored HLC so local writes always order after existing data.
@@ -47,7 +52,7 @@ class AppContainer(context: Context) {
     val ready: Deferred<Ready> = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
         val clock = HlcClock(nodeId = requireNotNull(settings.nodeId))
         db.dao().maxHlc()?.let { clock.receive(Hlc.parse(it)) }
-        val editor = LocalEditor(store, outbox, clock, db.roomTransactor, onChange = { onLocalChange() })
+        val editor = LocalEditor(store, outbox, clock, db.roomTransactor, onChange = { syncScheduler.requestSoon(); syncRunner.refreshAsync() })
         Ready(clock, editor, SnapshotRepository(store, db, scope))
     }
 
