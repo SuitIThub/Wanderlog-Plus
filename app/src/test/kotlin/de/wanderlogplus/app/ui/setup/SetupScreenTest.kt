@@ -102,7 +102,7 @@ class SetupScreenTest {
         vm.prefill(de.wanderlogplus.app.data.ServerSettings("https://evil.example.com", "x"))
         rule.waitForIdle()
         rule.onNodeWithText(
-            "Achtung: Dieser Link richtet einen anderen Server ein (evil.example.com). Beim Speichern werden alle Reisedaten dorthin übertragen.",
+            "Achtung: Das ist ein anderer Server als bisher (evil.example.com). Beim Speichern werden alle Reisedaten dorthin übertragen.",
         ).assertIsDisplayed()
     }
 

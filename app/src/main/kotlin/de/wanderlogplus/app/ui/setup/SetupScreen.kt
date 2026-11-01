@@ -60,7 +60,7 @@ fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Mo
         )
         s.otherServerHost?.let { host ->
             Text(
-                "Achtung: Dieser Link richtet einen anderen Server ein ($host). Beim Speichern werden alle Reisedaten dorthin übertragen.",
+                "Achtung: Das ist ein anderer Server als bisher ($host). Beim Speichern werden alle Reisedaten dorthin übertragen.",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
