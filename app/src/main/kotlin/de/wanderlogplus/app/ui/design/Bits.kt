@@ -207,3 +207,33 @@ internal fun PhotoOrGradient(
         }
     }
 }
+
+/** Rounded surface card shared by Mehr, Einstellungen, Import, Konflikte, Setup (same look as [PhotoCard]). */
+@Composable
+fun SurfaceCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    val colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    val elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 1.dp)
+    val shape = RoundedCornerShape(18.dp)
+    if (onClick != null) {
+        androidx.compose.material3.Card(onClick = onClick, modifier = modifier.fillMaxWidth(), shape = shape, colors = colors, elevation = elevation, content = content)
+    } else {
+        androidx.compose.material3.Card(modifier = modifier.fillMaxWidth(), shape = shape, colors = colors, elevation = elevation, content = content)
+    }
+}
+
+/** Rounded accent square with an icon, the leading element of Mehr rows. */
+@Composable
+fun IconTile(icon: ImageVector, modifier: Modifier = Modifier) {
+    Surface(
+        modifier.size(40.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp)) }
+    }
+}

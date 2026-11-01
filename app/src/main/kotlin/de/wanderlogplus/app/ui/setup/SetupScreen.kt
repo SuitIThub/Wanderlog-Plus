@@ -1,6 +1,11 @@
 package de.wanderlogplus.app.ui.setup
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.Alignment
+import de.wanderlogplus.app.ui.HeroTitle
+import de.wanderlogplus.app.ui.design.SurfaceCard
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -31,11 +36,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Modifier) {
     val s by vm.state.collectAsState()
     val scanner = rememberLauncherForActivityResult(ScanContract()) { vm.onScanned(it.contents) }
+    Box(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp), contentAlignment = Alignment.TopCenter) {
+    SurfaceCard(Modifier.widthIn(max = 480.dp)) {
     Column(
-        modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+        Modifier.padding(20.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
     ) {
-        Text("Server einrichten", style = MaterialTheme.typography.headlineSmall)
+        Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
+            Text("Wanderlog Plus", style = HeroTitle, color = MaterialTheme.colorScheme.primary)
+            Text("Server einrichten", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         OutlinedButton(
             onClick = {
                 scanner.launch(
@@ -89,6 +99,8 @@ fun SetupScreen(vm: SetupViewModel, onSaved: () -> Unit, modifier: Modifier = Mo
         s.connectedAs?.let { Text("Verbunden als $it", color = MaterialTheme.colorScheme.primary) }
         s.testError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Button(onClick = { vm.save(onSaved) }, enabled = s.canSave) { Text("Speichern") }
+    }
+    }
     }
     if (s.confirmSwitch) {
         AlertDialog(
