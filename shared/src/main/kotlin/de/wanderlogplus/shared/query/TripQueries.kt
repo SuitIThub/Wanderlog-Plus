@@ -40,8 +40,13 @@ class TripQueries(
         return if (d >= last.third) last.first else null
     }
 
-    // Last Day wins when several share a date; used by both days() and regionFor().
-    private val dayByDate: Map<String, Day> by lazy { days.associateBy { it.date } }
+    // Several Days may share a date (e.g. created on two devices); the largest id wins, deterministically.
+    private val dayByDate: Map<String, Day> by lazy {
+        days.groupBy { it.date }.mapValues { (_, v) -> v.maxByOrNull { it.id }!! }
+    }
+
+    /** The one Day that represents [date], or null if there is none. */
+    fun dayFor(date: String): Day? = dayByDate[date]
 
     fun days(): List<DayView> {
         val start = parseOrNull(trip.startDate) ?: return emptyList()

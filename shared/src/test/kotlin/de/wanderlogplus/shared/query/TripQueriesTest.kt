@@ -40,6 +40,15 @@ class TripQueriesTest {
     }
 
     @Test
+    fun `dayFor picks the largest id deterministically`() {
+        val a = Day("d1", date = "2027-05-10")
+        val b = Day("d2", date = "2027-05-10")
+        assertEquals("d2", queries(days = listOf(a, b)).dayFor("2027-05-10")?.id)
+        assertEquals("d2", queries(days = listOf(b, a)).dayFor("2027-05-10")?.id)
+        assertNull(queries(days = listOf(a)).dayFor("2027-05-11"))
+    }
+
+    @Test
     fun `days covers whole trip`() {
         val d = queries().days()
         assertEquals(22, d.size)

@@ -62,7 +62,47 @@ class ReimportMerger(private val clock: HlcClock) {
                 }
                 continue
             }
-            if (!rec.isFromWanderlog()) continue
+            if (!rec.isFromWanderlog()) {
+                if (rec.fields.containsKey("_source")) continue // owned by another source
+                // Adopt a device-recreated record (devices re-pushed to a fresh server before the import).
+                val hadContent = rec.fields.keys.any { !it.startsWith("_") && it != "deleted" }
+                var changed = false
+                set(entity.type, entity.id, "_source", JsonPrimitive(SOURCE))
+                set(entity.type, entity.id, "_sourceId", JsonPrimitive(entity.sourceId))
+                if (!rec.fields.containsKey("deleted")) {
+                    set(entity.type, entity.id, "deleted", FALSE)
+                    set(entity.type, entity.id, "_base.deleted", FALSE)
+                } else if (!rec.fields.containsKey("_base.deleted")) {
+                    set(entity.type, entity.id, "_base.deleted", rec.get("deleted"))
+                }
+                for ((f, w) in entity.fields) {
+                    val present = rec.fields.containsKey(f)
+                    val master = f in entity.masterFields
+                    when {
+                        f in entity.createOnlyFields -> if (!present) {
+                            set(entity.type, entity.id, f, w)
+                            if (!master) set(entity.type, entity.id, "_base.$f", w)
+                            changed = true
+                        }
+                        !present -> {
+                            set(entity.type, entity.id, f, w)
+                            if (!master) set(entity.type, entity.id, "_base.$f", w)
+                            changed = true
+                        }
+                        master -> if (rec.get(f) != w) {
+                            set(entity.type, entity.id, f, w)
+                            changed = true
+                        }
+                        else -> if (rec.get("_base.$f") != w) {
+                            // keep the device value (treated as an app edit), remember what Wanderlog said
+                            set(entity.type, entity.id, "_base.$f", w)
+                            changed = true
+                        }
+                    }
+                }
+                if (hadContent) updated++ else created++
+                continue
+            }
 
             // Snapshot implicitly says deleted = false for every contained entity.
             val fields = entity.fields + ("deleted" to FALSE)
