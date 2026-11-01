@@ -88,11 +88,17 @@ private fun parseSpans(s: String): List<MdSpan> {
     return out
 }
 
+/** Only web links are made tappable; anything else (javascript:, intent:, file: ...) stays plain text. */
+fun isSafeUrl(url: String): Boolean {
+    val u = url.trim().lowercase()
+    return u.startsWith("http://") || u.startsWith("https://")
+}
+
 private fun annotated(prefix: String, spans: List<MdSpan>, linkStyle: TextLinkStyles): AnnotatedString = buildAnnotatedString {
     append(prefix)
     for (sp in spans) {
         when {
-            sp.link != null -> withLink(LinkAnnotation.Url(sp.link, linkStyle)) { append(sp.text) }
+            sp.link != null && isSafeUrl(sp.link) -> withLink(LinkAnnotation.Url(sp.link, linkStyle)) { append(sp.text) }
             sp.bold || sp.italic -> withStyle(
                 SpanStyle(
                     fontWeight = if (sp.bold) FontWeight.Bold else null,

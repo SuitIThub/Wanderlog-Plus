@@ -22,6 +22,10 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import de.wanderlogplus.client.TripSnapshot
 
 /** Everything that needs disk access to initialize. */
 class Ready(val clock: HlcClock, val editor: LocalEditor, val snapshots: SnapshotRepository)
@@ -58,6 +62,19 @@ class AppContainer(context: Context) {
 
     suspend fun editor(): LocalEditor = ready.await().editor
     suspend fun snapshots(): SnapshotRepository = ready.await().snapshots
+
+    private val writeLock = Mutex()
+
+    /**
+     * The single write path: runs [block] on Dispatchers.IO under one app-wide lock with a snapshot built
+     * inside the lock, so concurrent actions never see a stale view of each other's changes.
+     */
+    suspend fun <T> edit(block: (LocalEditor, TripSnapshot) -> T): T {
+        val editor = editor()
+        return writeLock.withLock {
+            withContext(Dispatchers.IO) { block(editor, TripSnapshot.from(store.all())) }
+        }
+    }
 
     fun warmUp() {
         ready.start()

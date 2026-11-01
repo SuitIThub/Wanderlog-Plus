@@ -5,18 +5,18 @@ import androidx.lifecycle.viewModelScope
 import de.wanderlogplus.client.LocalEditor
 import de.wanderlogplus.client.TripSnapshot
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/**
- * [snapshots] yields the live snapshot flow, [editor] the local editor (both await app initialization).
- * All writes run on Dispatchers.IO because the editor is blocking.
- */
+/** Runs a write with the editor and a fresh snapshot, serialized app-wide (see AppContainer.edit). */
+typealias EditFn = suspend (block: (LocalEditor, TripSnapshot) -> Unit) -> Unit
+
+/** [snapshots] yields the live snapshot flow for display; every write goes through [edit] only. */
 class TripViewModel(
     private val snapshots: suspend () -> StateFlow<TripSnapshot?>,
-    private val editor: suspend () -> LocalEditor,
+    private val edit: EditFn,
 ) : ViewModel() {
     private val _snapshot = MutableStateFlow<TripSnapshot?>(null)
     val snapshot: StateFlow<TripSnapshot?> = _snapshot
@@ -29,17 +29,15 @@ class TripViewModel(
         viewModelScope.launch { snapshots().collect { _snapshot.value = it } }
     }
 
-    private fun write(action: (LocalEditor, TripSnapshot) -> Unit) {
-        val snap = _snapshot.value ?: return
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                action(editor(), snap)
-                _error.value = null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _error.value = e.javaClass.simpleName
-            }
+    fun consumeError() { _error.value = null }
+
+    private fun write(action: (LocalEditor, TripSnapshot) -> Unit): Job = viewModelScope.launch {
+        try {
+            edit(action)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _error.value = e.javaClass.simpleName
         }
     }
 

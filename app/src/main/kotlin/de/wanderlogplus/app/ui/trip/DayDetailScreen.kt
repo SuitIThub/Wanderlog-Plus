@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,15 +66,20 @@ fun DayDetailScreen(
     onRemove: (itemId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val queries = snapshot.queries()
-    val view = queries?.days()?.firstOrNull { it.date == date }
+    val queries = remember(snapshot) { snapshot.queries() }
+    val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
     val day = view?.day
-    val region = view?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
+    val region = remember(snapshot, view) { view?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } } }
     val stayName = view?.stay?.let { snapshot.places[it.placeId]?.name }?.takeIf { it.isNotBlank() }
-    val items = day?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+    val items = remember(snapshot, day) { day?.let { snapshot.dayItemsFor(it.id) }.orEmpty() }
 
     var category by rememberSaveable { mutableStateOf<PlaceCategory?>(null) }
     var openOnly by rememberSaveable { mutableStateOf(false) }
+    val dow = if (openOnly) dayOfWeekSunday0(date) else null
+    val shown = remember(snapshot, date, category, dow) {
+        val all = queries?.suggestionsFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
+        sortSuggestions(filterSuggestions(all, category, dow))
+    }
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -97,7 +103,7 @@ fun DayDetailScreen(
                 Text("Noch nichts geplant", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(Modifier.testTag("program-list")) {
-                items.forEach { item -> ProgramRow(item, snapshot, items.first() == item, items.last() == item, onMove, onRemove) }
+                items.forEachIndexed { i, item -> ProgramRow(item, snapshot, i == 0, i == items.lastIndex, onMove, onRemove) }
             }
         }
 
@@ -105,7 +111,6 @@ fun DayDetailScreen(
             if (view == null || view.regionId == null) {
                 Text("Reisetag – keine Vorschläge", style = MaterialTheme.typography.bodyMedium)
             } else {
-                val all = queries?.suggestionsFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
                         FilterChip(selected = category == c, onClick = { category = c }, label = { Text(categoryLabel(c)) })
@@ -115,8 +120,6 @@ fun DayDetailScreen(
                     Switch(checked = openOnly, onCheckedChange = { openOnly = it })
                     Text("an diesem Wochentag geöffnet", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium)
                 }
-                val dow = if (openOnly) dayOfWeekSunday0(date) else null
-                val shown = sortSuggestions(filterSuggestions(all, category, dow))
                 if (shown.isEmpty()) Text("Keine Vorschläge", style = MaterialTheme.typography.bodyMedium)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     shown.forEach { s -> SuggestionCard(s, date, onAddSuggestion) }

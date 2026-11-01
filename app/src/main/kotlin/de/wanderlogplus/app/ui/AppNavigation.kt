@@ -31,6 +31,11 @@ import de.wanderlogplus.app.ui.trip.TripScreen
 import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.app.ui.trip.dayRoute
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -70,7 +75,9 @@ fun AppNavigation(
     val backStack by nav.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
 
+    val snackbar = remember { SnackbarHostState() }
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
             if (current != SETUP_ROUTE) NavigationBar {
                 Tab.entries.forEach { tab ->
@@ -109,15 +116,20 @@ fun AppNavigation(
                 composable(Tab.REISE.route) {
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
-                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty == false) {
+                    TripErrors(vm, snackbar)
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
                         val s = snap
-                        if (s == null || s.isEmpty) EmptyState(onSyncNow = onRefresh)
-                        else TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) })
+                        when {
+                            s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                            else -> TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) })
+                        }
                     }
                 }
                 composable(DAY_ROUTE) { entry ->
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.getBackStackEntry(Tab.REISE.route))
                     val snap by vm.snapshot.collectAsState()
+                    TripErrors(vm, snackbar)
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
@@ -144,6 +156,17 @@ fun AppNavigation(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TripErrors(vm: TripViewModel, snackbar: SnackbarHostState) {
+    val error by vm.error.collectAsState()
+    LaunchedEffect(error) {
+        if (error != null) {
+            vm.consumeError()
+            snackbar.showSnackbar("Änderung fehlgeschlagen")
         }
     }
 }

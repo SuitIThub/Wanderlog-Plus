@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -116,6 +117,27 @@ class DayDetailTest {
         seedTrip(withStay = false)
         show("2027-05-10")
         rule.onNodeWithText("Reisetag – keine Vorschläge").assertIsDisplayed()
+    }
+
+    @Test fun weekdaySwitchHidesPlacesClosedOnThatDay() {
+        seedTrip()
+        // 2027-05-09 is a Sunday; this place only opens on Mondays.
+        seed(EntityType.PLACE, "pm", Place("pm", name = "Montagsladen", openingPeriods = listOf(OpeningPeriod(1, "09:00", 1, "17:00"))))
+        seed(EntityType.SAVED_PLACE, "sv-mon", SavedPlace("sv-mon", "pm", "r1", PlaceCategory.SHOPPING))
+        show("2027-05-09")
+        rule.onNodeWithTag("suggestion-sv-mon").assertExists()
+        rule.onNode(isToggleable()).performClick()
+        rule.onNodeWithTag("suggestion-sv-mon").assertDoesNotExist()
+        rule.onNodeWithTag("suggestion-sv-star").assertExists() // unknown hours pass the filter
+    }
+
+    @Test fun addOnDateWithoutDayCreatesDay() {
+        seedTrip()
+        show("2027-05-10")
+        assertTrue(TripSnapshot.from(store.all()).days.none { it.date == "2027-05-10" })
+        button("Zum Tag hinzufügen", "suggestion-sv-star").performClick()
+        assertTrue(TripSnapshot.from(store.all()).days.any { it.date == "2027-05-10" })
+        rule.onNode(hasText("Schrein Alpha") and hasAnyAncestor(hasTestTag("program-list"))).assertExists()
     }
 
     @Test fun tripListShowsDaysRegionStayAndTravelDay() {

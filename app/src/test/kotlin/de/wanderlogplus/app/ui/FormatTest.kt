@@ -31,6 +31,10 @@ class FormatTest {
         assertEquals(fallback, regionColor("nope"))
         assertEquals(fallback, regionColor("#12"))
         assertEquals(fallback, regionColor("#zzzzzz"))
+        assertEquals(fallback, regionColor("#+12345"))
+        assertEquals(fallback, regionColor("#12345g"))
+        assertEquals(fallback, regionColor("#1234567"))
+        assertEquals(Color(0x803498DB), regionColor("#803498db"))
         assertNotEquals(fallback, regionColor("#3498db"))
     }
 }

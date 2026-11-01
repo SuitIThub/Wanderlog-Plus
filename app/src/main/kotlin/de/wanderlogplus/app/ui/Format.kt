@@ -20,12 +20,13 @@ fun dayLabel(date: String): String {
     return "%s, %02d.%02d.".format(java.util.Locale.GERMAN, WEEKDAYS_DE[d.dayOfWeek.value - 1], d.dayOfMonth, d.monthValue)
 }
 
+private val HEX_COLOR = Regex("[0-9a-fA-F]{6}|[0-9a-fA-F]{8}")
 private val NEUTRAL_REGION_COLOR = androidx.compose.ui.graphics.Color(0xFF9E9E9E)
 
 /** Parses "#rrggbb" (or "#aarrggbb"); null or malformed values give a neutral grey. */
 fun regionColor(hex: String?): androidx.compose.ui.graphics.Color {
     val h = hex?.trim()?.removePrefix("#") ?: return NEUTRAL_REGION_COLOR
-    if (h.length != 6 && h.length != 8) return NEUTRAL_REGION_COLOR
-    val v = h.toLongOrNull(16) ?: return NEUTRAL_REGION_COLOR
+    if (!HEX_COLOR.matches(h)) return NEUTRAL_REGION_COLOR
+    val v = h.toLong(16)
     return androidx.compose.ui.graphics.Color(if (h.length == 6) 0xFF000000L or v else v)
 }

@@ -40,6 +40,15 @@ class MarkdownTest {
         assertEquals(listOf(MdSpan("Café ⭐ Müßli 2*3 [x")), b.spans)
     }
 
+    @Test fun onlyWebLinksAreSafe() {
+        assertEquals(true, isSafeUrl("https://example.org"))
+        assertEquals(true, isSafeUrl(" HTTP://example.org"))
+        assertEquals(false, isSafeUrl("javascript:alert(1)"))
+        assertEquals(false, isSafeUrl("intent://x#Intent;end"))
+        assertEquals(false, isSafeUrl("file:///etc/passwd"))
+        assertEquals(false, isSafeUrl("tel:123"))
+    }
+
     @Test fun emptyTextHasNoBlocks() {
         assertEquals(emptyList<MdBlock>(), parseMarkdown(""))
     }

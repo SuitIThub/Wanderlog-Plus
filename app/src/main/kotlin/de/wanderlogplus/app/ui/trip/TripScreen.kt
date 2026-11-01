@@ -17,6 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +41,8 @@ fun RegionChip(name: String, color: androidx.compose.ui.graphics.Color, modifier
 
 @Composable
 fun TripScreen(snapshot: TripSnapshot, onOpenDay: (String) -> Unit, modifier: Modifier = Modifier) {
-    val days = snapshot.queries()?.days().orEmpty()
-    val regionsById = snapshot.regions.associateBy { it.id }
+    val days = remember(snapshot) { snapshot.queries()?.days().orEmpty() }
+    val regionsById = remember(snapshot) { snapshot.regions.associateBy { it.id } }
     LazyColumn(modifier.fillMaxSize().testTag("trip-list")) {
         items(days, key = { it.date }) { d ->
             Column(

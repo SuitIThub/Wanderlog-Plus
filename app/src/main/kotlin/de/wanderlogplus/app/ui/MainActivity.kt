@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private fun tripFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            TripViewModel({ container.snapshots().snapshot }, { container.editor() }) as T
+            TripViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
     }
 
     private fun setupFactory(container: AppContainer) = object : ViewModelProvider.Factory {
