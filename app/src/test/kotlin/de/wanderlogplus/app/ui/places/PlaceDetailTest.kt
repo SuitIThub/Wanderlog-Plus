@@ -83,6 +83,7 @@ class PlaceDetailTest {
     @Test fun editNoteSavesAndShowsNewText() {
         seedPlace()
         show()
+        rule.onNodeWithTag("tab-note").performClick()
         rule.onNodeWithText("alt").assertIsDisplayed()
         rule.onNodeWithText("Bearbeiten").performClick()
         rule.onNodeWithTag("note-field").performTextClearance()
@@ -100,6 +101,7 @@ class PlaceDetailTest {
                 PlaceDetailScreen(TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> })
             }
         }
+        rule.onNodeWithTag("tab-note").performClick()
         rule.onNodeWithText("Bearbeiten").performClick()
         rule.onNodeWithTag("note-field").performTextClearance()
         rule.onNodeWithTag("note-field").performTextInput("Sofort sichtbar")
@@ -110,6 +112,7 @@ class PlaceDetailTest {
     @Test fun cancelEditWritesNothing() {
         seedPlace()
         show()
+        rule.onNodeWithTag("tab-note").performClick()
         rule.onNodeWithText("Bearbeiten").performClick()
         rule.onNodeWithTag("note-field").performTextInput("x")
         rule.onNodeWithText("Abbrechen").performClick()
@@ -173,6 +176,61 @@ class PlaceDetailTest {
         rule.onNodeWithTag("link-NAVIGATE").assertDoesNotExist()
     }
 
+    @Test fun placeDetailTabs() {
+        seedPlace(Place("p1", name = "Schrein Alpha", description = "Alter Schrein"))
+        seed(EntityType.ATTACHMENT, "at1", Attachment("at1", EntityType.SAVED_PLACE, "sv1", "a".repeat(64), "Plan.pdf", "application/pdf", 1000))
+        val actions = de.wanderlogplus.app.ui.attachments.AttachmentActions(
+            available = { false }, onAdd = { _, _ -> }, onAddToDay = {}, onOpen = {}, onDelete = {},
+        )
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(
+                    TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> },
+                    attachments = actions,
+                )
+            }
+        }
+        rule.onNodeWithTag("hero").assertExists()
+        rule.onNodeWithTag("hero-edit").assertExists()
+        rule.onNodeWithTag("tab-info").assertExists()
+        // Info is the default tab.
+        rule.onNodeWithText("Alter Schrein").assertIsDisplayed()
+        rule.onNodeWithTag("hours-Mo").assertExists()
+        rule.onNodeWithTag("place-note").assertDoesNotExist()
+        rule.onNodeWithTag("tab-note").performClick()
+        rule.onNodeWithTag("place-note").assertIsDisplayed()
+        rule.onNodeWithTag("hours-Mo").assertDoesNotExist()
+        rule.onNodeWithTag("attachment-at1").assertDoesNotExist()
+        rule.onNodeWithTag("tab-files").performClick()
+        rule.onNodeWithTag("attachment-at1").assertExists()
+        rule.onNodeWithTag("attachment-add").assertExists()
+        rule.onNodeWithTag("place-note").assertDoesNotExist()
+        // Status chips stay above the tabs.
+        rule.onNodeWithText("Besucht").assertIsDisplayed()
+    }
+
+    @Test fun todayHighlightedInHours() {
+        seedPlace(Place("p1", name = "Schrein Alpha", openingPeriods = listOf(OpeningPeriod(3, "09:00", 3, "17:00"))))
+        rule.setContent {
+            WanderlogPlusTheme {
+                // 2027-05-12 is a Wednesday.
+                PlaceDetailScreen(
+                    TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> },
+                    today = "2027-05-12",
+                )
+            }
+        }
+        rule.onNode(hasText("heute") and hasAnyAncestor(hasTestTag("hours-Mi"))).assertExists()
+        rule.onNode(hasText("heute") and hasAnyAncestor(hasTestTag("hours-Mo"))).assertDoesNotExist()
+        rule.onNode(hasText("09:00–17:00") and hasAnyAncestor(hasTestTag("hours-Mi"))).assertExists()
+    }
+
+    @Test fun noTodayHighlightWithoutDate() {
+        seedPlace()
+        show()
+        rule.onNode(hasText("heute")).assertDoesNotExist()
+    }
+
     @Test fun openingHoursLinesRules() {
         val lines = openingHoursLines(
             listOf(
@@ -196,6 +254,7 @@ class PlaceDetailTest {
                 PlaceDetailScreen(snapshot, "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, failureCount = failures)
             }
         }
+        rule.onNodeWithTag("tab-note").performClick()
         rule.onNodeWithText("Bearbeiten").performClick()
         rule.onNodeWithTag("note-field").performTextClearance()
         rule.onNodeWithTag("note-field").performTextInput("neu")

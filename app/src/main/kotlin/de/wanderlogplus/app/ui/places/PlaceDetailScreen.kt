@@ -1,61 +1,82 @@
 package de.wanderlogplus.app.ui.places
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Directions
+import androidx.compose.material.icons.filled.DirectionsTransit
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.links.GoogleExternalLinks
+import de.wanderlogplus.app.links.LinkKind
 import de.wanderlogplus.app.ui.LabeledDropdown
-import de.wanderlogplus.app.ui.LinkButtons
 import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
 import de.wanderlogplus.app.ui.attachments.AttachmentsFor
-import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.app.ui.categoryLabel
-import de.wanderlogplus.app.ui.design.placeImageUrl
-import de.wanderlogplus.app.ui.openingHoursLines
+import de.wanderlogplus.app.ui.design.ActionCircle
+import de.wanderlogplus.app.ui.design.Badge
+import de.wanderlogplus.app.ui.design.EditSheet
+import de.wanderlogplus.app.ui.design.EmptyHint
+import de.wanderlogplus.app.ui.design.HeroHeader
+import de.wanderlogplus.app.ui.design.SectionLabel
+import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.ratingLabel
+import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.statusLabel
-import de.wanderlogplus.app.ui.today.Section
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
+import de.wanderlogplus.shared.model.SavedPlace
+import de.wanderlogplus.shared.sync.EntityType
 import java.util.Locale
 
 private const val TAG_STAR = "⭐"
 private const val TAG_WARN = "⚠️"
 private const val NO_REGION_LABEL = "Keine Region"
+
+private const val TAB_INFO = 0
+private const val TAB_NOTE = 1
+private const val TAB_FILES = 2
 
 /**
  * Switches the marker [emoji] in [tags]: removes every tag starting with it (e.g. "⭐ Muss man sehen"), or appends the
@@ -81,7 +102,19 @@ internal fun durationText(place: Place): String? {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
+    LinkKind.NAVIGATE -> Icons.Filled.Directions
+    LinkKind.TRANSIT -> Icons.Filled.DirectionsTransit
+    LinkKind.WEBSITE -> Icons.Filled.Language
+    LinkKind.PHONE -> Icons.Filled.Call
+    LinkKind.TABELOG -> Icons.Filled.Restaurant
+}
+
+/**
+ * Place detail: photo hero (✎ opens "Ort bearbeiten" for tags, region and category), rating/category/tags, status
+ * chips, link action circles, then the tabs Info, Notiz and Dateien. The whole page scrolls.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceDetailScreen(
     snapshot: TripSnapshot,
@@ -99,64 +132,61 @@ fun PlaceDetailScreen(
     /** Null regionId = "Keine Region". */
     onSetRegion: (savedPlaceId: String, regionId: String?) -> Unit = { _, _ -> },
     onSetCategory: (savedPlaceId: String, category: PlaceCategory) -> Unit = { _, _ -> },
+    /** ISO date whose weekday is highlighted in the opening hours; null highlights none. */
+    today: String? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
+    val region = remember(snapshot, saved?.regionId) { saved?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } } }
+    val accent = region?.let { regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
+
+    var tab by rememberSaveable(savedPlaceId) { mutableIntStateOf(TAB_INFO) }
+    var editingTags by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var editing by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
     // Shown right after saving, until the snapshot carries the new note.
     var pendingNote by remember(savedPlaceId) { mutableStateOf<String?>(null) }
     LaunchedEffect(saved?.note, failureCount) { pendingNote = null }
 
-    Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+    if (saved == null) {
+        Column(modifier.fillMaxSize()) {
+            HeroHeader("Ort nicht gefunden", kicker = null, imageUrl = null, accent = accent, height = 140.dp, onBack = onBack, titleMaxLines = 1)
+            EmptyHint("Dieser Ort existiert nicht mehr.", Modifier.padding(16.dp))
         }
-        if (saved == null) {
-            Text("Ort nicht gefunden", Modifier.padding(16.dp))
-            return@Column
-        }
+        return
+    }
 
-        place?.imageKeys?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { key ->
-            var failed by remember(key) { mutableStateOf(false) }
-            if (!failed) {
-                AsyncImage(
-                    model = placeImageUrl(key),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    onError = { failed = true },
-                    modifier = Modifier.fillMaxWidth().height(200.dp).testTag("place-image"),
+    val fileCount = snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id).size
+
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        HeroHeader(
+            title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
+            kicker = region?.name ?: NO_REGION_LABEL,
+            imageUrl = place?.heroImageUrl(),
+            accent = accent,
+            height = 140.dp,
+            onBack = onBack,
+            onEdit = { editingTags = true },
+            titleMaxLines = 1,
+        )
+
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                place?.let(::ratingText)?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                Text(
+                    categoryLabel(saved.category),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", style = MaterialTheme.typography.headlineSmall)
-            place?.let(::ratingText)?.let { Text(it, style = MaterialTheme.typography.bodyLarge) }
-            Text(categoryLabel(saved.category), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (saved.tags.isNotEmpty()) Text(saved.tags.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
-            place?.address?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-            place?.let(::durationText)?.let { Text("Dauer: $it", style = MaterialTheme.typography.bodyMedium) }
-        }
-
-        if (place != null && onOpenLink != null) {
-            val links = remember(place, saved.category) { GoogleExternalLinks.linksFor(place, saved.category) }
-            LinkButtons(links, onOpenLink, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-        }
-
-        place?.description?.takeIf { it.isNotBlank() }?.let { Section("Beschreibung") { Text(it, style = MaterialTheme.typography.bodyMedium) } }
-
-        Section("Öffnungszeiten") {
-            openingHoursLines(place?.openingPeriods.orEmpty()).forEach { (day, text) ->
-                Row(Modifier.fillMaxWidth().testTag("hours-$day"), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(day, Modifier.padding(end = 4.dp), style = MaterialTheme.typography.labelLarge)
-                    Text(text, style = MaterialTheme.typography.bodyMedium)
+            if (saved.tags.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    saved.tags.forEach { Badge(tagBadge(it)) }
                 }
             }
-        }
-
-        Section("Status") {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("status-chips")) {
                 PlaceStatus.entries.forEach { s ->
                     FilterChip(
                         selected = saved.status == s,
@@ -167,61 +197,151 @@ fun PlaceDetailScreen(
             }
         }
 
-        Section("Markierungen") {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(TAG_STAR to "tag-star", TAG_WARN to "tag-warn").forEach { (emoji, tag) ->
-                    FilterChip(
-                        selected = saved.tags.any { it.startsWith(emoji) },
-                        onClick = { onSetTags(saved.id, toggleTag(saved.tags, emoji)) },
-                        label = { Text(emoji) },
-                        modifier = Modifier.testTag(tag),
+        if (place != null && onOpenLink != null) {
+            val links = remember(place, saved.category) { GoogleExternalLinks.linksFor(place, saved.category) }
+            if (links.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    links.forEach { l -> ActionCircle(linkIcon(l.kind), l.label, { onOpenLink(l) }, "link-${l.kind}") }
+                }
+            }
+        }
+
+        PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp)) {
+            PlaceTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
+            PlaceTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
+            PlaceTab(if (fileCount > 0) "Dateien ($fileCount)" else "Dateien", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
+        }
+
+        when (tab) {
+            TAB_INFO -> PlaceInfoTab(place, accent, today)
+            TAB_NOTE -> PlaceNoteTab(
+                note = pendingNote ?: saved.note,
+                accent = accent,
+                editing = editing,
+                draft = draft,
+                onDraft = { draft = it },
+                onStartEdit = { draft = pendingNote ?: saved.note; editing = true },
+                onSave = { pendingNote = draft; onSaveNote(saved.id, draft); editing = false },
+                onCancel = { editing = false },
+            )
+            else -> Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                SectionLabel("Dateien", color = accent)
+                if (attachments == null) {
+                    EmptyHint("Dateien sind hier nicht verfügbar", Modifier.padding(top = 6.dp))
+                } else {
+                    AttachmentsFor(
+                        snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id),
+                        attachments,
+                        onAdd = { attachments.onAdd(EntityType.SAVED_PLACE, saved.id) },
                     )
                 }
             }
-            val regionName = saved.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id }?.name ?: id } ?: NO_REGION_LABEL
-            LabeledDropdown(
-                tag = "place-region-dropdown",
-                label = "Region",
-                value = regionName,
-                options = listOf<Pair<String?, String>>(null to NO_REGION_LABEL) + snapshot.regions.map { it.id to it.name },
-                onSelect = { onSetRegion(saved.id, it) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
-            LabeledDropdown(
-                tag = "category-dropdown",
-                label = "Kategorie",
-                value = categoryLabel(saved.category),
-                options = PlaceCategory.entries.map { it to categoryLabel(it) },
-                onSelect = { onSetCategory(saved.id, it) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
         }
+    }
 
-        Section("Notiz") {
-            if (editing) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.fillMaxWidth().testTag("note-field"),
-                    minLines = 3,
-                )
-                Row {
-                    Button(onClick = { pendingNote = draft; onSaveNote(saved.id, draft); editing = false }) { Text("Speichern") }
-                    TextButton(onClick = { editing = false }) { Text("Abbrechen") }
+    if (editingTags) {
+        EditSheet("Ort bearbeiten", onDismiss = { editingTags = false }) {
+            PlaceEditForm(snapshot, saved, onSetTags, onSetRegion, onSetCategory, onDone = { editingTags = false })
+        }
+    }
+}
+
+@Composable
+private fun PlaceTab(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+    Tab(
+        selected = selected,
+        onClick = onClick,
+        text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.testTag(tag),
+    )
+}
+
+/** Notiz tab: the place note (Markdown), edited inline. */
+@Composable
+private fun PlaceNoteTab(
+    note: String,
+    accent: Color,
+    editing: Boolean,
+    draft: String,
+    onDraft: (String) -> Unit,
+    onStartEdit: () -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        SectionLabel("Notiz", color = accent)
+        Surface(
+            Modifier.fillMaxWidth().padding(top = 6.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            shadowElevation = 1.dp,
+        ) {
+            Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 4.dp)) {
+                if (editing) {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = onDraft,
+                        modifier = Modifier.fillMaxWidth().padding(end = 8.dp).testTag("note-field"),
+                        minLines = 3,
+                    )
+                    Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onCancel) { Text("Abbrechen") }
+                        Button(onClick = onSave) { Text("Speichern") }
+                    }
+                } else {
+                    if (note.isNotBlank()) {
+                        MarkdownText(note, Modifier.padding(end = 8.dp).testTag("place-note"))
+                    } else {
+                        Text("Keine Notiz", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = onStartEdit, modifier = Modifier.align(Alignment.End)) { Text("Bearbeiten") }
                 }
-            } else {
-                val shownNote = pendingNote ?: saved.note
-                if (shownNote.isNotBlank()) MarkdownText(shownNote, Modifier.testTag("place-note"))
-                else Text("Keine Notiz", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { draft = pendingNote ?: saved.note; editing = true }) { Text("Bearbeiten") }
             }
         }
-
-        AttachmentsFor(
-            snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id),
-            attachments,
-            onAdd = { attachments?.onAdd?.invoke(EntityType.SAVED_PLACE, saved.id) },
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
     }
+}
+
+/** Content of "Ort bearbeiten": ⭐/⚠️ toggles, region and category; every change is written right away. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlaceEditForm(
+    snapshot: TripSnapshot,
+    saved: SavedPlace,
+    onSetTags: (savedPlaceId: String, tags: List<String>) -> Unit,
+    onSetRegion: (savedPlaceId: String, regionId: String?) -> Unit,
+    onSetCategory: (savedPlaceId: String, category: PlaceCategory) -> Unit,
+    onDone: () -> Unit,
+) {
+    SectionLabel("Markierungen")
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(Triple(TAG_STAR, "tag-star", "Highlight"), Triple(TAG_WARN, "tag-warn", "Achtung")).forEach { (emoji, tag, label) ->
+            FilterChip(
+                selected = saved.tags.any { it.startsWith(emoji) },
+                onClick = { onSetTags(saved.id, toggleTag(saved.tags, emoji)) },
+                label = { Text("$emoji $label") },
+                modifier = Modifier.testTag(tag),
+            )
+        }
+    }
+    val regionName = saved.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id }?.name ?: id } ?: NO_REGION_LABEL
+    LabeledDropdown(
+        tag = "place-region-dropdown",
+        label = "Region",
+        value = regionName,
+        options = listOf<Pair<String?, String>>(null to NO_REGION_LABEL) + snapshot.regions.map { it.id to it.name },
+        onSelect = { onSetRegion(saved.id, it) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    LabeledDropdown(
+        tag = "category-dropdown",
+        label = "Kategorie",
+        value = categoryLabel(saved.category),
+        options = PlaceCategory.entries.map { it to categoryLabel(it) },
+        onSelect = { onSetCategory(saved.id, it) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("place-edit-done")) { Text("Fertig") }
 }

@@ -4,9 +4,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.*
@@ -20,10 +29,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/** Tags, region and category live in the ✎ sheet; inside it the click action is used directly (no touch under Robolectric). */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w400dp-h2400dp")
 class PlaceEditTest {
     @get:Rule val rule = createComposeRule()
+
+    private fun SemanticsNodeInteraction.tap() = performSemanticsAction(SemanticsActions.OnClick)
+
+    private fun openSheet() = rule.onNodeWithTag("hero-edit").performClick()
 
     private val store = InMemoryEntityStore()
 
@@ -54,8 +68,9 @@ class PlaceEditTest {
                 )
             }
         }
-        rule.onNodeWithTag("tag-star").performClick()
-        rule.onNodeWithTag("tag-star").performClick()
+        openSheet()
+        rule.onNodeWithTag("tag-star").tap()
+        rule.onNodeWithTag("tag-star").tap()
         assertEquals(listOf(listOf("🍜"), listOf("🍜", "⭐")), calls)
     }
 
@@ -70,7 +85,8 @@ class PlaceEditTest {
                 )
             }
         }
-        rule.onNodeWithTag("tag-warn").performClick()
+        openSheet()
+        rule.onNodeWithTag("tag-warn").tap()
         assertEquals(listOf(listOf("🍜", "⚠️")), calls)
     }
 
@@ -85,8 +101,9 @@ class PlaceEditTest {
                 )
             }
         }
-        rule.onNodeWithTag("category-dropdown").performClick()
-        rule.onNodeWithTag("category-dropdown-option-1").performClick() // FOOD
+        openSheet()
+        rule.onNodeWithTag("category-dropdown").tap()
+        rule.onNodeWithTag("category-dropdown-option-1").tap() // FOOD
         assertEquals(listOf(PlaceCategory.FOOD), calls)
     }
 
@@ -101,8 +118,48 @@ class PlaceEditTest {
                 )
             }
         }
-        rule.onNodeWithTag("place-region-dropdown").performClick()
-        rule.onNodeWithTag("place-region-dropdown-option-0").performClick() // Keine Region
+        openSheet()
+        rule.onNodeWithTag("place-region-dropdown").tap()
+        rule.onNodeWithTag("place-region-dropdown-option-0").tap() // Keine Region
         assertEquals(listOf<String?>(null), calls)
+    }
+
+    @Test fun editSheetHoldsTagsRegionCategory() {
+        seedPlace(listOf("⭐ Muss man sehen"))
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> })
+            }
+        }
+        // Not on the page itself any more ...
+        rule.onNodeWithTag("tag-star").assertDoesNotExist()
+        rule.onNodeWithTag("place-region-dropdown").assertDoesNotExist()
+        rule.onNodeWithTag("category-dropdown").assertDoesNotExist()
+        // ... but in the ✎ sheet.
+        openSheet()
+        rule.onNodeWithTag("edit-sheet").assertExists()
+        rule.onNodeWithText("Ort bearbeiten").assertExists()
+        rule.onNodeWithTag("tag-star").assertIsSelected()
+        rule.onNodeWithTag("tag-warn").assertIsNotSelected()
+        rule.onNodeWithTag("place-region-dropdown").assertTextContains("Kyoto")
+        rule.onNodeWithTag("category-dropdown").assertTextContains("Sehenswürdigkeiten")
+        rule.onNodeWithTag("place-edit-done").tap()
+        rule.onNodeWithTag("edit-sheet").assertDoesNotExist()
+    }
+
+    @Test fun tabelogCircleOnlyForFood() {
+        seed(EntityType.REGION, "r1", Region("r1", "Kyoto", "#3498db"))
+        seed(EntityType.PLACE, "p1", Place("p1", name = "Ramen Fuji", lat = 35.0, lng = 135.7))
+        seed(EntityType.SAVED_PLACE, "sv1", SavedPlace("sv1", "p1", "r1", PlaceCategory.FOOD))
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(
+                    TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> },
+                    onOpenLink = {},
+                )
+            }
+        }
+        rule.onNode(hasTestTag("link-TABELOG") and hasText("Tabelog")).assertExists()
+        rule.onNodeWithTag("link-NAVIGATE").assertExists()
     }
 }

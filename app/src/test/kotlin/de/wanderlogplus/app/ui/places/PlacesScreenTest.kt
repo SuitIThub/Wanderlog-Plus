@@ -94,6 +94,51 @@ class PlacesScreenTest {
         rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
     }
 
+    @Test fun regionTilesShowCounts() {
+        seedData()
+        // Ids sort the day trip ("r0") before its main region ("r1"); the tiles must still put it right after r1.
+        seed(EntityType.REGION, "r0", Region("r0", "Nara", "#2ecc71", dayTripFromRegionId = "r1"))
+        seed(EntityType.REGION, "r5", Region("r5", "Osaka", "#e74c3c"))
+        seed(EntityType.PLACE, "pn", Place("pn", name = "Hirschpark"))
+        seed(EntityType.SAVED_PLACE, "sv-n", SavedPlace("sv-n", "pn", "r0", PlaceCategory.SIGHT))
+        rule.setContent { WanderlogPlusTheme { PlacesScreen(TripSnapshot.from(store.all()), onOpenRegion = {}) } }
+        rule.onNode(hasText("Kyoto") and hasTestTag("region-r1")).assertExists()
+        rule.onNode(hasText("3 Orte") and hasTestTag("region-r1")).assertExists()
+        rule.onNode(hasText("0 Orte") and hasTestTag("region-r5")).assertExists()
+        rule.onNode(hasText("1 Ort") and hasTestTag("region-r0")).assertExists()
+        rule.onNode(hasText("Tagesausflug", substring = true) and hasTestTag("region-r0")).assertExists()
+        rule.onNode(hasText("Tagesausflug", substring = true) and hasTestTag("region-r1")).assertDoesNotExist()
+        val order = listOf("region-r1", "region-r0", "region-r5", "region-none").map {
+            val b = rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot
+            b.top * 10_000 + b.left
+        }
+        assertEquals(order.sorted(), order)
+    }
+
+    @Test fun categoryFilterNarrowsList() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        rule.onNodeWithTag("hero").assertExists()
+        rule.onNodeWithTag("filter-category-ALL").assertExists()
+        rule.onNodeWithTag("place-sv-a").assertExists()
+        rule.onNodeWithTag("filter-category-FOOD").performClick()
+        rule.onNodeWithTag("place-sv-f").assertExists()
+        rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
+        rule.onNodeWithTag("place-sv-b").assertDoesNotExist()
+        rule.onNodeWithTag("filter-category-SHOPPING").performClick()
+        rule.onNodeWithText("Keine Orte", substring = true).assertExists()
+        rule.onNodeWithTag("filter-category-ALL").performClick()
+        rule.onNodeWithTag("place-sv-a").assertExists()
+        rule.onNodeWithTag("place-sv-f").assertExists()
+    }
+
+    @Test fun placeCardShowsStatusDotAndRating() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        rule.onNodeWithTag("status-dot-sv-b", useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("★ 4,9", substring = true) and hasTestTag("place-sv-b")).assertExists()
+    }
+
     @Test fun toggleAlwaysShownAndMapUnavailableInTests() {
         seedData()
         rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
