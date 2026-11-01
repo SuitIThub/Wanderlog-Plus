@@ -4,7 +4,15 @@ import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
 import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
 import de.wanderlogplus.shared.sync.PushRequest
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.http.content.LocalFileContent
+import io.ktor.http.content.PartData
+import io.ktor.http.content.forEachPart
+import io.ktor.server.request.receiveMultipart
+import io.ktor.utils.io.jvm.javaio.toInputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
@@ -35,8 +43,10 @@ import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 import java.security.MessageDigest
 
+private const val MULTIPART_HEADROOM = 64L * 1024
+
 /** Container for server components; later tasks add store, sync, files, imports. */
-class Services(val config: ServerConfig, val store: SqliteStore, val sync: SyncService)
+class Services(val config: ServerConfig, val store: SqliteStore, val sync: SyncService, val files: FileStore)
 
 @Serializable
 private data class Health(val status: String, val protocol: Int)
@@ -90,6 +100,7 @@ fun Application.module(services: Services) {
     install(StatusPages) {
         // Never echo exception messages: they can contain request data.
         exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
+        exception<FileTooLarge> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("file_too_large")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<IllegalArgumentException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<SerializationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -113,6 +124,40 @@ fun Application.module(services: Services) {
             post("/api/sync/push") {
                 val req = call.receive<PushRequest>()
                 call.respond(services.sync.push(call.author(), req.changes))
+            }
+            post("/api/files") {
+                var stored: StoredFile? = null
+                // Ktor applies formFieldLimit to file parts too: leave headroom so FileStore's own limit fires first.
+                val multipart = call.receiveMultipart(formFieldLimit = services.config.maxFileBytes + MULTIPART_HEADROOM)
+                try {
+                    multipart.forEachPart { part ->
+                        try {
+                            if (part is PartData.FileItem && part.name == "file") {
+                                require(stored == null) { "multiple files" }
+                                stored = withContext(Dispatchers.IO) {
+                                    part.provider().toInputStream().use { services.files.save(it) }
+                                }
+                            }
+                        } finally {
+                            part.dispose()
+                        }
+                    }
+                } catch (e: java.io.IOException) {
+                    // Ktor's own multipart limit (only reached for uploads far beyond maxBytes).
+                    if (e.message?.startsWith("Multipart content length exceeds limit") == true) throw FileTooLarge()
+                    throw e
+                }
+                call.respond(stored ?: throw IllegalArgumentException("missing file part"))
+            }
+            get("/api/files/{hash}") {
+                val hash = call.parameters["hash"].orEmpty()
+                require(FileStore.isValidHash(hash)) { "hash" }
+                val path = services.files.open(hash)
+                if (path == null) {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+                } else {
+                    call.respond(LocalFileContent(path.toFile(), ContentType.Application.OctetStream))
+                }
             }
             get("/api/sync/pull") {
                 val q = call.request.queryParameters
