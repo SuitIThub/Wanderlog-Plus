@@ -15,6 +15,7 @@ fun main() {
     Files.createDirectories(config.dataDir)
     val store = SqliteStore(config.dataDir.resolve("wanderlog-plus.db"))
     Runtime.getRuntime().addShutdownHook(Thread { store.close() })
-    val services = Services(config, store, SyncService(store), FileStore.forConfig(config))
+    val sync = SyncService(store)
+    val services = Services(config, store, sync, FileStore.forConfig(config), ImportService(store, sync, tripSourceFrom(config)))
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }

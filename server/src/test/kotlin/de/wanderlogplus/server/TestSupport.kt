@@ -19,10 +19,11 @@ fun testConfig(dir: Path, maxFileBytes: Long = 25L * 1024 * 1024): ServerConfig 
     importFile = null,
 )
 
-fun testServices(dir: Path, maxFileBytes: Long = 25L * 1024 * 1024): Services {
+fun testServices(dir: Path, maxFileBytes: Long = 25L * 1024 * 1024, source: TripSource? = null): Services {
     val store = SqliteStore(dir.resolve("wanderlog-plus.db"))
     val config = testConfig(dir, maxFileBytes)
-    return Services(config, store, SyncService(store), FileStore.forConfig(config))
+    val sync = SyncService(store)
+    return Services(config, store, sync, FileStore.forConfig(config), ImportService(store, sync, source))
 }
 
 fun HttpRequestBuilder.authed(token: String = TOKEN_A) {

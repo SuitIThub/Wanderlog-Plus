@@ -5,6 +5,7 @@ import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
 import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
 import de.wanderlogplus.shared.sync.PushRequest
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.http.content.LocalFileContent
 import io.ktor.http.content.PartData
@@ -47,7 +48,13 @@ import java.security.MessageDigest
 private const val MULTIPART_HEADROOM = 64L * 1024
 
 /** Container for server components; later tasks add store, sync, files, imports. */
-class Services(val config: ServerConfig, val store: SqliteStore, val sync: SyncService, val files: FileStore)
+class Services(
+    val config: ServerConfig,
+    val store: SqliteStore,
+    val sync: SyncService,
+    val files: FileStore,
+    val imports: ImportService,
+)
 
 @Serializable
 private data class Health(val status: String, val protocol: Int)
@@ -101,6 +108,7 @@ fun Application.module(services: Services) {
     install(StatusPages) {
         // Never echo exception messages: they can contain request data.
         exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
+        exception<ImportNotConfigured> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("import_not_configured")) }
         exception<FileTooLarge> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("file_too_large")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<IllegalArgumentException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -162,6 +170,21 @@ fun Application.module(services: Services) {
                     call.response.headers.append("X-Content-Type-Options", "nosniff")
                     call.respond(LocalFileContent(path.toFile(), ContentType.Application.OctetStream))
                 }
+            }
+            post("/api/import/wanderlog") {
+                val entry = withContext(Dispatchers.IO) { services.imports.runImport() }
+                if (entry.ok) call.respond(entry)
+                else call.respond(HttpStatusCode.BadGateway, ErrorResponse("import_failed", entry.error))
+            }
+            get("/api/import/status") {
+                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw IllegalArgumentException("limit") } ?: 20
+                require(limit in 1..100) { "limit" }
+                call.respond(withContext(Dispatchers.IO) { services.store.importLog(limit) })
+            }
+            get("/api/export") {
+                val records = withContext(Dispatchers.IO) { services.store.all() }
+                call.response.headers.append(HttpHeaders.ContentDisposition, "attachment; filename=\"wanderlog-plus-export.json\"")
+                call.respond(records)
             }
             get("/api/sync/pull") {
                 val q = call.request.queryParameters
