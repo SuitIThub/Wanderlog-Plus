@@ -37,6 +37,8 @@ ENV
 docker compose up -d --build
 ```
 
+Für das automatische HTTPS muss `WLP_DOMAIN` per DNS auf den Host zeigen, und die Ports 80 und 443 müssen offen sein. Im Container bleibt `WLP_PORT` auf 8080 (Healthcheck und Compose setzen das voraus).
+
 `.env` steht in `.gitignore`. Der Server ist nur auf `127.0.0.1:8080` veröffentlicht, von außen erreichbar ist er über Caddy (HTTPS).
 
 ## API

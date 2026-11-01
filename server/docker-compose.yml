@@ -13,7 +13,9 @@ services:
 
   caddy:
     image: caddy:2
-    env_file: .env
+    # Nur die Domain, nicht die Tokens: Compose liest WLP_DOMAIN aus server/.env.
+    environment:
+      - WLP_DOMAIN=${WLP_DOMAIN:?WLP_DOMAIN in .env setzen}
     ports:
       - "80:80"
       - "443:443"
