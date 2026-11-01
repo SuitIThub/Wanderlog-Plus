@@ -79,6 +79,15 @@ class LocalEditorTest {
         assertEquals("imp", snap.dayItems.single().dayId)
     }
 
+    @Test fun addSuggestionUsesLargestIdWhenDatesCollide() {
+        val f = fx()
+        f.seedEntity(EntityType.DAY, "a-day", Day("a-day", "2027-05-04"))
+        f.seedEntity(EntityType.DAY, "z-day", Day("z-day", "2027-05-04"))
+        f.editor.addSuggestionToDay(f.snapshot(), "2027-05-04", "s1")
+        assertEquals("z-day", f.snapshot().dayItems.single().dayId)
+        assertEquals("z-day", f.snapshot().queries()!!.dayFor("2027-05-04")!!.id)
+    }
+
     @Test fun moveDayItemSwapsOrderAndNoopsAtEdges() {
         val f = fx()
         val a = f.editor.addSuggestionToDay(f.snapshot(), "2027-05-03", "s1")

@@ -208,6 +208,35 @@ class SyncEngineServerTest {
         }
     }
 
+    @Test fun importAdoptsRecordsRepushedByDevicesToFreshServer() {
+        val a = Device("dev-aaaaaaaaaaaa", tokenA)
+        var id = ""
+        withServer("s1") {
+            api(a).triggerImport()
+            sync(a)
+            id = a.savedPlace(oldNote).id
+            setNote(a, id, "A edited")
+            sync(a)
+        }
+        // Fresh server: the device re-pushes FIRST (records arrive without _source), the import comes afterwards.
+        withServer("s2") {
+            sync(a)
+            val result = api(a).triggerImport()
+            assertTrue(result.ok, result.error)
+            sync(a)
+            val c = Device("dev-cccccccccccc", tokenA)
+            sync(c)
+            val sp = c.snapshot().savedPlaces.first { it.id == id }
+            assertEquals("A edited", sp.note)
+            assertTrue(sp.placeId.isNotBlank())
+            assertTrue(c.snapshot().places[sp.placeId]?.name.orEmpty().isNotBlank())
+            assertEquals(JsonPrimitive("wanderlog"), c.store.get(EntityType.SAVED_PLACE, id)!!.fields.getValue("_source").value)
+            // idempotent
+            val again = api(a).triggerImport()
+            assertEquals(0, again.created + again.updated + again.conflicts + again.removed)
+        }
+    }
+
     @Test fun conflictRoundTrip() = withServer("s1") {
         val a = Device("dev-aaaaaaaaaaaa", tokenA)
         api(a).triggerImport()

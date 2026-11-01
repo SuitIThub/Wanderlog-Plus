@@ -55,7 +55,7 @@ class LocalEditor(
     fun addSuggestionToDay(snapshot: TripSnapshot, date: String, savedPlaceId: String): String {
         val trip = requireNotNull(snapshot.trip) { "No trip" }
         val saved = requireNotNull(snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }) { "Unknown saved place $savedPlaceId" }
-        val existing = snapshot.days.firstOrNull { it.date == date }
+        val existing = snapshot.queries()?.dayFor(date)
         val siblings = existing?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
         siblings.firstOrNull { it.kind == DayItemKind.PLACE && it.placeId == saved.placeId }?.let { return it.id }
         val dayId = existing?.id ?: Ids.dayId(trip.id, date)
