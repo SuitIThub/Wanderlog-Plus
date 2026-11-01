@@ -15,6 +15,7 @@ import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.ui.setup.SetupViewModel
+import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.client.TripSnapshot
 import kotlinx.coroutines.flow.map
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
                     onRefresh = container.syncScheduler::requestNow,
                     setupViewModelFactory = remember { setupFactory(container) },
                     tripViewModelFactory = remember { tripFactory(container) },
+                    placesViewModelFactory = remember { placesFactory(container) },
                 )
             }
         }
@@ -48,6 +50,12 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             TripViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+    }
+
+    private fun placesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
     }
 
     private fun setupFactory(container: AppContainer) = object : ViewModelProvider.Factory {

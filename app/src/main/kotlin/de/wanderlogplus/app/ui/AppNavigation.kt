@@ -25,6 +25,15 @@ import de.wanderlogplus.app.sync.SyncStatus
 import de.wanderlogplus.app.ui.setup.SetupScreen
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.app.ui.places.PLACE_ROUTE
+import de.wanderlogplus.app.ui.places.PlaceDetailScreen
+import de.wanderlogplus.app.ui.places.PlacesScreen
+import de.wanderlogplus.app.ui.places.PlacesViewModel
+import de.wanderlogplus.app.ui.places.REGION_ROUTE
+import de.wanderlogplus.app.ui.places.RegionPlacesScreen
+import de.wanderlogplus.app.ui.places.placeRoute
+import de.wanderlogplus.app.ui.places.regionRoute
+import de.wanderlogplus.app.ui.today.TodayScreen
 import de.wanderlogplus.app.ui.trip.DAY_ROUTE
 import de.wanderlogplus.app.ui.trip.DayDetailScreen
 import de.wanderlogplus.app.ui.trip.TripScreen
@@ -33,11 +42,14 @@ import de.wanderlogplus.app.ui.trip.dayRoute
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.flow.StateFlow
+import java.time.LocalDateTime
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -50,6 +62,15 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     ORTE("orte", "Orte", Icons.Filled.Place),
     LOGISTIK("logistik", "Logistik", Icons.Filled.Train),
     MEHR("mehr", "Mehr", Icons.Filled.MoreHoriz),
+    ;
+
+    /** Routes nested below this tab's root (the tab stays highlighted there). */
+    val nestedRoutes: Set<String>
+        get() = when (this) {
+            REISE -> setOf(DAY_ROUTE)
+            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
+            else -> emptySet()
+        }
 }
 
 /** Route of the server setup screen; "Mehr" (Task 9) navigates here to change the server. */
@@ -69,6 +90,9 @@ fun AppNavigation(
     onRefresh: () -> Unit = {},
     setupViewModelFactory: ViewModelProvider.Factory? = null,
     tripViewModelFactory: ViewModelProvider.Factory? = null,
+    placesViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Device-local "now" for the Heute tab; injectable for tests. */
+    clock: () -> LocalDateTime = { LocalDateTime.now() },
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -82,17 +106,12 @@ fun AppNavigation(
             if (current != SETUP_ROUTE) NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
-                        selected = current == tab.route || (tab == Tab.REISE && current == DAY_ROUTE),
+                        selected = current == tab.route || current in tab.nestedRoutes,
                         onClick = {
-                            if (tab == Tab.REISE && current == DAY_ROUTE) {
-                                nav.popBackStack(Tab.REISE.route, inclusive = false)
+                            if (current in tab.nestedRoutes && nav.popBackStack(tab.route, inclusive = false)) {
                                 return@NavigationBarItem
                             }
-                            nav.navigate(tab.route) {
-                                popUpTo(Tab.HEUTE.route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                            nav.navigateToTab(tab)
                         },
                         icon = { Icon(tab.icon, contentDescription = null) },
                         label = { Text(tab.label) },
@@ -113,6 +132,21 @@ fun AppNavigation(
                 })
             }
             if (tripViewModelFactory != null) {
+                composable(Tab.HEUTE.route) {
+                    val s = snapshot
+                    SyncedScreen(syncStatus, onRefresh, scrollable = s?.isEmpty != false) {
+                        if (s == null) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        } else {
+                            TodayScreen(
+                                s, clock(),
+                                onOpenDay = { nav.navigate(dayRoute(it)) },
+                                onOpenTrip = { nav.navigateToTab(Tab.REISE) },
+                                onSyncNow = onRefresh,
+                            )
+                        }
+                    }
+                }
                 composable(Tab.REISE.route) {
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
@@ -127,7 +161,7 @@ fun AppNavigation(
                     }
                 }
                 composable(DAY_ROUTE) { entry ->
-                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.getBackStackEntry(Tab.REISE.route))
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     TripErrors(vm, snackbar)
                     val date = entry.arguments?.getString("date").orEmpty()
@@ -145,7 +179,47 @@ fun AppNavigation(
                     }
                 }
             }
-            Tab.entries.filter { it != Tab.REISE || tripViewModelFactory == null }.forEach { tab ->
+            if (placesViewModelFactory != null) {
+                composable(Tab.ORTE.route) {
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory)
+                    val snap by vm.snapshot.collectAsState()
+                    ErrorSnack(vm.error, vm::consumeError, snackbar)
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
+                        val s = snap
+                        when {
+                            s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                            s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                            else -> PlacesScreen(s, onOpenRegion = { nav.navigate(regionRoute(it)) })
+                        }
+                    }
+                }
+                composable(REGION_ROUTE) { entry ->
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val key = entry.arguments?.getString("regionKey").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let {
+                            RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
+                        }
+                    }
+                }
+                composable(PLACE_ROUTE) { entry ->
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    ErrorSnack(vm.error, vm::consumeError, snackbar)
+                    val id = entry.arguments?.getString("savedPlaceId").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let {
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus)
+                        }
+                    }
+                }
+            }
+            Tab.entries.filter {
+                !(it == Tab.REISE && tripViewModelFactory != null) &&
+                    !(it == Tab.HEUTE && tripViewModelFactory != null) &&
+                    !(it == Tab.ORTE && placesViewModelFactory != null)
+            }.forEach { tab ->
                 composable(tab.route) {
                     SyncedScreen(syncStatus, onRefresh) {
                         if (tab in EMPTY_AWARE_TABS && snapshot?.isEmpty == true) {
@@ -161,14 +235,26 @@ fun AppNavigation(
 }
 
 @Composable
-private fun TripErrors(vm: TripViewModel, snackbar: SnackbarHostState) {
-    val error by vm.error.collectAsState()
+private fun TripErrors(vm: TripViewModel, snackbar: SnackbarHostState) = ErrorSnack(vm.error, vm::consumeError, snackbar)
+
+@Composable
+private fun ErrorSnack(errorFlow: StateFlow<String?>, consume: () -> Unit, snackbar: SnackbarHostState) {
+    val error by errorFlow.collectAsState()
     LaunchedEffect(error) {
         if (error != null) {
-            vm.consumeError()
+            consume()
             snackbar.showSnackbar("Änderung fehlgeschlagen")
         }
     }
+}
+
+private fun NavController.entryOrNull(route: String) =
+    try { getBackStackEntry(route) } catch (_: IllegalArgumentException) { null }
+
+private fun NavController.navigateToTab(tab: Tab) = navigate(tab.route) {
+    popUpTo(Tab.HEUTE.route) { saveState = true }
+    launchSingleTop = true
+    restoreState = true
 }
 
 @Composable

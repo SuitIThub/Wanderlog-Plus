@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.MarkdownText
+import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
@@ -42,15 +43,6 @@ import de.wanderlogplus.shared.query.filterSuggestions
 import de.wanderlogplus.shared.query.sortSuggestions
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
-
-private fun categoryLabel(c: PlaceCategory?) = when (c) {
-    null -> "Alle"
-    PlaceCategory.SIGHT -> "Sehenswürdigkeiten"
-    PlaceCategory.FOOD -> "Essen"
-    PlaceCategory.SHOPPING -> "Shopping"
-    PlaceCategory.NIGHTLIFE -> "Nightlife"
-    PlaceCategory.OTHER -> "Sonstiges"
-}
 
 /** 0 = Sunday (OpeningPeriod convention); null for unparsable dates. */
 private fun dayOfWeekSunday0(date: String): Int? =

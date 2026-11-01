@@ -30,3 +30,35 @@ fun regionColor(hex: String?): androidx.compose.ui.graphics.Color {
     val v = h.toLong(16)
     return androidx.compose.ui.graphics.Color(if (h.length == 6) 0xFF000000L or v else v)
 }
+
+fun categoryLabel(c: de.wanderlogplus.shared.model.PlaceCategory?) = when (c) {
+    null -> "Alle"
+    de.wanderlogplus.shared.model.PlaceCategory.SIGHT -> "Sehenswürdigkeiten"
+    de.wanderlogplus.shared.model.PlaceCategory.FOOD -> "Essen"
+    de.wanderlogplus.shared.model.PlaceCategory.SHOPPING -> "Shopping"
+    de.wanderlogplus.shared.model.PlaceCategory.NIGHTLIFE -> "Nightlife"
+    de.wanderlogplus.shared.model.PlaceCategory.OTHER -> "Sonstiges"
+}
+
+fun statusLabel(s: de.wanderlogplus.shared.model.PlaceStatus) = when (s) {
+    de.wanderlogplus.shared.model.PlaceStatus.IDEA -> "Idee"
+    de.wanderlogplus.shared.model.PlaceStatus.PLANNED -> "Geplant"
+    de.wanderlogplus.shared.model.PlaceStatus.VISITED -> "Besucht"
+    de.wanderlogplus.shared.model.PlaceStatus.DROPPED -> "Verworfen"
+}
+
+/**
+ * Opening hours per weekday, Monday to Sunday: "HH:mm–HH:mm" per period (comma-separated), "24 Stunden geöffnet" for a
+ * period without closing time, "geschlossen" when periods exist but none opens that day, "unbekannt" without periods.
+ */
+fun openingHoursLines(periods: List<de.wanderlogplus.shared.model.OpeningPeriod>): List<Pair<String, String>> =
+    WEEKDAYS_DE.mapIndexed { i, name ->
+        val dow = (i + 1) % 7 // OpeningPeriod: 0 = Sunday
+        val text = when {
+            periods.isEmpty() -> "unbekannt"
+            else -> periods.filter { it.openDay == dow }.sortedBy { it.openTime }.map {
+                if (it.closeTime == null) "24 Stunden geöffnet" else "${it.openTime}–${it.closeTime}"
+            }.joinToString(", ").ifEmpty { "geschlossen" }
+        }
+        name to text
+    }
