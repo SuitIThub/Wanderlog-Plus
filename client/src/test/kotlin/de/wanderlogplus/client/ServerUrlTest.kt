@@ -13,7 +13,7 @@ class ServerUrlTest {
     }
 
     @Test fun rejectsInvalid() {
-        for (s in listOf("ftp://x", "", "http://", "https://host/pfad", "https://", "  ")) {
+        for (s in listOf("ftp://x", "", "http://", "https://", "  ")) {
             val r = ServerUrl.normalize(s)
             assertTrue(r.isFailure, "should fail: '$s'")
             assertEquals("Ungültige Server-Adresse", r.exceptionOrNull()?.message)
@@ -31,5 +31,17 @@ class ServerUrlTest {
         assertFalse(ServerUrl.isInsecure("http://127.0.0.1"))
         assertFalse(ServerUrl.isInsecure("http://10.1.2.3"))
         assertTrue(ServerUrl.isInsecure("http://11.1.2.3"))
+    }
+}
+
+class ServerUrlPrefixTest {
+    @Test fun acceptsPathPrefix() {
+        assertEquals("https://h.example/wlp", ServerUrl.normalize("https://h.example/wlp/").getOrThrow())
+    }
+
+    @Test fun rejectsQueryEvenWithPrefix() {
+        assertTrue(ServerUrl.normalize("https://h/wlp?x=1").isFailure)
+        assertTrue(ServerUrl.normalize("https://h/wlp#f").isFailure)
+        assertTrue(ServerUrl.normalize("https://u@h/wlp").isFailure)
     }
 }

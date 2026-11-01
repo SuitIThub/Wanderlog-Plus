@@ -22,6 +22,10 @@ class LocalEditor(
     private val tx: Transactor = NoTransaction,
     private val onChange: () -> Unit = {},
 ) {
+    private companion object {
+        val DAY_FIELDS = setOf("title", "note", "regionOverrideId")
+    }
+
     private fun isReserved(field: String) = field == "_source" || field == "_sourceId" || field.startsWith("_base.")
 
     /** Validates and writes without notifying; callers must be inside [tx]. */
@@ -73,6 +77,64 @@ class LocalEditor(
                 ),
             )
             write(EntityType.SAVED_PLACE, saved.id, mapOf("status" to JsonPrimitive(PlaceStatus.PLANNED.name)))
+        }
+        onChange()
+        return itemId
+    }
+
+    fun addAttachment(
+        targetType: EntityType,
+        targetId: String,
+        fileHash: String,
+        fileName: String,
+        mimeType: String,
+        size: Long,
+    ): String = create(
+        EntityType.ATTACHMENT,
+        mapOf(
+            "targetType" to JsonPrimitive(targetType.name),
+            "targetId" to JsonPrimitive(targetId),
+            "fileHash" to JsonPrimitive(fileHash),
+            "fileName" to JsonPrimitive(fileName),
+            "mimeType" to JsonPrimitive(mimeType),
+            "size" to JsonPrimitive(size),
+        ),
+    )
+
+    fun setDayFields(snapshot: TripSnapshot, date: String, values: Map<String, JsonElement>) {
+        val bad = values.keys.firstOrNull { it !in DAY_FIELDS }
+        require(bad == null) { "Field not editable on a day" }
+        val trip = requireNotNull(snapshot.trip) { "No trip" }
+        if (values.isEmpty()) return
+        val existing = snapshot.queries()?.dayFor(date)
+        tx.run {
+            if (existing == null) {
+                writeNew(EntityType.DAY, Ids.dayId(trip.id, date), values + ("date" to JsonPrimitive(date)))
+            } else {
+                write(EntityType.DAY, existing.id, values)
+            }
+        }
+        onChange()
+    }
+
+    fun addNoteToDay(snapshot: TripSnapshot, date: String, text: String): String {
+        val trip = requireNotNull(snapshot.trip) { "No trip" }
+        val existing = snapshot.queries()?.dayFor(date)
+        val siblings = existing?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+        val dayId = existing?.id ?: Ids.dayId(trip.id, date)
+        val itemId = Ids.newId()
+        tx.run {
+            if (existing == null) writeNew(EntityType.DAY, dayId, mapOf("date" to JsonPrimitive(date)))
+            writeNew(
+                EntityType.DAY_ITEM,
+                itemId,
+                mapOf(
+                    "dayId" to JsonPrimitive(dayId),
+                    "kind" to JsonPrimitive(DayItemKind.NOTE.name),
+                    "text" to JsonPrimitive(text),
+                    "sortKey" to JsonPrimitive(SortKey.between(siblings.lastOrNull()?.sortKey, null)),
+                ),
+            )
         }
         onChange()
         return itemId
