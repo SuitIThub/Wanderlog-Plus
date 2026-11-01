@@ -86,6 +86,14 @@ class TripQueriesTest {
     }
 
     @Test
+    fun `derivedRegionFor ignores override`() {
+        val q = queries(days = listOf(Day("d", date = "2027-05-20", regionOverrideId = "k")))
+        assertEquals("o", q.derivedRegionFor("2027-05-20"))
+        assertEquals("k", q.regionFor("2027-05-20"))
+        assertNull(q.derivedRegionFor("2027-05-08"))
+    }
+
+    @Test
     fun `travel day on check-in and check-out`() {
         val byDate = queries().days().associateBy { it.date }
         assertTrue(byDate.getValue("2027-05-09").isTravelDay)

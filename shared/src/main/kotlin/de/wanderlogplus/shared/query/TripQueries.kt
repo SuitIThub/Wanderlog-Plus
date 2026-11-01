@@ -69,7 +69,10 @@ class TripQueries(
     }
 
     fun regionFor(date: String): String? =
-        dayByDate[date]?.regionOverrideId ?: stayFor(date)?.regionId
+        dayByDate[date]?.regionOverrideId ?: derivedRegionFor(date)
+
+    /** The region [date] gets from its stay, ignoring any manual override ("Automatisch"). */
+    fun derivedRegionFor(date: String): String? = stayFor(date)?.regionId
 
     fun suggestionsFor(date: String): List<SavedPlace> {
         val r = regionFor(date) ?: return emptyList()

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.links.GoogleExternalLinks
+import de.wanderlogplus.app.ui.LabeledDropdown
 import de.wanderlogplus.app.ui.LinkButtons
 import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
@@ -47,10 +48,22 @@ import de.wanderlogplus.app.ui.statusLabel
 import de.wanderlogplus.app.ui.today.Section
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Place
+import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
 import java.util.Locale
 
 private const val IMAGE_BASE = "https://itin-dev.wanderlogstatic.com/freeImageMedium/"
+
+private const val TAG_STAR = "⭐"
+private const val TAG_WARN = "⚠️"
+private const val NO_REGION_LABEL = "Keine Region"
+
+/**
+ * Switches the marker [emoji] in [tags]: removes every tag starting with it (e.g. "⭐ Muss man sehen"), or appends the
+ * bare emoji when absent. All other tags keep their order.
+ */
+internal fun toggleTag(tags: List<String>, emoji: String): List<String> =
+    if (tags.any { it.startsWith(emoji) }) tags.filterNot { it.startsWith(emoji) } else tags + emoji
 
 /** "★ 4.5 (1.234)"; null without rating. */
 internal fun ratingText(place: Place): String? {
@@ -83,6 +96,10 @@ fun PlaceDetailScreen(
     attachments: AttachmentActions? = null,
     /** Null hides the link buttons. */
     onOpenLink: ((ExternalLink) -> Unit)? = null,
+    onSetTags: (savedPlaceId: String, tags: List<String>) -> Unit = { _, _ -> },
+    /** Null regionId = "Keine Region". */
+    onSetRegion: (savedPlaceId: String, regionId: String?) -> Unit = { _, _ -> },
+    onSetCategory: (savedPlaceId: String, category: PlaceCategory) -> Unit = { _, _ -> },
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -149,6 +166,36 @@ fun PlaceDetailScreen(
                     )
                 }
             }
+        }
+
+        Section("Markierungen") {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(TAG_STAR to "tag-star", TAG_WARN to "tag-warn").forEach { (emoji, tag) ->
+                    FilterChip(
+                        selected = saved.tags.any { it.startsWith(emoji) },
+                        onClick = { onSetTags(saved.id, toggleTag(saved.tags, emoji)) },
+                        label = { Text(emoji) },
+                        modifier = Modifier.testTag(tag),
+                    )
+                }
+            }
+            val regionName = saved.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id }?.name ?: id } ?: NO_REGION_LABEL
+            LabeledDropdown(
+                tag = "place-region-dropdown",
+                label = "Region",
+                value = regionName,
+                options = listOf<Pair<String?, String>>(null to NO_REGION_LABEL) + snapshot.regions.map { it.id to it.name },
+                onSelect = { onSetRegion(saved.id, it) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            LabeledDropdown(
+                tag = "category-dropdown",
+                label = "Kategorie",
+                value = categoryLabel(saved.category),
+                options = PlaceCategory.entries.map { it to categoryLabel(it) },
+                onSelect = { onSetCategory(saved.id, it) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
         }
 
         Section("Notiz") {

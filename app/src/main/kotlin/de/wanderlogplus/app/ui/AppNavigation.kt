@@ -221,6 +221,7 @@ fun AppNavigation(
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     TripErrors(vm, snackbar)
+                    val dayFailures by vm.failures.collectAsState()
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
@@ -232,6 +233,11 @@ fun AppNavigation(
                                 onMove = vm::move,
                                 onRemove = vm::remove,
                                 attachments = attachmentActions,
+                                onSetTitle = vm::setDayTitle,
+                                onSetNote = vm::setDayNote,
+                                onSetRegion = vm::setRegionOverride,
+                                onAddNote = vm::addNote,
+                                failureCount = dayFailures,
                             )
                         }
                     }
@@ -269,7 +275,7 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink)
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory)
                         }
                     }
                 }

@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Runs a write with the editor and a fresh snapshot, serialized app-wide (see AppContainer.edit). */
 typealias EditFn = suspend (block: (LocalEditor, TripSnapshot) -> Unit) -> Unit
@@ -28,6 +30,10 @@ class TripViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    /** Counts failed writes so screens can drop optimistic state. */
+    private val _failures = MutableStateFlow(0)
+    val failures: StateFlow<Int> = _failures
+
     init {
         viewModelScope.launch { snapshots().collect { _snapshot.value = it } }
     }
@@ -41,10 +47,20 @@ class TripViewModel(
             throw e
         } catch (e: Exception) {
             _error.value = e.javaClass.simpleName
+            _failures.value++
         }
     }
 
     fun addSuggestion(date: String, savedPlaceId: String) = write { e, s -> e.addSuggestionToDay(s, date, savedPlaceId) }
     fun move(itemId: String, up: Boolean) = write { e, s -> e.moveDayItem(s, itemId, up) }
     fun remove(itemId: String) = write { e, s -> e.removeDayItem(s, itemId) }
+
+    fun setDayTitle(date: String, title: String) = write { e, s -> e.setDayFields(s, date, mapOf("title" to JsonPrimitive(title))) }
+    fun setDayNote(date: String, note: String) = write { e, s -> e.setDayFields(s, date, mapOf("note" to JsonPrimitive(note))) }
+
+    /** [regionId] null means "Automatisch": JsonNull is written, so the stay's region applies again. */
+    fun setRegionOverride(date: String, regionId: String?) =
+        write { e, s -> e.setDayFields(s, date, mapOf("regionOverrideId" to (regionId?.let { JsonPrimitive(it) } ?: JsonNull))) }
+
+    fun addNote(date: String, text: String) = write { e, s -> e.addNoteToDay(s, date, text) }
 }

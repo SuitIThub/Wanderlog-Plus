@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import de.wanderlogplus.app.ui.trip.EditFn
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.coroutines.CancellationException
@@ -12,6 +13,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 /** [snapshots] yields the live snapshot flow for display; every write goes through [edit] only. */
@@ -54,4 +57,14 @@ class PlacesViewModel(
 
     fun setStatus(savedPlaceId: String, status: PlaceStatus) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("status" to JsonPrimitive(status.name))) }
+
+    fun setTags(savedPlaceId: String, tags: List<String>) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("tags" to JsonArray(tags.map { JsonPrimitive(it) }))) }
+
+    /** [regionId] null means "Keine Region". */
+    fun setRegion(savedPlaceId: String, regionId: String?) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("regionId" to (regionId?.let { JsonPrimitive(it) } ?: JsonNull))) }
+
+    fun setCategory(savedPlaceId: String, category: PlaceCategory) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 }
