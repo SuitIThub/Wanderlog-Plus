@@ -37,6 +37,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import de.wanderlogplus.client.TripSnapshot
+import de.wanderlogplus.shared.model.Ids
+import kotlinx.serialization.json.JsonPrimitive
 
 /** Everything that needs disk access to initialize. */
 class Ready(val clock: HlcClock, val editor: LocalEditor, val snapshots: SnapshotRepository)
@@ -140,6 +142,14 @@ class AppContainer(context: Context) {
         val id = edit { e, _ -> e.addAttachment(targetType, resolvedTarget, imported.hash, fileName, mimeType, imported.size) }
         syncScheduler.requestFiles()
         return id
+    }
+
+    /** The id of the Day for [date]; the Day (empty title) is created when missing. One edit, so no duplicates. */
+    suspend fun ensureDay(date: String): String = edit { e, s ->
+        s.queries()?.dayFor(date)?.id ?: run {
+            e.setDayFields(s, date, mapOf("title" to JsonPrimitive("")))
+            Ids.dayId(requireNotNull(s.trip).id, date)
+        }
     }
 
     fun warmUp() {

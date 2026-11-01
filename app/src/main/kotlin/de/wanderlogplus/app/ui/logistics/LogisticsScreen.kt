@@ -100,6 +100,10 @@ private fun endpointText(e: Endpoint): String {
     return listOf(place, whenText).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { "–" }
 }
 
+fun flightTitle(f: Flight): String = "Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).filter { it.isNotBlank() }.joinToString(" ")
+
+fun trainTitle(t: Train): String = "Zug" + (t.carrier?.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+
 @Composable
 private fun Title(text: String) = Text(text, style = MaterialTheme.typography.titleMedium)
 
@@ -115,7 +119,7 @@ private fun Details(confirmation: String?, travelers: List<String>, note: String
 
 @Composable
 private fun FlightCard(f: Flight) {
-    Title("Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).filter { it.isNotBlank() }.joinToString(" "))
+    Title(flightTitle(f))
     Line("Abflug: " + endpointText(f.depart))
     Line("Ankunft: " + endpointText(f.arrive))
     Details(f.confirmationNumber, f.travelerNames, f.note)
@@ -123,7 +127,7 @@ private fun FlightCard(f: Flight) {
 
 @Composable
 private fun TrainCard(t: Train) {
-    Title("Zug" + (t.carrier?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""))
+    Title(trainTitle(t))
     Line("Strecke: ${t.depart.name.ifBlank { "–" }} → ${t.arrive.name.ifBlank { "–" }}")
     Line("Abfahrt: " + endpointText(t.depart))
     Line("Ankunft: " + endpointText(t.arrive))

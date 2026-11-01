@@ -32,8 +32,6 @@ import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.data.now
 import de.wanderlogplus.app.ui.attachments.AttachmentsViewModel
 import de.wanderlogplus.app.ui.setup.SetupViewModel
-import de.wanderlogplus.shared.model.Ids
-import kotlinx.serialization.json.JsonPrimitive
 import de.wanderlogplus.app.ui.places.PlacesViewModel
 import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.client.TripSnapshot
@@ -131,14 +129,7 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = AttachmentsViewModel(
             edit = { block -> container.edit(block) },
             addAttachment = { type, id, input, name, mime -> container.addAttachment(type, id, input, name, mime) },
-            ensureDay = { date ->
-                container.edit { e, s ->
-                    s.queries()?.dayFor(date)?.id ?: run {
-                        e.setDayFields(s, date, mapOf("title" to JsonPrimitive("")))
-                        Ids.dayId(requireNotNull(s.trip).id, date)
-                    }
-                }
-            },
+            ensureDay = container::ensureDay,
             writeScope = container.scope,
         ) as T
     }
