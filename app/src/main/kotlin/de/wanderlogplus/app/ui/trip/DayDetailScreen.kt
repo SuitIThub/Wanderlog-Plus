@@ -1,50 +1,52 @@
 package de.wanderlogplus.app.ui.trip
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.LabeledDropdown
-import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.attachments.AttachmentActions
-import de.wanderlogplus.app.ui.attachments.AttachmentsFor
-import de.wanderlogplus.shared.sync.EntityType
-import de.wanderlogplus.app.ui.categoryLabel
+import de.wanderlogplus.app.ui.dayKicker
 import de.wanderlogplus.app.ui.dayLabel
-import de.wanderlogplus.app.ui.ratingLabel
+import de.wanderlogplus.app.ui.design.EditSheet
+import de.wanderlogplus.app.ui.design.HeroHeader
+import de.wanderlogplus.app.ui.design.dayHeroImage
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
-import de.wanderlogplus.shared.model.DayItem
-import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.filterSuggestions
@@ -53,9 +55,18 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
 /** 0 = Sunday (OpeningPeriod convention); null for unparsable dates. */
-private fun dayOfWeekSunday0(date: String): Int? =
+internal fun dayOfWeekSunday0(date: String): Int? =
     try { LocalDate.parse(date).dayOfWeek.value % 7 } catch (_: DateTimeParseException) { null }
 
+private const val TAB_PROGRAM = 0
+private const val TAB_SUGGESTIONS = 1
+private const val TAB_NOTES = 2
+
+/**
+ * Day detail: hero header (✎ opens "Tag bearbeiten" for title and region) above the tabs Programm (timeline with ⋮
+ * menus and an add FAB), Vorschläge and Notizen & Dateien. The selected tab survives recreation.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DayDetailScreen(
     snapshot: TripSnapshot,
@@ -78,206 +89,212 @@ fun DayDetailScreen(
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
     val day = view?.day
     val region = remember(snapshot, view) { view?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } } }
-    val stayName = view?.stay?.let { snapshot.places[it.placeId]?.name }?.takeIf { it.isNotBlank() }
+    val accent = region?.let { regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
     val items = remember(snapshot, day) { day?.let { snapshot.dayItemsFor(it.id) }.orEmpty() }
-
+    val movements = remember(snapshot, date) { movementsOn(snapshot, date) }
+    val heroImage = remember(snapshot, date) { dayHeroImage(snapshot, date) }
     val derivedRegion = remember(snapshot, date) {
         queries?.derivedRegionFor(date)?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
     }
-    var editingTitle by rememberSaveable(date) { mutableStateOf(false) }
-    var titleDraft by rememberSaveable(date) { mutableStateOf("") }
+
+    var tab by rememberSaveable(date) { mutableIntStateOf(TAB_PROGRAM) }
+    var editingDay by rememberSaveable(date) { mutableStateOf(false) }
+    var adding by rememberSaveable(date) { mutableStateOf(false) }
+    var addingNote by rememberSaveable(date) { mutableStateOf(false) }
+
+    // Shown right after saving, until the snapshot carries the new value (or a save failed).
     var pendingTitle by remember(date) { mutableStateOf<String?>(null) }
     LaunchedEffect(day?.title, failureCount) { pendingTitle = null }
-    var editingNote by rememberSaveable(date) { mutableStateOf(false) }
-    var noteDraft by rememberSaveable(date) { mutableStateOf("") }
-    // Shown right after saving, until the snapshot carries the new note.
     var pendingNote by remember(date) { mutableStateOf<String?>(null) }
     LaunchedEffect(day?.note, failureCount) { pendingNote = null }
-    var addingNote by rememberSaveable(date) { mutableStateOf(false) }
-    var newNoteText by rememberSaveable(date) { mutableStateOf("") }
+    var editingNote by rememberSaveable(date) { mutableStateOf(false) }
+    var noteDraft by rememberSaveable(date) { mutableStateOf("") }
 
     var category by rememberSaveable { mutableStateOf<PlaceCategory?>(null) }
     var openOnly by rememberSaveable { mutableStateOf(false) }
-    val dow = if (openOnly) dayOfWeekSunday0(date) else null
-    val shown = remember(snapshot, date, category, dow) {
+    val hasSuggestions = view?.regionId != null
+    val shown = remember(snapshot, date, category, openOnly) {
+        val dow = if (openOnly) dayOfWeekSunday0(date) else null
         val all = queries?.suggestionsFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
         sortSuggestions(filterSuggestions(all, category, dow))
     }
 
-    Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
-            Column(Modifier.padding(end = 16.dp)) {
-                Text(dayLabel(date), style = MaterialTheme.typography.titleLarge)
-                if (editingTitle) {
-                    OutlinedTextField(
-                        value = titleDraft,
-                        onValueChange = { titleDraft = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("day-title-field"),
-                    )
-                    Row {
-                        Button(onClick = { pendingTitle = titleDraft; onSetTitle(date, titleDraft); editingTitle = false }) { Text("Speichern") }
-                        TextButton(onClick = { editingTitle = false }) { Text("Abbrechen") }
-                    }
-                } else {
-                    val shownTitle = pendingTitle ?: day?.title.orEmpty()
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (shownTitle.isNotBlank()) Text(shownTitle, style = MaterialTheme.typography.titleMedium)
-                        else Text("Kein Titel", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        IconButton(onClick = { titleDraft = shownTitle; editingTitle = true }, modifier = Modifier.testTag("day-title-edit")) {
-                            Icon(Icons.Filled.Edit, contentDescription = "Titel bearbeiten")
-                        }
-                    }
-                }
-                region?.let { RegionChip(it.name, regionColor(it.color)) }
-                stayName?.let {
-                    Text("Unterkunft: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
+    val shownTitle = pendingTitle ?: day?.title.orEmpty()
+    val shownNote = pendingNote ?: day?.note.orEmpty()
 
-        Section("Notiz") {
-            if (editingNote) {
-                OutlinedTextField(
-                    value = noteDraft,
-                    onValueChange = { noteDraft = it },
-                    modifier = Modifier.fillMaxWidth().testTag("day-note-field"),
-                    minLines = 3,
+    Column(modifier.fillMaxSize()) {
+        HeroHeader(
+            title = shownTitle.ifBlank { region?.name ?: dayLabel(date) },
+            // Region in the kicker instead of a chip: the 140 dp header has no room for chips below the buttons.
+            kicker = listOfNotNull(dayKicker(date, snapshot.trip?.startDate), region?.name?.takeIf { shownTitle.isNotBlank() })
+                .joinToString(" · "),
+            imageUrl = heroImage,
+            accent = accent,
+            height = 140.dp,
+            onBack = onBack,
+            onEdit = { editingDay = true },
+            titleMaxLines = 1,
+        )
+        PrimaryTabRow(selectedTabIndex = tab) {
+            DayTab("Programm", tab == TAB_PROGRAM, "tab-program") { tab = TAB_PROGRAM }
+            DayTab(if (hasSuggestions) "Vorschläge (${shown.size})" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions") {
+                tab = TAB_SUGGESTIONS
+            }
+            DayTab("Notizen & Dateien", tab == TAB_NOTES, "tab-notes") { tab = TAB_NOTES }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when (tab) {
+                TAB_PROGRAM -> DayProgramTab(
+                    snapshot = snapshot,
+                    items = items,
+                    movements = movements,
+                    stay = view?.stay,
+                    accent = accent,
+                    onMove = onMove,
+                    onRemove = onRemove,
+                    attachments = attachments,
                 )
-                Row {
-                    Button(onClick = { pendingNote = noteDraft; onSetNote(date, noteDraft); editingNote = false }) { Text("Speichern") }
-                    TextButton(onClick = { editingNote = false }) { Text("Abbrechen") }
+                TAB_SUGGESTIONS -> DaySuggestionsTab(
+                    hasRegion = hasSuggestions,
+                    date = date,
+                    shown = shown,
+                    accent = accent,
+                    category = category,
+                    onCategory = { category = it },
+                    openOnly = openOnly,
+                    onOpenOnly = { openOnly = it },
+                    onAdd = onAddSuggestion,
+                )
+                else -> DayNotesTab(
+                    snapshot = snapshot,
+                    date = date,
+                    day = day,
+                    note = shownNote,
+                    accent = accent,
+                    editing = editingNote,
+                    draft = noteDraft,
+                    onDraft = { noteDraft = it },
+                    onStartEdit = { noteDraft = shownNote; editingNote = true },
+                    onSave = { pendingNote = noteDraft; onSetNote(date, noteDraft); editingNote = false },
+                    onCancel = { editingNote = false },
+                    attachments = attachments,
+                )
+            }
+            if (tab == TAB_PROGRAM) {
+                ExtendedFloatingActionButton(
+                    onClick = { addingNote = false; adding = true },
+                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                    text = { Text("Hinzufügen") },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("day-add"),
+                )
+            }
+        }
+    }
+
+    if (editingDay) {
+        val auto = "Automatisch (" + (derivedRegion?.name ?: "keine Region") + ")"
+        val options = listOf<Pair<String?, String>>(null to auto) + snapshot.regions.map { it.id to it.name }
+        EditSheet("Tag bearbeiten", onDismiss = { editingDay = false }) {
+            DayEditForm(shownTitle, day?.regionOverrideId, options, onSave = { title, regionId ->
+                if (title != shownTitle) {
+                    pendingTitle = title
+                    onSetTitle(date, title)
                 }
-            } else {
-                val shownNote = pendingNote ?: day?.note.orEmpty()
-                if (shownNote.isNotBlank()) MarkdownText(shownNote, Modifier.testTag("day-note"))
-                else Text("Keine Notiz", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { noteDraft = shownNote; editingNote = true }) { Text("Bearbeiten") }
-            }
+                if (regionId != day?.regionOverrideId) onSetRegion(date, regionId)
+                editingDay = false
+            })
         }
+    }
 
-        Section("Region") {
-            val override = day?.regionOverrideId
-            val auto = "Automatisch (" + (derivedRegion?.name ?: "keine Region") + ")"
-            val current = override?.let { id -> snapshot.regions.firstOrNull { it.id == id }?.name ?: id } ?: auto
-            LabeledDropdown(
-                tag = "region-dropdown",
-                label = "Region",
-                value = current,
-                options = listOf<Pair<String?, String>>(null to auto) + snapshot.regions.map { it.id to it.name },
-                onSelect = { onSetRegion(date, it) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        Section("Programm") {
-            if (items.isEmpty()) {
-                Text("Noch nichts geplant", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.testTag("program-list")) {
-                items.forEachIndexed { i, item -> ProgramRow(item, snapshot, i == 0, i == items.lastIndex, onMove, onRemove) }
-            }
+    if (adding) {
+        EditSheet(if (addingNote) "Notiz hinzufügen" else "Hinzufügen", onDismiss = { adding = false; addingNote = false }) {
             if (addingNote) {
-                // Inline instead of a dialog: text fields inside dialog windows hang the Robolectric text layout.
-                OutlinedTextField(
-                    value = newNoteText,
-                    onValueChange = { newNoteText = it },
-                    modifier = Modifier.fillMaxWidth().testTag("add-note-field"),
-                    minLines = 2,
+                AddNoteForm(
+                    onAdd = { text -> onAddNote(date, text); adding = false; addingNote = false },
+                    onCancel = { addingNote = false },
                 )
-                Row {
-                    Button(
-                        onClick = { onAddNote(date, newNoteText.trim()); addingNote = false },
-                        enabled = newNoteText.isNotBlank(),
-                        modifier = Modifier.testTag("add-note-confirm"),
-                    ) { Text("Hinzufügen") }
-                    TextButton(onClick = { addingNote = false }) { Text("Abbrechen") }
-                }
             } else {
-                TextButton(onClick = { newNoteText = ""; addingNote = true }) { Text("Notiz zum Programm hinzufügen") }
-            }
-        }
-
-        if (attachments != null) {
-            AttachmentsFor(
-                day?.let { snapshot.attachmentsFor(EntityType.DAY, it.id) }.orEmpty(),
-                attachments,
-                onAdd = { attachments.onAddToDay(date) },
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
-
-        Section("Vorschläge") {
-            if (view == null || view.regionId == null) {
-                Text("Reisetag – keine Vorschläge", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
-                        FilterChip(selected = category == c, onClick = { category = c }, label = { Text(categoryLabel(c)) })
-                    }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                    Switch(checked = openOnly, onCheckedChange = { openOnly = it })
-                    Text("an diesem Wochentag geöffnet", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium)
-                }
-                if (shown.isEmpty()) Text("Keine Vorschläge", style = MaterialTheme.typography.bodyMedium)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    shown.forEach { s -> SuggestionCard(s, date, onAddSuggestion) }
-                }
+                AddOption(Icons.Filled.Place, "Ort aus Vorschlägen", "add-from-suggestions") { adding = false; tab = TAB_SUGGESTIONS }
+                AddOption(Icons.AutoMirrored.Filled.Notes, "Notiz", "add-note-open") { addingNote = true }
             }
         }
     }
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        HorizontalDivider(Modifier.padding(bottom = 8.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp))
-        content()
-    }
+private fun DayTab(label: String, selected: Boolean, tag: String, onClick: () -> Unit) {
+    Tab(
+        selected = selected,
+        onClick = onClick,
+        text = { Text(label, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        modifier = Modifier.testTag(tag),
+    )
 }
 
 @Composable
-private fun ProgramRow(
-    item: DayItem,
-    snapshot: TripSnapshot,
-    first: Boolean,
-    last: Boolean,
-    onMove: (String, Boolean) -> Unit,
-    onRemove: (String) -> Unit,
+private fun AddOption(icon: ImageVector, label: String, tag: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().testTag(tag),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+            Text(label, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+/** Content of "Tag bearbeiten": title field and region dropdown; [onSave] gets the drafts. */
+@Composable
+internal fun DayEditForm(
+    initialTitle: String,
+    initialRegion: String?,
+    regionOptions: List<Pair<String?, String>>,
+    onSave: (title: String, regionId: String?) -> Unit,
 ) {
-    val name = when (item.kind) {
-        DayItemKind.PLACE -> snapshot.places[item.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort"
-        DayItemKind.NOTE -> item.text
-    }
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("program-row-${item.id}")) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item.time?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.labelLarge) }
-            Text(name, style = MaterialTheme.typography.bodyLarge)
-        }
-        Row {
-            TextButton(onClick = { onMove(item.id, true) }, enabled = !first) { Text("Nach oben") }
-            TextButton(onClick = { onMove(item.id, false) }, enabled = !last) { Text("Nach unten") }
-            TextButton(onClick = { onRemove(item.id) }) { Text("Entfernen") }
+    var title by rememberSaveable { mutableStateOf(initialTitle) }
+    var regionId by rememberSaveable { mutableStateOf(initialRegion) }
+    Column(Modifier.fillMaxWidth().testTag("day-title-edit"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Titel") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("day-title-field"),
+        )
+        LabeledDropdown(
+            tag = "region-dropdown",
+            label = "Region",
+            value = regionOptions.firstOrNull { it.first == regionId }?.second ?: regionId.orEmpty(),
+            options = regionOptions,
+            onSelect = { regionId = it },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(onClick = { onSave(title, regionId) }, modifier = Modifier.align(Alignment.End).testTag("day-edit-save")) {
+            Text("Speichern")
         }
     }
 }
 
+/** Note for the program; [onAdd] gets the trimmed text. */
 @Composable
-private fun SuggestionCard(s: Suggestion, date: String, onAdd: (String, String) -> Unit) {
-    Card(Modifier.fillMaxWidth().testTag("suggestion-${s.saved.id}")) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", style = MaterialTheme.typography.titleSmall)
-            if (s.saved.tags.isNotEmpty()) Text(s.saved.tags.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-            val rating = s.place?.rating?.let { ratingLabel(it) }
-            Text(
-                listOfNotNull(categoryLabel(s.saved.category), rating).joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(onClick = { onAdd(date, s.saved.id) }) { Text("Zum Tag hinzufügen") }
+internal fun AddNoteForm(onAdd: (String) -> Unit, onCancel: () -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            label = { Text("Notiz") },
+            modifier = Modifier.fillMaxWidth().testTag("add-note-field"),
+            minLines = 2,
+        )
+        Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onCancel) { Text("Abbrechen") }
+            Button(onClick = { onAdd(text.trim()) }, enabled = text.isNotBlank(), modifier = Modifier.testTag("add-note-confirm")) {
+                Text("Hinzufügen")
+            }
         }
     }
 }

@@ -60,7 +60,8 @@ fun DayTimeline(
     movements: List<Movement>,
     stay: Stay?,
     accent: Color,
-    onOpenItem: (DayItem) -> Unit,
+    /** Null makes the program cards non-clickable. */
+    onOpenItem: ((DayItem) -> Unit)?,
     modifier: Modifier = Modifier,
     now: LocalDateTime? = null,
     onOpenAttachment: (Attachment) -> Unit = {},
@@ -101,7 +102,7 @@ fun DayTimeline(
                             accent = accent,
                             style = PhotoCardStyle.Large,
                             badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
-                            onClick = { onOpenItem(item) },
+                            onClick = onOpenItem?.let { open -> { open(item) } },
                             trailing = actions,
                             modifier = tag,
                         )
@@ -109,7 +110,7 @@ fun DayTimeline(
                     DayItemKind.NOTE -> TextCard(
                         title = item.text.ifBlank { "Notiz" },
                         subtitle = item.time?.takeIf { it.isNotBlank() },
-                        onClick = { onOpenItem(item) },
+                        onClick = onOpenItem?.let { open -> { open(item) } },
                         trailing = actions,
                         modifier = tag,
                     )

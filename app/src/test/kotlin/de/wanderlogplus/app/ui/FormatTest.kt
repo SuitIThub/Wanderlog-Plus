@@ -10,6 +10,8 @@ class FormatTest {
         assertEquals("So, 09.05.", dayLabel("2027-05-09"))
         assertEquals("Sa, 01.01.", dayLabel("2028-01-01"))
         assertEquals("kaputt", dayLabel("kaputt"))
+        assertEquals("Do 20.05.", dayCardLabel("2027-05-20"))
+        assertEquals("kaputt", dayCardLabel("kaputt"))
     }
 
     @Test fun relativeAgoBoundaries() {

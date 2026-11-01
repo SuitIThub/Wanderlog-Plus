@@ -1,6 +1,9 @@
 package de.wanderlogplus.app.ui.trip
 
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -8,6 +11,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
@@ -23,6 +27,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/**
+ * Text input is only exercised outside bottom sheets (typing inside a ModalBottomSheet has run Robolectric out of
+ * memory): the sheet tests open the sheet and check its content, the forms are tested on their own.
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w400dp-h2400dp")
 class DayDetailEditTest {
@@ -73,21 +81,49 @@ class DayDetailEditTest {
         }
     }
 
+    /** Touch input does not reach bottom sheets under Robolectric; inside sheets the click action is used directly. */
+    private fun SemanticsNodeInteraction.tap() = performSemanticsAction(SemanticsActions.OnClick)
+
+    private val regionOptions = listOf<Pair<String?, String>>(null to "Automatisch (Kyoto)", "r1" to "Kyoto", "r2" to "Osaka")
+
+    @Test fun editSheetShowsTitleAndRegion() {
+        seedTrip()
+        show(Calls())
+        rule.onNodeWithTag("hero-edit").performClick()
+        rule.onNodeWithText("Tag bearbeiten").assertExists()
+        rule.onNodeWithTag("day-title-edit").assertExists()
+        rule.onNodeWithTag("day-title-field").assertTextContains("Tempeltag")
+        rule.onNodeWithTag("region-dropdown").assertTextContains("Automatisch (Kyoto)")
+        rule.onNodeWithTag("day-edit-save").assertExists()
+    }
+
     @Test fun editTitleCallsSetDayTitle() {
+        var saved: Pair<String, String?>? = null
+        rule.setContent {
+            WanderlogPlusTheme { DayEditForm("Tempeltag", null, regionOptions, onSave = { t, r -> saved = t to r }) }
+        }
+        rule.onNodeWithTag("day-title-field").performTextClearance()
+        rule.onNodeWithTag("day-title-field").performTextInput("Neuer Titel")
+        rule.onNodeWithTag("day-edit-save").tap()
+        assertEquals("Neuer Titel" to null, saved)
+    }
+
+    @Test fun savingUnchangedSheetWritesNothing() {
         seedTrip()
         val c = Calls()
         show(c)
-        rule.onNodeWithTag("day-title-edit").performClick()
-        rule.onNodeWithTag("day-title-field").performTextClearance()
-        rule.onNodeWithTag("day-title-field").performTextInput("Neuer Titel")
-        rule.onNodeWithText("Speichern").performClick()
-        assertEquals(listOf("2027-05-09" to "Neuer Titel"), c.titles)
+        rule.onNodeWithTag("hero-edit").performClick()
+        rule.onNodeWithTag("day-edit-save").tap()
+        assertEquals(emptyList<Pair<String, String>>(), c.titles)
+        assertEquals(emptyList<Pair<String, String?>>(), c.regions)
+        rule.onNodeWithText("Tag bearbeiten").assertDoesNotExist()
     }
 
     @Test fun editNoteCallsSetDayNote() {
         seedTrip()
         val c = Calls()
         show(c)
+        rule.onNodeWithTag("tab-notes").performClick()
         rule.onNodeWithText("alte Notiz").assertIsDisplayed()
         rule.onNodeWithText("Bearbeiten").performClick()
         rule.onNodeWithTag("day-note-field").performTextClearance()
@@ -101,19 +137,24 @@ class DayDetailEditTest {
         seedTrip()
         val c = Calls()
         show(c)
-        rule.onNodeWithTag("region-dropdown").performClick()
+        rule.onNodeWithTag("hero-edit").performClick()
+        rule.onNodeWithTag("region-dropdown").tap()
         rule.onNode(hasText("Automatisch (Kyoto)") and hasTestTag("region-dropdown-option-0")).assertExists()
         rule.onNode(hasText("Osaka") and hasTestTag("region-dropdown-option-2")).assertExists()
-        rule.onNodeWithTag("region-dropdown-option-2").performClick()
+        rule.onNodeWithTag("region-dropdown-option-2").tap()
+        rule.onNodeWithTag("day-edit-save").tap()
         assertEquals(listOf("2027-05-09" to "r2"), c.regions)
+        assertEquals(emptyList<Pair<String, String>>(), c.titles)
     }
 
     @Test fun choosingAutomaticClearsOverride() {
         seedTrip(override = "r2")
         val c = Calls()
         show(c)
-        rule.onNodeWithTag("region-dropdown").performClick()
-        rule.onNodeWithTag("region-dropdown-option-0").performClick()
+        rule.onNodeWithTag("hero-edit").performClick()
+        rule.onNodeWithTag("region-dropdown").tap()
+        rule.onNodeWithTag("region-dropdown-option-0").tap()
+        rule.onNodeWithTag("day-edit-save").tap()
         assertEquals(listOf("2027-05-09" to null), c.regions)
     }
 
@@ -121,17 +162,24 @@ class DayDetailEditTest {
         seedTrip()
         show(Calls())
         rule.onNode(hasText("Bento kaufen") and hasAnyAncestor(hasTestTag("program-row-n1"))).assertIsDisplayed()
-        rule.onNode(hasText("Entfernen") and hasAnyAncestor(hasTestTag("program-row-n1"))).assertExists()
+        rule.onNodeWithTag("item-menu-n1").performClick()
+        rule.onNode(hasText("Entfernen") and hasTestTag("item-remove-n1")).assertExists()
+    }
+
+    @Test fun addNoteSheetShowsNoteField() {
+        seedTrip()
+        show(Calls())
+        rule.onNodeWithTag("day-add").performClick()
+        rule.onNodeWithTag("add-note-open").tap()
+        rule.onNodeWithTag("add-note-field").assertExists()
     }
 
     @Test fun addNoteCallsAddNote() {
-        seedTrip()
-        val c = Calls()
-        show(c)
-        rule.onNodeWithText("Notiz zum Programm hinzufügen").performClick()
+        var added: String? = null
+        rule.setContent { WanderlogPlusTheme { AddNoteForm(onAdd = { added = it }, onCancel = {}) } }
         rule.onNodeWithTag("add-note-field").assertIsDisplayed()
-        rule.onNodeWithTag("add-note-field").performTextInput("Tickets holen")
+        rule.onNodeWithTag("add-note-field").performTextInput("  Tickets holen ")
         rule.onNodeWithTag("add-note-confirm").performClick()
-        assertEquals(listOf("2027-05-09" to "Tickets holen"), c.added)
+        assertEquals("Tickets holen", added)
     }
 }

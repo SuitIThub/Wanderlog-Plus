@@ -46,7 +46,7 @@ import de.wanderlogplus.app.ui.design.HeroHeader
 import de.wanderlogplus.app.ui.design.PhotoCard
 import de.wanderlogplus.app.ui.design.PhotoCardStyle
 import de.wanderlogplus.app.ui.design.SectionLabel
-import de.wanderlogplus.app.ui.design.accentGradient
+import de.wanderlogplus.app.ui.design.heroGradient
 import de.wanderlogplus.app.ui.design.dayHeroImage
 import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.ratingLabel
@@ -102,7 +102,7 @@ fun TodayScreen(
 private fun Before(snapshot: TripSnapshot, state: TodayState.Before, modifier: Modifier) {
     val accent = MaterialTheme.colorScheme.primary
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        Box(Modifier.fillMaxWidth().height(170.dp).background(accentGradient(accent))) {
+        Box(Modifier.fillMaxWidth().height(170.dp).background(heroGradient(accent))) {
             Column(Modifier.align(Alignment.BottomStart).padding(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
                 Text(
                     if (state.daysUntilStart == 1L) "1 Tag" else "${state.daysUntilStart} Tage",

@@ -14,6 +14,9 @@ fun relativeAgo(millis: Long, now: Long): String {
 
 private val WEEKDAYS_DE = listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
 
+/** "2027-05-20" -> "Do 20.05." (trip list cards); unparsable input is returned unchanged. */
+fun dayCardLabel(date: String): String = dayLabel(date).replaceFirst(", ", " ")
+
 /** "2027-05-09" -> "So, 09.05."; unparsable input is returned unchanged. */
 fun dayLabel(date: String): String {
     val d = try { java.time.LocalDate.parse(date) } catch (_: java.time.format.DateTimeParseException) { return date }

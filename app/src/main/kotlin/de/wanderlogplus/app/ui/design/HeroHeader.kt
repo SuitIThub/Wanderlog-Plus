@@ -57,9 +57,11 @@ fun HeroHeader(
     onEdit: (() -> Unit)? = null,
     chips: List<String> = emptyList(),
     modifier: Modifier = Modifier,
+    /** Low headers with back/edit buttons pass 1 so kicker and title stay clear of the buttons. */
+    titleMaxLines: Int = 2,
 ) {
     Box(modifier.fillMaxWidth().height(height).testTag("hero")) {
-        PhotoOrGradient(imageUrl, accent, "hero-fallback", Modifier.matchParentSize())
+        PhotoOrGradient(imageUrl, accent, "hero-fallback", Modifier.matchParentSize(), gradient = heroGradient(accent))
         Box(Modifier.matchParentSize().background(Scrim))
 
         if (onBack != null) {
@@ -84,7 +86,7 @@ fun HeroHeader(
                 )
                 Spacer(Modifier.height(2.dp))
             }
-            Text(title, style = HeroTitle, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, style = HeroTitle, color = Color.White, maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis)
             if (chips.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -97,14 +99,19 @@ fun HeroHeader(
 
 @Composable
 private fun HeroButton(icon: ImageVector, label: String, onClick: () -> Unit, tag: String, modifier: Modifier) {
+    // 48 dp touch target around a 40 dp dark circle.
     Surface(
         onClick = onClick,
-        modifier = modifier.padding(10.dp).size(40.dp).testTag(tag),
+        modifier = modifier.padding(6.dp).size(48.dp).testTag(tag),
         shape = CircleShape,
-        color = Color.Black.copy(alpha = 0.35f),
+        color = Color.Transparent,
         contentColor = Color.White,
     ) {
-        Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp)) }
+        Box(contentAlignment = Alignment.Center) {
+            Box(Modifier.size(40.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
+            }
+        }
     }
 }
 

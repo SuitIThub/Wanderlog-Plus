@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,18 +82,28 @@ fun Badge(spec: BadgeSpec, modifier: Modifier = Modifier) {
     }
 }
 
-/** Round action button with a label below (navigation, transit, website, call, Tabelog). [tag] goes on the button. */
+/**
+ * Round action button with a label below (navigation, transit, website, call, Tabelog). The whole column is the
+ * button, so TalkBack announces the label once; [tag] goes on it.
+ */
 @Composable
 fun ActionCircle(icon: ImageVector, label: String, onClick: () -> Unit, tag: String, modifier: Modifier = Modifier) {
-    Column(modifier.width(76.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+        modifier.width(76.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 4.dp)
+            .testTag(tag),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Surface(
-            onClick = onClick,
-            modifier = Modifier.size(52.dp).testTag(tag),
+            modifier = Modifier.size(52.dp),
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primaryContainer,
             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         ) {
-            Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp)) }
+            Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp)) }
         }
         Text(
             label,
@@ -126,6 +139,28 @@ internal fun accentGradient(accent: Color): Brush = Brush.linearGradient(
     listOf(lerp(accent, Color.White, 0.22f), accent, lerp(accent, Color.Black, 0.38f)),
 )
 
+/** Highest luminance that still gives white text a contrast of at least 4.5:1 (with some margin). */
+private const val MAX_LUMINANCE_UNDER_WHITE = 0.16f
+
+/** [c] darkened step by step until white text on it is readable (contrast >= 4.5:1). */
+internal fun darkenForWhiteText(c: Color): Color {
+    var x = c
+    repeat(40) {
+        if (x.luminance() <= MAX_LUMINANCE_UNDER_WHITE) return x
+        x = lerp(x, Color.Black, 0.08f)
+    }
+    return x
+}
+
+/** Stops of [heroGradient]: like [accentGradient], but every tone is dark enough for white text in both themes. */
+fun heroGradientColors(accent: Color): List<Color> {
+    val base = darkenForWhiteText(accent)
+    return listOf(darkenForWhiteText(lerp(accent, Color.White, 0.22f)), base, lerp(base, Color.Black, 0.38f))
+}
+
+/** Fallback behind white header text (hero, countdown): never a pale gradient, also for light accents in dark mode. */
+fun heroGradient(accent: Color): Brush = Brush.linearGradient(heroGradientColors(accent))
+
 /**
  * Photo from [url] over an accent gradient. The gradient is always drawn first (no empty hole while loading) and
  * carries [fallbackTag] when it is what the user sees: no URL, or the image failed to load.
@@ -138,12 +173,13 @@ internal fun PhotoOrGradient(
     modifier: Modifier = Modifier,
     symbol: String? = null,
     symbolSize: TextUnit = 26.sp,
+    gradient: Brush = accentGradient(accent),
 ) {
     var failed by remember(url) { mutableStateOf(false) }
     val showFallback = url == null || failed
     Box(modifier) {
         Box(
-            Modifier.matchParentSize().background(accentGradient(accent)).then(if (showFallback) Modifier.testTag(fallbackTag) else Modifier),
+            Modifier.matchParentSize().background(gradient).then(if (showFallback) Modifier.testTag(fallbackTag) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             if (symbol != null && showFallback) Text(symbol, fontSize = symbolSize, color = Color.White)

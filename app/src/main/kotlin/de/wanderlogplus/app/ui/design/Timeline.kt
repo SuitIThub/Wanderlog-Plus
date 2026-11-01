@@ -43,10 +43,12 @@ private val DotRadius = 5.dp
 fun Timeline(
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
+    /** Ring around each dot; pass the surface colour when the timeline sits on a tinted surface. */
+    ringColor: Color = MaterialTheme.colorScheme.background,
     content: TimelineScope.() -> Unit,
 ) {
     val entries = TimelineScope().apply(content).entries
-    val ring = MaterialTheme.colorScheme.background
+    val ring = ringColor
     val line = accent.copy(alpha = 0.35f)
     Column(modifier.fillMaxWidth()) {
         entries.forEachIndexed { i, e ->

@@ -23,6 +23,17 @@ import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.testing.recordScreenshot
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.app.ui.regionColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.performClick
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +79,34 @@ class DesignGalleryScreenshotTest {
         rule.onNodeWithTag("edit-sheet").assertExists()
         rule.onNodeWithText("Tag bearbeiten").assertExists()
         rule.onNodeWithText("Inhalt").assertExists()
+    }
+
+    @Test fun actionCircleIsOneButtonWithItsLabel() {
+        var clicks = 0
+        rule.setContent { WanderlogPlusTheme { ActionCircle(Icons.Filled.Navigation, "Navigation", { clicks++ }, "act-nav") } }
+        rule.onNodeWithTag("act-nav").assertHasClickAction().assertTextEquals("Navigation")
+        // The icon carries no description of its own, so the label is not announced twice.
+        rule.onAllNodesWithContentDescription("Navigation", useUnmergedTree = true).assertCountEquals(0)
+        rule.onNodeWithTag("act-nav").performClick()
+        assertEquals(1, clicks)
+    }
+
+    @Test fun heroButtonsHave48dpTouchTargets() {
+        rule.setContent {
+            WanderlogPlusTheme { HeroHeader(title = "Tag", kicker = null, imageUrl = null, accent = regionColor("#C0603A"), onBack = {}, onEdit = {}) }
+        }
+        rule.onNodeWithTag("hero-back").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        rule.onNodeWithTag("hero-edit").assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+    }
+
+    @Test fun fallbackGradientIsDarkEnoughForWhiteText() {
+        // Light accents (e.g. the dark-theme primary, a pale peach) must still give white text >= 4.5:1 contrast.
+        listOf(Color(0xFFFFB68B), Color(0xFFFFFFFF), Color(0xFFF5D76E), regionColor("#3498db"), regionColor("#C0603A")).forEach { accent ->
+            heroGradientColors(accent).forEach { c ->
+                val contrast = 1.05 / (c.luminance() + 0.05)
+                assertTrue("contrast $contrast for $c from $accent", contrast >= 4.5)
+            }
+        }
     }
 }
 
