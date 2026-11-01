@@ -49,7 +49,7 @@ class SettingsStore(context: Context) : SyncStateStore {
 
     override var epoch: String?
         get() = prefs.getString("epoch", null)
-        set(v) = putString("epoch", v)
+        set(v) = putString("epoch", v, commit = true)
 
     override var lastSyncAt: Long?
         get() = if (prefs.contains("lastSyncAt")) prefs.getLong("lastSyncAt", 0L) else null
@@ -61,10 +61,11 @@ class SettingsStore(context: Context) : SyncStateStore {
 
     override var pendingReset: Boolean
         get() = prefs.getBoolean("pendingReset", false)
-        set(v) { prefs.edit().putBoolean("pendingReset", v).apply() }
+        set(v) { prefs.edit().putBoolean("pendingReset", v).commit() }
 
-    private fun putString(key: String, v: String?) {
-        prefs.edit().apply { if (v == null) remove(key) else putString(key, v) }.apply()
+    private fun putString(key: String, v: String?, commit: Boolean = false) {
+        val e = prefs.edit().apply { if (v == null) remove(key) else putString(key, v) }
+        if (commit) e.commit() else e.apply()
     }
 
     private companion object {

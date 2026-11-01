@@ -5,6 +5,7 @@ import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.FieldValue
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -32,12 +33,17 @@ class RoomEntityStore(private val db: AppDatabase) : EntityStore {
     override fun all(): List<EntityRecord> = toRecords(dao.all())
 
     private fun toRecords(rows: List<FieldEntity>): List<EntityRecord> =
-        rows.groupBy { it.type to it.id }.map { (key, fs) ->
-            EntityRecord(
-                EntityType.valueOf(key.first),
-                key.second,
-                fs.associate { it.field to FieldValue(decodeJson(it.value), it.hlc) },
-            )
+        rows.mapNotNull { row ->
+            // Rows of an unknown type or with undecodable JSON are skipped rather than crashing readers.
+            val type = EntityType.entries.firstOrNull { it.name == row.type } ?: return@mapNotNull null
+            val value = try {
+                decodeJson(row.value)
+            } catch (_: SerializationException) {
+                return@mapNotNull null
+            }
+            Triple(type to row.id, row.field, FieldValue(value, row.hlc))
+        }.groupBy({ it.first }, { it.second to it.third }).map { (key, fs) ->
+            EntityRecord(key.first, key.second, fs.toMap())
         }
 }
 

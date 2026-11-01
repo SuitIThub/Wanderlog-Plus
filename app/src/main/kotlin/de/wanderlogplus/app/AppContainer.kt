@@ -13,13 +13,18 @@ import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
 import de.wanderlogplus.shared.sync.parse
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+
+/** Everything that needs disk access to initialize. */
+class Ready(val clock: HlcClock, val editor: LocalEditor, val snapshots: SnapshotRepository)
 
 /**
- * Manual DI. Everything that touches disk is lazy; [warmUp] initializes it on a background dispatcher
- * so the main thread normally never pays for it.
+ * Manual DI. Construction is cheap and never touches disk. Disk-dependent pieces are built in [ready],
+ * which runs on Dispatchers.IO once started ([warmUp]); consumers await it instead of touching the DB directly.
  */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
@@ -32,26 +37,24 @@ class AppContainer(context: Context) {
     val outbox: RoomOutbox by lazy { RoomOutbox(db) }
     val settings: SettingsStore by lazy { SettingsStore(appContext) }
 
-    /** Advanced past the highest stored HLC so local writes always order after existing data. */
-    val clock: HlcClock by lazy {
-        HlcClock(nodeId = requireNotNull(settings.nodeId)).also { c ->
-            db.dao().maxHlc()?.let { c.receive(Hlc.parse(it)) }
-        }
-    }
-
     /** Hook for the sync scheduler (Task 6). */
-    var onLocalChange: () -> Unit = {}
+    @Volatile var onLocalChange: () -> Unit = {}
 
-    val editor: LocalEditor by lazy {
-        LocalEditor(store, outbox, clock, db.roomTransactor, onChange = { onLocalChange() })
+    /**
+     * The clock is advanced past the highest stored HLC so local writes always order after existing data.
+     * Started lazily so tests can seed the DB first; [warmUp] starts it.
+     */
+    val ready: Deferred<Ready> = scope.async(Dispatchers.IO, start = CoroutineStart.LAZY) {
+        val clock = HlcClock(nodeId = requireNotNull(settings.nodeId))
+        db.dao().maxHlc()?.let { clock.receive(Hlc.parse(it)) }
+        val editor = LocalEditor(store, outbox, clock, db.roomTransactor, onChange = { onLocalChange() })
+        Ready(clock, editor, SnapshotRepository(store, db, scope))
     }
-    val snapshots: SnapshotRepository by lazy { SnapshotRepository(store, db, scope) }
+
+    suspend fun editor(): LocalEditor = ready.await().editor
+    suspend fun snapshots(): SnapshotRepository = ready.await().snapshots
 
     fun warmUp() {
-        scope.launch(Dispatchers.IO) {
-            clock
-            editor
-            snapshots
-        }
+        ready.start()
     }
 }
