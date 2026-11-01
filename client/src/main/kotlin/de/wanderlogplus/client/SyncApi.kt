@@ -143,6 +143,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     suspend fun uploadFile(file: File, fileName: String, mimeType: String): UploadedFile = call {
         client.post("$base/api/files") {
             auth()
+            timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
             setBody(
                 MultiPartFormDataContent(
                     formData {

@@ -34,6 +34,10 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+    sourceSets {
+        // Robolectric unit tests read the debug variant's merged assets, so the Room schemas must live there (debug APK only).
+        getByName("debug").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 kotlin { jvmToolchain(17) }

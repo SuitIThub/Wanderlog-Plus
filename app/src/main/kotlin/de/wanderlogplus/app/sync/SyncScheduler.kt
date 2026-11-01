@@ -53,6 +53,15 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
     }
 
+    /** Uploads queued attachment files and downloads missing ones; appended so a running run is never cancelled. */
+    fun requestFiles() {
+        val request = OneTimeWorkRequestBuilder<FileSyncWorker>()
+            .setConstraints(connected)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+            .build()
+        work.enqueueUniqueWork(FILES, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+    }
+
     internal companion object {
         /** APPEND_OR_REPLACE while a sync is running, REPLACE (debounce) otherwise. */
         fun soonPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy =
@@ -61,6 +70,7 @@ class SyncScheduler(context: Context) {
         const val PERIODIC = "sync-periodic"
         const val SOON = "sync-soon"
         const val NOW = "sync-now"
+        const val FILES = "files"
         const val BACKOFF_SECONDS = 30L
     }
 }

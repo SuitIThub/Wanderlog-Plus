@@ -3,6 +3,17 @@ package de.wanderlogplus.app
 import android.content.Context
 import androidx.room.Room
 import de.wanderlogplus.app.data.AppDatabase
+import de.wanderlogplus.app.data.MIGRATION_1_2
+import de.wanderlogplus.app.data.PendingUploadEntity
+import de.wanderlogplus.app.data.ServerSettings
+import de.wanderlogplus.app.files.AttachmentFiles
+import de.wanderlogplus.app.files.FileSyncRunner
+import de.wanderlogplus.client.SyncApi
+import de.wanderlogplus.shared.sync.EntityType
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import java.io.File
+import java.io.InputStream
 import de.wanderlogplus.app.data.RoomEntityStore
 import de.wanderlogplus.app.data.RoomOutbox
 import de.wanderlogplus.app.data.SettingsStore
@@ -39,7 +50,9 @@ class AppContainer(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val db: AppDatabase by lazy {
-        Room.databaseBuilder(appContext, AppDatabase::class.java, "wanderlog-plus.db").build()
+        Room.databaseBuilder(appContext, AppDatabase::class.java, "wanderlog-plus.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
     }
     val store: RoomEntityStore by lazy { RoomEntityStore(db) }
     val outbox: RoomOutbox by lazy { RoomOutbox(db) }
@@ -48,6 +61,28 @@ class AppContainer(context: Context) {
     val syncScheduler: SyncScheduler by lazy { SyncScheduler(appContext) }
     val syncRunner: SyncRunner by lazy { SyncRunner(this) }
     val http: HttpClient by lazy { HttpClient(OkHttp) }
+
+    val attachmentFiles: AttachmentFiles by lazy { AttachmentFiles(File(appContext.filesDir, "attachments")) }
+
+    private var apiFor: ServerSettings? = null
+    private var api: SyncApi? = null
+
+    /** The API for the currently configured server (reused while the configuration is unchanged); null without a server. */
+    @Synchronized
+    private fun currentApi(): SyncApi? {
+        val server = runBlocking { settings.server.first() } ?: return null
+        api?.let { if (apiFor == server) return it }
+        return SyncApi(http, server.url, server.token).also { api = it; apiFor = server }
+    }
+
+    val fileSyncRunner: FileSyncRunner by lazy {
+        FileSyncRunner(
+            api = { currentApi() },
+            files = attachmentFiles,
+            uploads = db.pendingUploads(),
+            attachments = { TripSnapshot.from(store.all()).attachments },
+        )
+    }
 
     /**
      * The clock is advanced past the highest stored HLC so local writes always order after existing data.
@@ -74,6 +109,27 @@ class AppContainer(context: Context) {
         return writeLock.withLock {
             withContext(Dispatchers.IO) { block(editor, TripSnapshot.from(store.all())) }
         }
+    }
+
+    /**
+     * Stores the file locally, queues its upload and creates the attachment record right away (also offline).
+     * Other devices show the attachment as not available offline until the file has been uploaded.
+     */
+    suspend fun addAttachment(
+        targetType: EntityType,
+        targetId: String,
+        input: InputStream,
+        fileName: String,
+        mimeType: String,
+    ): String {
+        val imported = withContext(Dispatchers.IO) {
+            attachmentFiles.importStream(input).also {
+                db.pendingUploads().insert(PendingUploadEntity(it.hash, fileName, mimeType, System.currentTimeMillis()))
+            }
+        }
+        val id = edit { e, _ -> e.addAttachment(targetType, targetId, imported.hash, fileName, mimeType, imported.size) }
+        syncScheduler.requestFiles()
+        return id
     }
 
     fun warmUp() {

@@ -8,6 +8,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -23,7 +24,7 @@ class SyncSchedulerTest {
 
     @Before fun setUp() {
         context = ApplicationProvider.getApplicationContext()
-        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().build())
+        WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor { /* never run workers: keep requests ENQUEUED */ }.build())
         scheduler = SyncScheduler(context)
     }
 
@@ -50,6 +51,15 @@ class SyncSchedulerTest {
         val info = infos("sync-periodic").single()
         assertEquals(TimeUnit.MINUTES.toMillis(15), info.periodicityInfo?.repeatIntervalMillis)
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
+    }
+
+    @Test fun requestFilesEnqueuesUniqueWork() {
+        scheduler.requestFiles()
+        scheduler.requestFiles()
+        val all = infos("files")
+        assertTrue(all.isNotEmpty())
+        assertTrue(all.all { it.constraints.requiredNetworkType == NetworkType.CONNECTED })
+        assertTrue(all.any { it.state == WorkInfo.State.ENQUEUED })
     }
 
     @Test fun soonPolicyAppendsWhileRunningAndReplacesOtherwise() {
