@@ -28,7 +28,7 @@ class WanderlogClient(
                 failure = e
             }
         }
-        if (response == null) throw ImportFormatException("Request failed: ${failure?.message}", failure)
+        if (response == null) throw ImportFormatException("Request failed (${failure?.javaClass?.simpleName})", failure)
         if (response.statusCode() != 200) throw ImportFormatException("HTTP ${response.statusCode()}")
         return response.body()
     }

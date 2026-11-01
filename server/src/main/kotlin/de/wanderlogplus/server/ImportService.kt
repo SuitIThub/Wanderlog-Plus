@@ -6,6 +6,7 @@ import de.wanderlogplus.importer.ImportRunner
 import de.wanderlogplus.importer.WanderlogClient
 import de.wanderlogplus.shared.sync.HlcClock
 import java.nio.file.Files
+import org.slf4j.LoggerFactory
 import java.time.Instant
 
 /** Supplies the raw Wanderlog trip JSON; blocking. */
@@ -15,9 +16,6 @@ fun interface TripSource {
 
 /** No import source (neither trip key nor import file) is configured. */
 class ImportNotConfigured : RuntimeException("no import source configured")
-
-/** Import failed; [message] is structural text only (no booking values). */
-class ImportFailed(message: String) : RuntimeException(message)
 
 fun tripSourceFrom(config: ServerConfig): TripSource? {
     config.importFile?.let { file -> return TripSource { Files.readString(file) } }
@@ -52,7 +50,11 @@ class ImportService(
             // Only the class name: other exceptions may carry values.
             failed(started, e.javaClass.simpleName)
         }
-        sync.withWriteLock { store.appendImportLog(entry) }
+        try {
+            sync.withWriteLock { store.appendImportLog(entry) }
+        } catch (e: Exception) {
+            LoggerFactory.getLogger(ImportService::class.java).error("Could not write import log: {}", e.javaClass.simpleName)
+        }
         return entry
     }
 

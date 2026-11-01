@@ -12,6 +12,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -146,5 +147,32 @@ class ImportRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, c.get("/api/import/status?limit=$q") { authed() }.status, q)
         }
         assertEquals(HttpStatusCode.OK, c.get("/api/import/status?limit=100") { authed() }.status)
+    }
+
+    @Test
+    fun parseErrorDoesNotLeakInput() {
+        val sentinel = "SENTINEL-BOOKING-4711"
+        val bad = fixture().replaceFirst("\"id\": 1,", "\"id\": \"$sentinel\",")
+        // Precondition: the raw kotlinx message really contains the input.
+        val cause = runCatching { de.wanderlogplus.importer.WanderlogParser.parse(bad) }.exceptionOrNull()
+        assertTrue(cause?.cause?.message.orEmpty().contains(sentinel), "raw cause must contain sentinel")
+        assertFalse(cause?.message.orEmpty().contains(sentinel))
+        app({ bad }) { services ->
+            val c = jsonClient()
+            val r = c.runImport()
+            assertEquals(HttpStatusCode.BadGateway, r.status)
+            assertFalse(r.bodyAsText().contains(sentinel))
+            assertFalse(c.get("/api/import/status") { authed() }.bodyAsText().contains(sentinel))
+            assertFalse(services.store.importLog(10).single().ok)
+        }
+    }
+
+    @Test
+    fun importFileTakesPrecedenceOverTripKey() {
+        val file = dir.resolve("trip.json")
+        Files.writeString(file, "from-file")
+        val cfg = testConfig(dir).copy(tripKey = "some-key", importFile = file)
+        assertEquals("from-file", tripSourceFrom(cfg)!!.fetch())
+        assertEquals(null, tripSourceFrom(testConfig(dir)))
     }
 }
