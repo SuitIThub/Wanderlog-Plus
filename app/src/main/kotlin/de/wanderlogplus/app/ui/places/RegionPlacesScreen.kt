@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import de.wanderlogplus.app.BuildConfig
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.statusLabel
@@ -44,7 +43,6 @@ fun RegionPlacesScreen(
     onBack: () -> Unit,
     onOpenPlace: (savedPlaceId: String) -> Unit,
     modifier: Modifier = Modifier,
-    mapAvailable: Boolean = BuildConfig.HAS_MAPS_KEY,
 ) {
     val title = if (regionKey == NO_REGION) "Ohne Region" else snapshot.regions.firstOrNull { it.id == regionKey }?.name.orEmpty()
     val groups = remember(snapshot, regionKey) {
@@ -60,23 +58,21 @@ fun RegionPlacesScreen(
             Text(title, style = MaterialTheme.typography.titleLarge)
         }
         var showMap by rememberSaveable { mutableStateOf(false) }
-        if (mapAvailable) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                SegmentedButton(
-                    selected = !showMap,
-                    onClick = { showMap = false },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    modifier = Modifier.testTag("view-list"),
-                ) { Text("Liste") }
-                SegmentedButton(
-                    selected = showMap,
-                    onClick = { showMap = true },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    modifier = Modifier.testTag("view-map"),
-                ) { Text("Karte") }
-            }
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            SegmentedButton(
+                selected = !showMap,
+                onClick = { showMap = false },
+                shape = SegmentedButtonDefaults.itemShape(0, 2),
+                modifier = Modifier.testTag("view-list"),
+            ) { Text("Liste") }
+            SegmentedButton(
+                selected = showMap,
+                onClick = { showMap = true },
+                shape = SegmentedButtonDefaults.itemShape(1, 2),
+                modifier = Modifier.testTag("view-map"),
+            ) { Text("Karte") }
         }
-        if (mapAvailable && showMap) {
+        if (showMap) {
             RegionMap(markers, onOpenPlace, Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp))
             return@Column
         }

@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -8,11 +6,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.roborazzi)
 }
-
-// Optional Google Maps key: read from the gitignored local.properties, empty by default (map toggle hidden).
-val mapsApiKey: String = Properties().also { props ->
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
-}.getProperty("MAPS_API_KEY", "").trim()
 
 android {
     namespace = "de.wanderlogplus.app"
@@ -24,8 +17,6 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0"
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
-        buildConfigField("boolean", "HAS_MAPS_KEY", mapsApiKey.isNotEmpty().toString())
     }
 
     buildTypes {
@@ -41,7 +32,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     testOptions {
@@ -78,8 +68,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
     implementation(libs.zxing.embedded)
-    implementation(libs.maps.compose)
-    implementation(libs.play.services.maps)
+    // OpenStreetMap maps (OpenFreeMap style, no key); never initialized in Robolectric tests.
+    implementation(libs.maplibre.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 

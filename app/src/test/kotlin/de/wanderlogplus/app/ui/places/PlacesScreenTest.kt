@@ -6,6 +6,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.client.TripSnapshot
@@ -91,17 +94,17 @@ class PlacesScreenTest {
         rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
     }
 
-    @Test fun noToggleWithoutKey() {
+    @Test fun toggleAlwaysShownAndMapUnavailableInTests() {
         seedData()
-        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = false) } }
-        rule.onNodeWithTag("view-map").assertDoesNotExist()
-        rule.onNodeWithTag("view-list").assertDoesNotExist()
-    }
-
-    @Test fun toggleShownWithKey() {
-        seedData()
-        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = true) } }
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
         rule.onNodeWithTag("view-map").assertExists()
         rule.onNodeWithTag("view-list").assertExists()
+        // Semantics click: Robolectric's injected touch does not reach the segmented buttons reliably.
+        rule.onNodeWithTag("view-map").performSemanticsAction(SemanticsActions.OnClick)
+        // LocalMapsEnabled defaults to false, so MapLibre is never loaded under Robolectric.
+        rule.onNodeWithText("Karte nicht verfügbar").assertIsDisplayed()
+        rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
+        rule.onNodeWithTag("view-list").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("place-sv-a").assertExists()
     }
 }

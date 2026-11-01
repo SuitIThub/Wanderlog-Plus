@@ -38,6 +38,10 @@ import de.wanderlogplus.app.WanderlogPlusApp
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.data.now
+import de.wanderlogplus.app.maps.LocalMapsEnabled
+import de.wanderlogplus.app.maps.LocalRouteMapRenderer
+import de.wanderlogplus.app.maps.RouteMapRenderer
+import androidx.compose.runtime.CompositionLocalProvider
 import de.wanderlogplus.app.ui.attachments.AttachmentsViewModel
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.app.ui.places.PlacesViewModel
@@ -119,33 +123,37 @@ class MainActivity : ComponentActivity() {
                     return@WanderlogPlusTheme
                 }
                 val pending by pendingSetup.collectAsState()
-                AppNavigation(
-                    pendingSetup = pending,
-                    onPendingSetupConsumed = { pendingSetup.value = null },
-                    hasServer = hasServer,
-                    snapshot = snapshot,
-                    syncStatus = status,
-                    onRefresh = container.syncScheduler::requestNow,
-                    setupViewModelFactory = remember { setupFactory(container) { serverRef.value } },
-                    tripViewModelFactory = remember { tripFactory(container) },
-                    placesViewModelFactory = remember { placesFactory(container) },
-                    moreViewModelFactory = remember { moreFactory(container) },
-                    importViewModelFactory = remember { importFactory(container) },
-                    settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
-                    tripZone = tripZone,
-                    onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
-                    remindersEnabled = remindersEnabled,
-                    onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
-                    clock = { tripZone.now() },
-                    attachmentsViewModelFactory = remember { attachmentsFactory(container) },
-                    attachmentFiles = container.attachmentFiles,
-                    onResetSync = {
-                        scope.launch {
-                            container.syncRunner.resetCursor()
-                            container.syncScheduler.requestNow()
-                        }
-                    },
-                )
+                // Real maps only here: MapLibre is initialized lazily on first use, never in tests (they keep the defaults).
+                val routeMaps = remember { RouteMapRenderer(applicationContext) }
+                CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps) {
+                    AppNavigation(
+                        pendingSetup = pending,
+                        onPendingSetupConsumed = { pendingSetup.value = null },
+                        hasServer = hasServer,
+                        snapshot = snapshot,
+                        syncStatus = status,
+                        onRefresh = container.syncScheduler::requestNow,
+                        setupViewModelFactory = remember { setupFactory(container) { serverRef.value } },
+                        tripViewModelFactory = remember { tripFactory(container) },
+                        placesViewModelFactory = remember { placesFactory(container) },
+                        moreViewModelFactory = remember { moreFactory(container) },
+                        importViewModelFactory = remember { importFactory(container) },
+                        settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
+                        tripZone = tripZone,
+                        onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
+                        remindersEnabled = remindersEnabled,
+                        onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
+                        clock = { tripZone.now() },
+                        attachmentsViewModelFactory = remember { attachmentsFactory(container) },
+                        attachmentFiles = container.attachmentFiles,
+                        onResetSync = {
+                            scope.launch {
+                                container.syncRunner.resetCursor()
+                                container.syncScheduler.requestNow()
+                            }
+                        },
+                    )
+                }
             }
         }
     }

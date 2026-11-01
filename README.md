@@ -31,13 +31,11 @@ Begleit-App für Wanderlog mit eigenem Sync-Server: Reiseplan offline ansehen un
 
 ## Karte
 
-Die Kartenansicht pro Region (Umschalter „Liste | Karte“) ist optional und erscheint nur mit einem eigenen Google-Maps-API-Key (Maps SDK for Android). Den Key in die nicht eingecheckte `local.properties` eintragen:
+Karten zeigen OpenStreetMap-Daten über [MapLibre](https://maplibre.org/) mit dem freien Stil von [OpenFreeMap](https://openfreemap.org/) (`https://tiles.openfreemap.org/styles/liberty`). Ein API-Key ist nicht nötig.
 
-```
-MAPS_API_KEY=dein-key
-```
-
-Ohne Key bleibt die App vollständig nutzbar (Navigation über Links). Nutzungsbedingungen und Kosten von Google Maps trägt der Nutzer selbst.
+- **Orte pro Region:** Umschalter „Liste | Karte“, interaktive Karte mit farbigen Punkten nach Status; ein Tipp auf einen Punkt öffnet den Ort. Kacheln landen im Cache von MapLibre.
+- **Routenkarten** für Flüge (Bogen) und Züge (Linie): einmal als Bild gerendert und im App-Cache (`cache/route-maps`) abgelegt, danach offline verfügbar. Ohne Netz und ohne Cache erscheint eine stilisierte Grafik; ohne Koordinaten gibt es keine Karte. Die Route ist eine Luftlinie zwischen den Endpunkten, nicht der echte Verlauf.
+- Attribution „© OpenStreetMap“ ist auf jeder Karte sichtbar.
 
 ## Server
 
