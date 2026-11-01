@@ -3,6 +3,7 @@ package de.wanderlogplus.server
 import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.FieldChange
+import de.wanderlogplus.shared.sync.FieldValue
 import de.wanderlogplus.shared.sync.Hlc
 import de.wanderlogplus.shared.sync.HlcClock
 import de.wanderlogplus.shared.sync.PullResponse
@@ -10,6 +11,7 @@ import de.wanderlogplus.shared.sync.PushResponse
 import de.wanderlogplus.shared.sync.applyChanges
 import de.wanderlogplus.shared.sync.encode
 import de.wanderlogplus.shared.sync.parse
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 const val MAX_CLOCK_DRIFT_MILLIS = 86_400_000L
@@ -65,13 +67,27 @@ class SyncService(
 
     private fun isEdit(field: String) = !field.startsWith("_") && field != "deleted"
 
+    /** Keeps only the highest-HLC change per (type, id, field), in original order. */
+    private fun collapse(changes: List<FieldChange>): List<FieldChange> {
+        val best = HashMap<Triple<EntityType, String, String>, Int>()
+        changes.forEachIndexed { i, c ->
+            val key = Triple(c.type, c.id, c.field)
+            val j = best[key]
+            if (j == null || Hlc.parse(c.hlc) > Hlc.parse(changes[j].hlc)) best[key] = i
+        }
+        return changes.filterIndexed { i, c -> best[Triple(c.type, c.id, c.field)] == i }
+    }
+
     /** Applies the validated batch inside the caller's transaction; returns the number of device changes written. */
-    private fun apply(changes: List<FieldChange>): Int {
+    private fun apply(batch: List<FieldChange>): Int {
+        val changes = collapse(batch)
+        val deletedInBatch = changes.filter { it.field == "deleted" }.map { it.type to it.id }.toSet()
         var accepted = 0
         val edited = LinkedHashSet<Pair<EntityType, String>>()
         for (c in changes) {
-            val stored = store.get(c.type, c.id)?.fields?.get(c.field)
-            val wrote = if (stored != null && isImporterConflict(c, stored.hlc, stored.value)) {
+            val record = store.get(c.type, c.id)
+            val stored = record?.fields?.get(c.field)
+            val wrote = if (stored != null && isImporterConflict(c, record, stored)) {
                 writeConflict(c, stored.hlc, stored.value)
                 true
             } else {
@@ -82,19 +98,18 @@ class SyncService(
                 if (isEdit(c.field)) edited += c.type to c.id
             }
         }
-        for ((type, id) in edited) reviveIfDeletedByImport(type, id)
+        for ((type, id) in edited) if ((type to id) !in deletedInBatch) reviveIfDeletedByImport(type, id)
         return accepted
     }
 
-    private fun isImporterConflict(c: FieldChange, storedHlc: String, storedValue: kotlinx.serialization.json.JsonElement): Boolean {
-        if (!isEdit(c.field) || c.value == storedValue) return false
-        val s = Hlc.parse(storedHlc)
+    private fun isImporterConflict(c: FieldChange, record: EntityRecord, stored: FieldValue): Boolean {
+        if (!isEdit(c.field) || c.value == stored.value) return false
+        val s = Hlc.parse(stored.hlc)
         if (s.nodeId != IMPORTER_NODE || Hlc.parse(c.hlc) >= s) return false
-        val record = store.get(c.type, c.id) ?: return false
         return record.fields.containsKey("_base.${c.field}")
     }
 
-    private fun writeConflict(c: FieldChange, storedHlc: String, storedValue: kotlinx.serialization.json.JsonElement) {
+    private fun writeConflict(c: FieldChange, storedHlc: String, storedValue: JsonElement) {
         clock.receive(Hlc.parse(storedHlc))
         catchUp(c.type, c.id, "_conflict.${c.field}")
         val winner = FieldChange(c.type, c.id, c.field, c.value, clock.tick().encode())

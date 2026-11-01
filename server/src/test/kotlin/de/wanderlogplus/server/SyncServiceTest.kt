@@ -188,4 +188,27 @@ class SyncServiceTest {
         assertEquals(JsonPrimitive(true), str("deleted"))
         assertNull(field("_removedInSource"))
     }
+
+    @Test
+    fun multipleEditsOfSameFieldKeepNewest() {
+        seedImporterConflictBase()
+        val r = sync.push("alice", listOf(ch("notes", "X", 200), ch("notes", "Y", 250)))
+        assertEquals(1, r.accepted)
+        assertEquals(JsonPrimitive("Y"), str("notes"))
+        assertEquals(JsonPrimitive("W2"), str("_conflict.notes"))
+    }
+
+    @Test
+    fun losingDeleteInBatchDoesNotRevive() {
+        importerWrite(
+            ch("notes", "n", 100, "importer"),
+            FieldChange(EntityType.PLACE, "p", "deleted", JsonPrimitive(true), hlc(300, "importer")),
+        )
+        sync.push(
+            "alice",
+            listOf(ch("notes", "edit", 200), FieldChange(EntityType.PLACE, "p", "deleted", JsonPrimitive(true), hlc(250, "dev-a"))),
+        )
+        assertEquals(JsonPrimitive(true), str("deleted"))
+        assertNull(field("_removedInSource"))
+    }
 }

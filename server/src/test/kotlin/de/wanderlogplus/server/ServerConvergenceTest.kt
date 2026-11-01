@@ -15,6 +15,7 @@ import java.nio.file.Path
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ServerConvergenceTest {
     @TempDir
@@ -84,15 +85,17 @@ class ServerConvergenceTest {
                 if (round % 50 == 49) {
                     val id = ids.random(rnd)
                     val v = JsonPrimitive("W$round")
-                    sync.withWriteLock {
-                        store.transaction("importer") {
-                            store.applyChanges(
-                                listOf(
-                                    importer.change(EntityType.PLACE, id, "notes", v),
-                                    importer.change(EntityType.PLACE, id, "_base.notes", v),
-                                ),
-                            )
-                        }
+                    val batch = mutableListOf(
+                        importer.change(EntityType.PLACE, id, "notes", v),
+                        importer.change(EntityType.PLACE, id, "_base.notes", v),
+                    )
+                    if (round == 99) batch += importer.change(EntityType.PLACE, id, "deleted", JsonPrimitive(true))
+                    sync.withWriteLock { store.transaction("importer") { store.applyChanges(batch) } }
+                    // Device edits with older HLCs (clocks lag the importer) lose to the import.
+                    for (d in devices) {
+                        val old = FieldChange(EntityType.PLACE, id, "notes", JsonPrimitive("old-${d.node}-$round"), hlc(time - 1000, d.node))
+                        d.outbox += old
+                        d.push()
                     }
                 }
             }
@@ -104,6 +107,9 @@ class ServerConvergenceTest {
             val expected = asMap(store.all())
             assertEquals(expected, asMap(a.local.all()))
             assertEquals(expected, asMap(b.local.all()))
+            val names = store.all().flatMap { it.fields.keys }
+            assertTrue(names.any { it.startsWith("_conflict.") }, "conflict path did not run")
+            assertTrue(store.all().any { it.value("_removedInSource") == JsonPrimitive(true) }, "revive path did not run")
         } finally {
             store.close()
         }
