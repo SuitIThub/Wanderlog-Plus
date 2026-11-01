@@ -8,6 +8,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
@@ -26,14 +27,22 @@ class SyncScheduler(context: Context) {
         work.enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
-    /** Debounced push after a local edit: a newer request replaces the pending one. */
+    /**
+     * Debounced push after a local edit: a newer request replaces the pending one. If the sync-soon work is
+     * already running it must not be cancelled (it may be mid-push), so the new request is appended after it.
+     */
     fun requestSoon() {
+        val states = try {
+            work.getWorkInfosForUniqueWork(SOON).get().map { it.state }
+        } catch (e: Exception) {
+            emptyList() // unknown state: fall back to the debounce behaviour
+        }
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setInitialDelay(5, TimeUnit.SECONDS)
             .setConstraints(connected)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .build()
-        work.enqueueUniqueWork(SOON, ExistingWorkPolicy.REPLACE, request)
+        work.enqueueUniqueWork(SOON, soonPolicy(states), request)
     }
 
     fun requestNow() {
@@ -44,7 +53,11 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
     }
 
-    private companion object {
+    internal companion object {
+        /** APPEND_OR_REPLACE while a sync is running, REPLACE (debounce) otherwise. */
+        fun soonPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy =
+            if (states.any { it == WorkInfo.State.RUNNING }) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE
+
         const val PERIODIC = "sync-periodic"
         const val SOON = "sync-soon"
         const val NOW = "sync-now"

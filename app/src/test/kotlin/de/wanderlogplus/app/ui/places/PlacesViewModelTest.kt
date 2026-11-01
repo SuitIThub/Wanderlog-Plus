@@ -27,13 +27,15 @@ class PlacesViewModelTest {
     private var editCalls = 0
     private val edit: EditFn = { block -> editCalls++; block(editor, TripSnapshot.from(store.all())) }
 
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Unconfined)
+
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
     @After fun tearDown() = Dispatchers.resetMain()
 
     private fun changes() = outbox.peek(100).map { it.change }
 
     @Test fun setNoteAndStatusWriteSavedPlaceFieldsThroughEdit() {
-        val vm = PlacesViewModel({ MutableStateFlow(null) }, edit)
+        val vm = PlacesViewModel({ MutableStateFlow(null) }, edit, scope)
         vm.setNote("sv1", "Früh hin")
         vm.setStatus("sv1", PlaceStatus.VISITED)
         assertEquals(2, editCalls)
@@ -47,10 +49,20 @@ class PlacesViewModelTest {
     }
 
     @Test fun failedEditSetsClassNameOnlyAndConsumeClears() {
-        val vm = PlacesViewModel({ MutableStateFlow(null) }, { _ -> throw IllegalStateException("secret") })
+        val vm = PlacesViewModel({ MutableStateFlow(null) }, { _ -> throw IllegalStateException("secret") }, scope)
         vm.setNote("sv1", "x")
         assertEquals("IllegalStateException", vm.error.value)
         vm.consumeError()
         assertNull(vm.error.value)
+    }
+
+    @Test fun writesRunInInjectedScopeNotViewModelScope() {
+        val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher()
+        val injected = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + dispatcher)
+        val vm = PlacesViewModel({ MutableStateFlow(null) }, edit, injected)
+        vm.setNote("sv1", "x")
+        assertEquals(0, editCalls) // queued on the injected scope, not run on viewModelScope (Main is unconfined)
+        dispatcher.scheduler.advanceUntilIdle()
+        assertEquals(1, editCalls)
     }
 }

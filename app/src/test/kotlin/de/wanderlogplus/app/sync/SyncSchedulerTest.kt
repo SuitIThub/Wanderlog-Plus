@@ -51,4 +51,10 @@ class SyncSchedulerTest {
         assertEquals(TimeUnit.MINUTES.toMillis(15), info.periodicityInfo?.repeatIntervalMillis)
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
     }
+
+    @Test fun soonPolicyAppendsWhileRunningAndReplacesOtherwise() {
+        assertEquals(androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.RUNNING)))
+        assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(listOf(WorkInfo.State.ENQUEUED)))
+        assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.soonPolicy(emptyList()))
+    }
 }

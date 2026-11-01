@@ -72,6 +72,8 @@ fun PlaceDetailScreen(
     onSaveNote: (savedPlaceId: String, note: String) -> Unit,
     onSetStatus: (savedPlaceId: String, status: PlaceStatus) -> Unit,
     modifier: Modifier = Modifier,
+    /** Increases whenever a save failed; the optimistic note is dropped then. */
+    failureCount: Int = 0,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -79,7 +81,7 @@ fun PlaceDetailScreen(
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
     // Shown right after saving, until the snapshot carries the new note.
     var pendingNote by remember(savedPlaceId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(saved?.note) { pendingNote = null }
+    LaunchedEffect(saved?.note, failureCount) { pendingNote = null }
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {

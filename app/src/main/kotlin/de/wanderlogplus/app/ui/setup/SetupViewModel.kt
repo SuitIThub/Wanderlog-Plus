@@ -30,9 +30,12 @@ data class SetupState(
 /** [testConnection] receives the normalized URL and the token and returns the account name. */
 class SetupViewModel(
     private val testConnection: suspend (url: String, token: String) -> Result<String>,
+    /** Prefill when opened from Settings; the connection must be tested again before saving. */
+    initialUrl: String = "",
+    initialToken: String = "",
     private val persist: suspend (url: String, token: String) -> Unit,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(SetupState())
+    private val _state = MutableStateFlow(SetupState(url = initialUrl, token = initialToken, insecure = isInsecure(initialUrl)))
     val state: StateFlow<SetupState> = _state
 
     fun setUrl(v: String) = _state.update {
@@ -88,12 +91,12 @@ class SetupViewModel(
         }
     }
 
-    private fun isInsecure(raw: String): Boolean {
-        val url = ServerUrl.normalize(raw).getOrNull() ?: return false
-        return ServerUrl.isInsecure(url)
-    }
-
     companion object {
+        private fun isInsecure(raw: String): Boolean {
+            val url = ServerUrl.normalize(raw).getOrNull() ?: return false
+            return ServerUrl.isInsecure(url)
+        }
+
         /** Real connection test: health, then whoami; failures become readable German messages. */
         fun connectionTester(http: HttpClient): suspend (String, String) -> Result<String> = { url, token ->
             try {

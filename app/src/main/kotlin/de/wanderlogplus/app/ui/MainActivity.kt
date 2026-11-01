@@ -4,7 +4,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -37,20 +51,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             WanderlogPlusTheme {
                 val hasServer by remember { container.settings.server.map { it != null } }.collectAsState(null)
+                var loadFailed by remember { mutableStateOf(false) }
                 val snapshot by produceState<TripSnapshot?>(null) {
-                    container.snapshots().snapshot.collect { value = it }
+                    try {
+                        container.snapshots().snapshot.collect { value = it }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        loadFailed = true // no details: they could carry data
+                    }
                 }
                 val server by remember { container.settings.server }.collectAsState(null)
-                val nodeId by produceState<String?>(null) { value = withContext(Dispatchers.IO) { container.settings.nodeId } }
+                val serverRef = rememberUpdatedState(server)
+                val nodeId by produceState<String?>(null) {
+                    value = try { withContext(Dispatchers.IO) { container.settings.nodeId } } catch (e: CancellationException) { throw e } catch (e: Exception) { loadFailed = true; null }
+                }
                 val scope = rememberCoroutineScope()
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
+                if (loadFailed) {
+                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("Lokale Daten konnten nicht geladen werden", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    }
+                    return@WanderlogPlusTheme
+                }
                 AppNavigation(
                     hasServer = hasServer,
                     snapshot = snapshot,
                     syncStatus = status,
                     onRefresh = container.syncScheduler::requestNow,
-                    setupViewModelFactory = remember { setupFactory(container) },
+                    setupViewModelFactory = remember { setupFactory(container) { serverRef.value } },
                     tripViewModelFactory = remember { tripFactory(container) },
                     placesViewModelFactory = remember { placesFactory(container) },
                     moreViewModelFactory = remember { moreFactory(container) },
@@ -70,19 +100,19 @@ class MainActivity : ComponentActivity() {
     private fun tripFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            TripViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+            TripViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
     }
 
     private fun placesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
     }
 
     private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }) as T
+            MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
     }
 
     private fun importFactory(container: AppContainer) = object : ViewModelProvider.Factory {
@@ -93,11 +123,12 @@ class MainActivity : ComponentActivity() {
         ) as T
     }
 
-    private fun setupFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+    private fun setupFactory(container: AppContainer, current: () -> ServerSettings?) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val tester = SetupViewModel.connectionTester(container.http)
-            return SetupViewModel(tester) { url, token ->
+            val cur = current()
+            return SetupViewModel(tester, cur?.url.orEmpty(), cur?.token.orEmpty()) { url, token ->
                 container.settings.saveServer(ServerSettings(url, token))
                 container.syncScheduler.schedulePeriodic()
                 container.syncScheduler.requestNow()

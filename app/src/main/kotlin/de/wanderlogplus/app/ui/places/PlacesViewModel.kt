@@ -7,6 +7,7 @@ import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,8 @@ import kotlinx.serialization.json.JsonPrimitive
 class PlacesViewModel(
     private val snapshots: suspend () -> StateFlow<TripSnapshot?>,
     private val edit: EditFn,
+    /** Process-wide scope for writes: leaving a screen must not cancel a pending write. */
+    private val writeScope: CoroutineScope,
 ) : ViewModel() {
     private val _snapshot = MutableStateFlow<TripSnapshot?>(null)
     val snapshot: StateFlow<TripSnapshot?> = _snapshot
@@ -25,19 +28,24 @@ class PlacesViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
+    /** Counts failed writes so screens can drop optimistic state. */
+    private val _failures = MutableStateFlow(0)
+    val failures: StateFlow<Int> = _failures
+
     init {
         viewModelScope.launch { snapshots().collect { _snapshot.value = it } }
     }
 
     fun consumeError() { _error.value = null }
 
-    private fun write(action: (de.wanderlogplus.client.LocalEditor, TripSnapshot) -> Unit): Job = viewModelScope.launch {
+    private fun write(action: (de.wanderlogplus.client.LocalEditor, TripSnapshot) -> Unit): Job = writeScope.launch {
         try {
             edit(action)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             _error.value = e.javaClass.simpleName
+            _failures.value++
         }
     }
 

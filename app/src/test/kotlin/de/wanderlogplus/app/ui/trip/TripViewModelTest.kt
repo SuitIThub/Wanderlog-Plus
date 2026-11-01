@@ -32,6 +32,8 @@ class TripViewModelTest {
         lock.withLock { withContext(Dispatchers.IO) { block(editor, TripSnapshot.from(store.all())) } }
     }
 
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Unconfined)
+
     @Before fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
     @After fun tearDown() = Dispatchers.resetMain()
 
@@ -42,7 +44,7 @@ class TripViewModelTest {
         store.put(rec)
     }
 
-    private fun vm() = TripViewModel({ MutableStateFlow(null) }, edit)
+    private fun vm() = TripViewModel({ MutableStateFlow(null) }, edit, scope)
 
     @Test fun concurrentAddOfSameSuggestionCreatesOneItem() {
         seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
@@ -67,7 +69,7 @@ class TripViewModelTest {
     }
 
     @Test fun failedActionSetsClassNameOnly() {
-        val vm = TripViewModel({ MutableStateFlow(null) }, { _ -> throw IllegalStateException("secret") })
+        val vm = TripViewModel({ MutableStateFlow(null) }, { _ -> throw IllegalStateException("secret") }, scope)
         runBlocking { vm.remove("x").join() }
         assertEquals("IllegalStateException", vm.error.value)
         vm.consumeError()

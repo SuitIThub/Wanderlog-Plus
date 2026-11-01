@@ -158,7 +158,7 @@ fun AppNavigation(
                 composable(Tab.HEUTE.route) {
                     val s = snapshot
                     val now = rememberMinuteNow(clock)
-                    SyncedScreen(syncStatus, onRefresh, scrollable = s?.isEmpty != false) {
+                    SyncedScreen(syncStatus, onRefresh, scrollable = s?.isEmpty == true) {
                         if (s == null) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         } else {
@@ -175,7 +175,7 @@ fun AppNavigation(
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
                     TripErrors(vm, snackbar)
-                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty == true) {
                         val s = snap
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -208,7 +208,7 @@ fun AppNavigation(
                     val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
                     ErrorSnack(vm.error, vm::consumeError, snackbar)
-                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty == true) {
                         val s = snap
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -231,10 +231,11 @@ fun AppNavigation(
                     val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     ErrorSnack(vm.error, vm::consumeError, snackbar)
+                    val failures by vm.failures.collectAsState()
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus)
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures)
                         }
                     }
                 }
@@ -243,7 +244,7 @@ fun AppNavigation(
                 composable(Tab.LOGISTIK.route) {
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
-                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty != false) {
+                    SyncedScreen(syncStatus, onRefresh, scrollable = snap?.isEmpty == true) {
                         val s = snap
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

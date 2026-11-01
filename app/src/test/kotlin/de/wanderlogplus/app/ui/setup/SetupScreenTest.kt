@@ -28,6 +28,13 @@ class SetupScreenTest {
         rule.setContent { WanderlogPlusTheme { SetupScreen(vm, onSaved = {}) } }
     }
 
+    @Test fun prefilledStateCarriesUrlAndTokenButNeedsNewTest() {
+        val vm = SetupViewModel({ _, _ -> Result.success("a") }, "http://192.168.1.5:8080", "tok") { _, _ -> }
+        assertEquals("http://192.168.1.5:8080", vm.state.value.url)
+        assertEquals("tok", vm.state.value.token)
+        assertEquals(false, vm.state.value.canSave)
+    }
+
     @Test fun invalidUrlShowsErrorAndSaveStaysDisabled() {
         show()
         rule.onNodeWithText("Server-Adresse").performTextInput("ht tp://x y")

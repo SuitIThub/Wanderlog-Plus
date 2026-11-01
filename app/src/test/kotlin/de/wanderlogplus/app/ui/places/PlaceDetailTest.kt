@@ -162,4 +162,24 @@ class PlaceDetailTest {
         assertEquals("geschlossen", lines["Mi"])
         assertEquals(listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"), openingHoursLines(emptyList()).map { it.first })
     }
+
+    @Test fun failedSaveDropsOptimisticNote() {
+        seedPlace()
+        var failures by mutableStateOf(0)
+        rule.setContent {
+            val snapshot = remember { TripSnapshot.from(store.all()) }
+            WanderlogPlusTheme {
+                PlaceDetailScreen(snapshot, "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, failureCount = failures)
+            }
+        }
+        rule.onNodeWithText("Bearbeiten").performClick()
+        rule.onNodeWithTag("note-field").performTextClearance()
+        rule.onNodeWithTag("note-field").performTextInput("neu")
+        rule.onNodeWithText("Speichern").performClick()
+        rule.onNodeWithTag("place-note").assertIsDisplayed()
+        rule.onNode(hasText("neu", substring = true)).assertIsDisplayed()
+        failures = 1
+        rule.waitForIdle()
+        rule.onNode(hasText("alt", substring = true)).assertIsDisplayed()
+    }
 }

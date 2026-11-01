@@ -38,6 +38,8 @@ android {
 
 kotlin { jvmToolchain(17) }
 
+ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
 dependencies {
     implementation(project(":client"))
     implementation(libs.kotlinx.serialization.json)

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import de.wanderlogplus.client.LocalEditor
 import de.wanderlogplus.client.TripSnapshot
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,8 @@ typealias EditFn = suspend (block: (LocalEditor, TripSnapshot) -> Unit) -> Unit
 class TripViewModel(
     private val snapshots: suspend () -> StateFlow<TripSnapshot?>,
     private val edit: EditFn,
+    /** Process-wide scope for writes: leaving a screen must not cancel a pending write. */
+    private val writeScope: CoroutineScope,
 ) : ViewModel() {
     private val _snapshot = MutableStateFlow<TripSnapshot?>(null)
     val snapshot: StateFlow<TripSnapshot?> = _snapshot
@@ -31,7 +34,7 @@ class TripViewModel(
 
     fun consumeError() { _error.value = null }
 
-    private fun write(action: (LocalEditor, TripSnapshot) -> Unit): Job = viewModelScope.launch {
+    private fun write(action: (LocalEditor, TripSnapshot) -> Unit): Job = writeScope.launch {
         try {
             edit(action)
         } catch (e: CancellationException) {
