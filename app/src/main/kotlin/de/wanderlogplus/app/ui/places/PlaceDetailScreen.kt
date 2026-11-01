@@ -42,6 +42,7 @@ import de.wanderlogplus.app.ui.attachments.AttachmentActions
 import de.wanderlogplus.app.ui.attachments.AttachmentsFor
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.app.ui.categoryLabel
+import de.wanderlogplus.app.ui.design.placeImageUrl
 import de.wanderlogplus.app.ui.openingHoursLines
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.statusLabel
@@ -51,8 +52,6 @@ import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
 import java.util.Locale
-
-private const val IMAGE_BASE = "https://itin-dev.wanderlogstatic.com/freeImageMedium/"
 
 private const val TAG_STAR = "⭐"
 private const val TAG_WARN = "⚠️"
@@ -122,7 +121,7 @@ fun PlaceDetailScreen(
             var failed by remember(key) { mutableStateOf(false) }
             if (!failed) {
                 AsyncImage(
-                    model = IMAGE_BASE + key,
+                    model = placeImageUrl(key),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     onError = { failed = true },

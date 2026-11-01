@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.roborazzi)
 }
 
 // Optional Google Maps key: read from the gitignored local.properties, empty by default (map toggle hidden).
@@ -45,6 +46,7 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.systemProperty("repoRoot", rootDir.path) }
     }
     sourceSets {
         // Robolectric unit tests read the debug variant's merged assets, so the Room schemas must live there (debug APK only).
@@ -55,6 +57,9 @@ android {
 kotlin { jvmToolchain(17) }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+// Screenshot tests only record (never compare); PNGs land under build/ and are never committed.
+roborazzi { outputDir.set(file("build/outputs/roborazzi")) }
 
 dependencies {
     implementation(project(":client"))
@@ -93,6 +98,10 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    // Fixtures.realOrNull() runs the importer on the private real export when present.
+    testImplementation(project(":importer"))
 }
 
 // Compose UI tests need ui-test-manifest, which is debug-only; run unit tests for debug only.
