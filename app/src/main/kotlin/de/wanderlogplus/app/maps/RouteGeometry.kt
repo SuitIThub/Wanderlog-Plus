@@ -50,14 +50,45 @@ private fun Endpoint.coords(snapshot: TripSnapshot): LatLngD? {
     return LatLngD(p.lat, p.lng)
 }
 
+/**
+ * Airport reference points by IATA code, for flights whose endpoints have no place with coordinates (Wanderlog often
+ * stores only the code). Small on purpose: the airports of the trip plus a few common Japanese ones.
+ */
+internal val AIRPORTS: Map<String, LatLngD> = mapOf(
+    "FRA" to LatLngD(50.0333, 8.5706), // Frankfurt
+    "HND" to LatLngD(35.5494, 139.7798), // Tokio-Haneda
+    "NRT" to LatLngD(35.7720, 140.3929), // Tokio-Narita
+    "KIX" to LatLngD(34.4347, 135.2440), // Osaka-Kansai
+    "ITM" to LatLngD(34.7855, 135.4382), // Osaka-Itami
+    "NGO" to LatLngD(34.8584, 136.8054), // Nagoya-Chubu
+    "HIJ" to LatLngD(34.4361, 132.9194), // Hiroshima
+    "FUK" to LatLngD(33.5859, 130.4511), // Fukuoka
+    "CTS" to LatLngD(42.7752, 141.6923), // Sapporo-New Chitose
+    "OKA" to LatLngD(26.1958, 127.6459), // Okinawa-Naha
+    "TPE" to LatLngD(25.0777, 121.2328), // Taipeh-Taoyuan
+    "HKD" to LatLngD(41.7700, 140.8219), // Hakodate
+    "SDJ" to LatLngD(38.1397, 140.9170), // Sendai
+    "KOJ" to LatLngD(31.8034, 130.7194), // Kagoshima
+)
+
+/** The airport of [Endpoint.code] from [AIRPORTS] (case-insensitive), or null. */
+private fun Endpoint.airportCoords(): LatLngD? = code?.trim()?.uppercase(Locale.ROOT)?.let { AIRPORTS[it] }
+
 private fun route(depart: Endpoint, arrive: Endpoint, snapshot: TripSnapshot, arc: Boolean): RouteGeometry? {
     val from = depart.coords(snapshot) ?: return null
     val to = arrive.coords(snapshot) ?: return null
     return RouteGeometry(from, to, arc)
 }
 
-/** Arc between the flight's endpoint places; null when a coordinate is missing or (0,0). */
-fun routeFor(flight: Flight, snapshot: TripSnapshot): RouteGeometry? = route(flight.depart, flight.arrive, snapshot, arc = true)
+/**
+ * Arc between the flight's endpoints: each end uses its place's coordinates, otherwise its IATA code from [AIRPORTS];
+ * null when an end has neither.
+ */
+fun routeFor(flight: Flight, snapshot: TripSnapshot): RouteGeometry? {
+    val from = flight.depart.coords(snapshot) ?: flight.depart.airportCoords() ?: return null
+    val to = flight.arrive.coords(snapshot) ?: flight.arrive.airportCoords() ?: return null
+    return RouteGeometry(from, to, arc = true)
+}
 
 /** Straight line between the train's endpoint places; null when a coordinate is missing or (0,0). */
 fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? = route(train.depart, train.arrive, snapshot, arc = false)

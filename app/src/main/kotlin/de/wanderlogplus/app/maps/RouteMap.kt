@@ -67,7 +67,8 @@ fun RouteMap(
                 model = shown,
                 contentDescription = "Routenkarte",
                 contentScale = ContentScale.Crop,
-                onError = { failed = true },
+                // An undecodable cache file (truncated, corrupt) is deleted, so the next composition renders it anew.
+                onError = { failed = true; shown.delete() },
                 modifier = Modifier.fillMaxSize(),
             )
         }

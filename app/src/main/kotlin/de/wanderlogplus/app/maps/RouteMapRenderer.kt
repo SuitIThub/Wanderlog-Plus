@@ -37,8 +37,8 @@ import kotlin.coroutines.resume
 /** OpenFreeMap's free OpenStreetMap style; needs no key. */
 const val MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 
-/** Text drawn into every snapshot (license requirement). */
-const val MAP_ATTRIBUTION = "© OpenStreetMap"
+/** Attribution drawn into every snapshot and shown on the region map (license requirement of tiles and data). */
+const val MAP_ATTRIBUTION = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap"
 
 /**
  * Renders a route once with MapLibre's [MapSnapshotter] and keeps the PNG in [cacheDir], so it stays available offline.
@@ -148,16 +148,23 @@ private object RouteSnapshots {
             .withLogo(false)
             .withPixelRatio(ratio)
         val snapshotter = MapSnapshotter(context, options)
-        val main = Handler(Looper.getMainLooper())
-        val bitmap = suspendCancellableCoroutine<Bitmap?> { cont ->
-            cont.invokeOnCancellation { main.post { snapshotter.cancel() } }
-            snapshotter.start(
-                { snap -> if (cont.isActive) cont.resume(snap.bitmap.copy(Bitmap.Config.ARGB_8888, true)) },
-                { _ -> if (cont.isActive) cont.resume(null) },
-            )
+        val bitmap = try {
+            suspendCancellableCoroutine<Bitmap?> { cont ->
+                snapshotter.start(
+                    { snap -> if (cont.isActive) cont.resume(snap.bitmap.copy(Bitmap.Config.ARGB_8888, true)) },
+                    { _ -> if (cont.isActive) cont.resume(null) },
+                )
+            }
+        } finally {
+            // Success, failure and timeout/cancellation alike: release the native snapshotter right away, on the main thread.
+            onMainThread { snapshotter.cancel() }
         } ?: return null
         drawAttribution(bitmap, ratio)
         return bitmap
+    }
+
+    private fun onMainThread(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else Handler(Looper.getMainLooper()).post(block)
     }
 
     /**
@@ -187,6 +194,9 @@ private object RouteSnapshots {
         val canvas = Canvas(bitmap)
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(60, 60, 60); textSize = 10f * density }
         val pad = 3f * density
+        // The full attribution is long: shrink it on narrow snapshots so it never runs off the left edge.
+        val maxW = bitmap.width - 2 * pad
+        if (text.measureText(MAP_ATTRIBUTION) > maxW) text.textSize *= maxW / text.measureText(MAP_ATTRIBUTION)
         val w = text.measureText(MAP_ATTRIBUTION)
         val h = text.fontMetrics.let { it.descent - it.ascent }
         val box = RectF(bitmap.width - w - 2 * pad, bitmap.height - h - 2 * pad, bitmap.width.toFloat(), bitmap.height.toFloat())

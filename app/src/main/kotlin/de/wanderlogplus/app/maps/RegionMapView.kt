@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.maps
 
+import android.content.ComponentCallbacks2
+import android.content.res.Configuration
 import android.graphics.RectF
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -23,7 +25,9 @@ import androidx.core.view.doOnLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import de.wanderlogplus.app.ui.places.CameraFit
 import de.wanderlogplus.app.ui.places.MapMarker
+import de.wanderlogplus.app.ui.places.cameraFitFor
 import de.wanderlogplus.shared.model.PlaceStatus
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -98,6 +102,19 @@ fun RegionMapView(markers: List<MapMarker>, onOpenPlace: (savedPlaceId: String) 
             }
         }
     }
+    // MapView wants onLowMemory from its host; forward the system callback while this map is shown.
+    DisposableEffect(context, mapView) {
+        val callbacks = object : ComponentCallbacks2 {
+            override fun onConfigurationChanged(newConfig: Configuration) = Unit
+            @Deprecated("Deprecated in Java")
+            override fun onLowMemory() = mapView.onLowMemory()
+            override fun onTrimMemory(level: Int) = Unit
+        }
+        context.registerComponentCallbacks(callbacks)
+        onDispose { context.unregisterComponentCallbacks(callbacks) }
+    }
+    // The fit the camera last moved to; a changed marker set (filters, edits) moves it again.
+    val fitted = remember { mutableListOf<CameraFit>() }
     Box(modifier) {
         AndroidView(
             factory = {
@@ -105,7 +122,7 @@ fun RegionMapView(markers: List<MapMarker>, onOpenPlace: (savedPlaceId: String) 
                     map.uiSettings.isRotateGesturesEnabled = false
                     map.setStyle(Style.Builder().fromUri(MAP_STYLE_URL)) { style ->
                         addPlaceLayers(style, currentMarkers)
-                        mapView.doOnLayout { fitCamera(map, currentMarkers) }
+                        mapView.doOnLayout { fitted.fitOnce(map, cameraFitFor(currentMarkers)) }
                     }
                     map.addOnMapClickListener { latLng ->
                         val p = map.projection.toScreenLocation(latLng)
@@ -119,7 +136,11 @@ fun RegionMapView(markers: List<MapMarker>, onOpenPlace: (savedPlaceId: String) 
                 mapView
             },
             update = { view ->
-                view.getMapAsync { map -> map.style?.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(featuresOf(markers)) }
+                view.getMapAsync { map ->
+                    val style = map.style?.takeIf { it.isFullyLoaded } ?: return@getMapAsync // the style callback fits first
+                    style.getSourceAs<GeoJsonSource>(SOURCE_ID)?.setGeoJson(featuresOf(markers))
+                    view.doOnLayout { fitted.fitOnce(map, cameraFitFor(markers)) }
+                }
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -157,12 +178,16 @@ private fun addPlaceLayers(style: Style, markers: List<MapMarker>) {
     )
 }
 
-private fun fitCamera(map: MapLibreMap, markers: List<MapMarker>) {
-    when (markers.size) {
-        0 -> Unit
-        1 -> map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(markers[0].lat, markers[0].lng), 14.0))
-        else -> {
-            val b = LatLngBounds.Builder().apply { markers.forEach { include(LatLng(it.lat, it.lng)) } }.build()
+/** Moves the camera to [fit] unless it is the one applied last (keeps the user's pan/zoom while markers stay the same). */
+private fun MutableList<CameraFit>.fitOnce(map: MapLibreMap, fit: CameraFit) {
+    if (lastOrNull() == fit) return
+    clear()
+    add(fit)
+    when (fit) {
+        CameraFit.None -> Unit
+        is CameraFit.Center -> map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(fit.lat, fit.lng), fit.zoom))
+        is CameraFit.Bounds -> {
+            val b = LatLngBounds.Builder().include(LatLng(fit.north, fit.east)).include(LatLng(fit.south, fit.west)).build()
             map.moveCamera(CameraUpdateFactory.newLatLngBounds(b, 100))
         }
     }

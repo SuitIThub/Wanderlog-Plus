@@ -41,4 +41,19 @@ class RegionMapTest {
         assertEquals(listOf("sv-o"), mapMarkers(snap, NO_REGION).map { it.savedPlaceId })
         assertEquals(listOf("sv-a"), mapMarkers(snap, "r1").map { it.savedPlaceId })
     }
+
+    @Test fun cameraFitHandlesNoneOneSharedAndMany() {
+        fun m(id: String, lat: Double, lng: Double) = MapMarker(id, id, lat, lng, PlaceStatus.IDEA)
+        assertEquals(CameraFit.None, cameraFitFor(emptyList()))
+        assertEquals(CameraFit.Center(35.0, 135.0, SINGLE_MARKER_ZOOM), cameraFitFor(listOf(m("a", 35.0, 135.0))))
+        // Several markers on one coordinate (e.g. shops in one building) zoom like a single marker.
+        assertEquals(
+            CameraFit.Center(35.0, 135.0, SINGLE_MARKER_ZOOM),
+            cameraFitFor(listOf(m("a", 35.0, 135.0), m("b", 35.0, 135.0))),
+        )
+        assertEquals(
+            CameraFit.Bounds(south = 34.9, west = 135.0, north = 35.1, east = 135.7),
+            cameraFitFor(listOf(m("a", 35.1, 135.0), m("b", 34.9, 135.7), m("c", 35.0, 135.2))),
+        )
+    }
 }

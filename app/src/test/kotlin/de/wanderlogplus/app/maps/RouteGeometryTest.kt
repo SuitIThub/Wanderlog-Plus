@@ -67,4 +67,19 @@ class RouteGeometryTest {
         val flight = routeFor(snap.flights.first { it.id == "fl-1" }, snap)!!
         assertEquals(RouteGeometry(LatLngD(35.55, 139.78), LatLngD(34.43, 135.23), arc = true), flight)
     }
+
+    @Test fun flightFallsBackToAirportCodes() {
+        val snap = Fixtures.trip()
+        val byCode = Flight("f", depart = Endpoint("Frankfurt", "FRA"), arrive = Endpoint("Tokio", "hnd"))
+        assertEquals(RouteGeometry(LatLngD(50.0333, 8.5706), LatLngD(35.5494, 139.7798), arc = true), routeFor(byCode, snap))
+        // A place with coordinates wins over the code; a missing place falls back to the code per endpoint.
+        val mixed = Flight("f", depart = Endpoint("Nord", "FRA", placeId = "p-flughafen-a"), arrive = Endpoint("Naha", "OKA", placeId = "missing"))
+        assertEquals(RouteGeometry(LatLngD(35.55, 139.78), LatLngD(26.1958, 127.6459), arc = true), routeFor(mixed, snap))
+        listOf("FRA", "HIJ", "HND", "NRT", "OKA", "TPE", "ITM", "KIX", "CTS", "FUK", "NGO").forEach {
+            assertTrue("missing airport $it", it in AIRPORTS)
+        }
+        assertNull(routeFor(Flight("f", depart = Endpoint("X", "XXX"), arrive = Endpoint("Tokio", "HND")), snap))
+        // Trains never use the airport table.
+        assertNull(routeFor(Train("t", depart = Endpoint("A", "FRA"), arrive = Endpoint("B", "HND")), snap))
+    }
 }

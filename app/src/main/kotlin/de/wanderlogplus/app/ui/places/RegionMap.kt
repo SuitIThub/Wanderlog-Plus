@@ -23,6 +23,31 @@ fun mapMarkers(snapshot: TripSnapshot, regionKey: String): List<MapMarker> =
         MapMarker(s.id, p.name.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", p.lat, p.lng, s.status)
     }
 
+/** Where the region map's camera goes for a set of markers. */
+sealed interface CameraFit {
+    data object None : CameraFit
+    data class Center(val lat: Double, val lng: Double, val zoom: Double) : CameraFit
+    data class Bounds(val south: Double, val west: Double, val north: Double, val east: Double) : CameraFit
+}
+
+/** Zoom for a single place (also used when all markers share one coordinate: bounds of zero size would zoom to the max). */
+const val SINGLE_MARKER_ZOOM = 14.0
+
+/** Camera for [markers]: nothing, the single-marker zoom on one distinct coordinate, else their bounds. */
+fun cameraFitFor(markers: List<MapMarker>): CameraFit {
+    val coords = markers.map { it.lat to it.lng }.distinct()
+    return when (coords.size) {
+        0 -> CameraFit.None
+        1 -> CameraFit.Center(coords[0].first, coords[0].second, SINGLE_MARKER_ZOOM)
+        else -> CameraFit.Bounds(
+            south = coords.minOf { it.first },
+            west = coords.minOf { it.second },
+            north = coords.maxOf { it.first },
+            east = coords.maxOf { it.second },
+        )
+    }
+}
+
 /** The region's places on an OpenStreetMap map; MapLibre is only composed when [LocalMapsEnabled] (never in tests). */
 @Composable
 fun RegionMap(markers: List<MapMarker>, onOpenPlace: (savedPlaceId: String) -> Unit, modifier: Modifier = Modifier) {
