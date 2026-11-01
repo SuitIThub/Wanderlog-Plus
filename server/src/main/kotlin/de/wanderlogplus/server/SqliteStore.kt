@@ -63,6 +63,7 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             }
             conn.createStatement().use { st ->
                 st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                st.execute("CREATE TABLE IF NOT EXISTS route_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, created_at INTEGER NOT NULL)")
             }
             conn.prepareStatement("INSERT OR IGNORE INTO meta(key, value) VALUES ('db_epoch', ?)").use { ps ->
                 ps.setString(1, UUID.randomUUID().toString()); ps.executeUpdate()
@@ -249,5 +250,21 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             }
         }
         return out
+    }
+
+    /** Cached Routes API result (`{}` = no route) and the time it was stored, or null. */
+    @Synchronized
+    fun cachedRoute(key: String): Pair<String, Long>? =
+        conn.prepareStatement("SELECT json, created_at FROM route_cache WHERE key = ?").use { ps ->
+            ps.setString(1, key)
+            ps.executeQuery().use { if (it.next()) it.getString(1) to it.getLong(2) else null }
+        }
+
+    @Synchronized
+    fun putCachedRoute(key: String, json: String, createdAt: Long) {
+        conn.prepareStatement("INSERT OR REPLACE INTO route_cache(key, json, created_at) VALUES (?,?,?)").use { ps ->
+            ps.setString(1, key); ps.setString(2, json); ps.setLong(3, createdAt)
+            ps.executeUpdate()
+        }
     }
 }

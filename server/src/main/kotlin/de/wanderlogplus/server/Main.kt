@@ -16,6 +16,10 @@ fun main() {
     val store = SqliteStore(config.dataDir.resolve("wanderlog-plus.db"))
     Runtime.getRuntime().addShutdownHook(Thread { store.close() })
     val sync = SyncService(store)
-    val services = Services(config, store, sync, FileStore.forConfig(config), ImportService(store, sync, tripSourceFrom(config)))
+    val services = Services(
+        config, store, sync, FileStore.forConfig(config),
+        ImportService(store, sync, tripSourceFrom(config)),
+        RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) }),
+    )
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }

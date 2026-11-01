@@ -1,6 +1,7 @@
 package de.wanderlogplus.shared.model
 
 import de.wanderlogplus.shared.sync.EntityType
+import de.wanderlogplus.shared.sync.TravelMode
 import kotlinx.serialization.Serializable
 
 /** Dates are ISO strings ("2027-05-09"), times are "HH:mm". */
@@ -91,6 +92,9 @@ data class Endpoint(
     val placeId: String? = null,
     val date: String? = null,
     val time: String? = null,
+    /** Coordinates picked in the app (place search); win over [placeId]'s place. */
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 @Serializable
@@ -101,6 +105,8 @@ data class Flight(
     val number: String? = null,
     val depart: Endpoint = Endpoint(),
     val arrive: Endpoint = Endpoint(),
+    /** Stopovers between [depart] and [arrive], in travel order. */
+    val via: List<Endpoint> = emptyList(),
     val confirmationNumber: String? = null,
     val travelerNames: List<String> = emptyList(),
     val note: String = "",
@@ -112,6 +118,8 @@ data class Train(
     val carrier: String? = null,
     val depart: Endpoint = Endpoint(),
     val arrive: Endpoint = Endpoint(),
+    /** Changes or stops between [depart] and [arrive] (e.g. Frankfurt Hbf), in travel order. */
+    val via: List<Endpoint> = emptyList(),
     val confirmationNumber: String? = null,
     val travelerNames: List<String> = emptyList(),
     val note: String = "",
@@ -124,6 +132,8 @@ data class Day(
     val title: String = "",
     val note: String = "",
     val regionOverrideId: String? = null,
+    /** Show travel legs (time, distance, map) between the program's places. */
+    val showLegs: Boolean = false,
 )
 
 enum class DayItemKind { PLACE, NOTE }
@@ -137,6 +147,8 @@ data class DayItem(
     val placeId: String? = null,
     val text: String = "",
     val time: String? = null,
+    /** How to get here from the previous place of the day; null = on foot. */
+    val legMode: TravelMode? = null,
 )
 
 @Serializable
