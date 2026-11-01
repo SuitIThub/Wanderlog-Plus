@@ -108,4 +108,53 @@ class LocalEditorTest {
         assertEquals(1, snap.dayItems.size)
         assertEquals(PlaceStatus.PLANNED, snap.savedPlaces.first { it.id == "s1" }.status)
     }
+
+    private class CountingTx : Transactor {
+        var depth = 0
+        var topLevel = 0
+        override fun <T> run(block: () -> T): T {
+            if (depth == 0) topLevel++
+            depth++
+            try { return block() } finally { depth-- }
+        }
+    }
+
+    @Test fun compoundOpsAreOneTransactionAndOneNotification() {
+        val f = fx()
+        val tx = CountingTx()
+        var notes = 0
+        val ed = LocalEditor(f.store, f.outbox, f.clock, tx) { notes++; assertEquals(0, tx.depth) }
+        val a = ed.addSuggestionToDay(f.snapshot(), "2027-05-03", "s1")
+        assertEquals(1 to 1, tx.topLevel to notes)
+        val b = ed.addSuggestionToDay(f.snapshot(), "2027-05-03", "s2")
+        assertEquals(2 to 2, tx.topLevel to notes)
+        ed.moveDayItem(f.snapshot(), b, up = true)
+        assertEquals(3 to 3, tx.topLevel to notes)
+        ed.removeDayItem(f.snapshot(), a)
+        assertEquals(4 to 4, tx.topLevel to notes)
+    }
+
+    @Test fun addSuggestionTwiceForSamePlaceIsNoop() {
+        val f = fx()
+        val a = f.editor.addSuggestionToDay(f.snapshot(), "2027-05-03", "s1")
+        val size = f.outbox.size()
+        val n = f.changes
+        assertEquals(a, f.editor.addSuggestionToDay(f.snapshot(), "2027-05-03", "s1"))
+        assertEquals(size, f.outbox.size())
+        assertEquals(n, f.changes)
+    }
+
+    @Test fun moveWithEqualNeighbourKeysDoesNotThrow() {
+        val f = fx()
+        f.seedEntity(EntityType.DAY, "d", Day("d", "2027-05-03"))
+        for ((id, key) in listOf("a" to "5", "b" to "5", "c" to "8")) {
+            f.seedEntity(EntityType.DAY_ITEM, id, DayItem(id, "d", key, DayItemKind.NOTE, text = id))
+        }
+        f.editor.moveDayItem(f.snapshot(), "c", up = true)
+        val order = f.snapshot().dayItemsFor("d").map { it.id }
+        assertEquals(listOf("a", "c", "b"), order)
+        val keys = f.snapshot().dayItemsFor("d").map { it.sortKey }
+        assertEquals(keys.sorted(), keys)
+        assertEquals(3, keys.toSet().size)
+    }
 }
