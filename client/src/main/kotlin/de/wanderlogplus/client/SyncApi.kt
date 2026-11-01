@@ -1,5 +1,6 @@
 package de.wanderlogplus.client
 
+import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.FieldChange
 import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
@@ -26,6 +27,9 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.IOException
 
 @Serializable
@@ -85,11 +89,25 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
-    suspend fun pull(since: Long, limit: Int = 500): PullResponse = call {
-        client.get("$base/api/sync/pull") {
-            auth()
-            parameter("since", since)
-            parameter("limit", limit)
+    suspend fun pull(since: Long, limit: Int = 500): PullResponse {
+        val raw: JsonObject = call {
+            client.get("$base/api/sync/pull") {
+                auth()
+                parameter("since", since)
+                parameter("limit", limit)
+            }
+        }
+        // Tolerate record types a newer server knows but this app does not (forward compatibility).
+        val records = (raw["records"] as? JsonArray)?.filter { r ->
+            val type = ((r as? JsonObject)?.get("type") as? JsonPrimitive)?.takeIf { it.isString }?.content
+            type != null && KNOWN_TYPES.contains(type)
+        }
+        val cleaned = if (records != null) JsonObject(raw + ("records" to JsonArray(records))) else raw
+        try {
+            return json.decodeFromJsonElement(PullResponse.serializer(), cleaned)
+        } catch (e: Exception) {
+            // Never include the body: it may hold booking data.
+            throw ApiException(ApiErrorKind.SERVER, message = "Unerwartete Serverantwort", cause = e)
         }
     }
 
@@ -153,5 +171,9 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             else -> ApiErrorKind.SERVER
         }
         return ApiException(kind, code, status, err?.message)
+    }
+
+    private companion object {
+        val KNOWN_TYPES: Set<String> = EntityType.entries.map { it.name }.toSet()
     }
 }

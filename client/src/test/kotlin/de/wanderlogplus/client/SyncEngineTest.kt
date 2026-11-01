@@ -115,9 +115,26 @@ class SyncEngineTest {
         }
         rig.outbox.add(listOf(change("a"), change("b"), change("c")))
         val r = rig.engine.sync()
-        assertEquals(SyncResult.Ok(2, 0), r)
+        assertEquals(SyncResult.Ok(2, 0, rejected = 1), r)
         assertEquals(listOf(3, 2), sentSizes)
         assertEquals(0, rig.outbox.size())
+        assertEquals("1 Änderung(en) vom Server abgelehnt", rig.state.lastError)
+        assertEquals(42L, rig.state.lastSyncAt)
+    }
+
+    @Test fun clockDriftMessageShowsServerAndDeviceTime() = runTest {
+        val rig = Rig { req ->
+            when (req.url.encodedPath) {
+                "/api/health" -> json(HttpStatusCode.OK, """{"status":"ok","protocol":1,"epoch":"e1","serverTime":1798761600000}""")
+                else -> err(HttpStatusCode.BadRequest, "clock_drift")
+            }
+        }
+        rig.outbox.add(listOf(change("a")))
+        val engine = SyncEngine(rig.api, rig.store, rig.outbox, rig.state, rig.clock, now = { 1798761600000L + 3 * 3600_000L }, zone = java.time.ZoneOffset.UTC)
+        val r = assertIs<SyncResult.Failed>(engine.sync())
+        assertEquals(ApiErrorKind.CLOCK_DRIFT, r.kind)
+        assertEquals("Uhrzeit des Geräts weicht stark ab (Server: 01.01. 00:00, Gerät: 01.01. 03:00)", r.message)
+        assertEquals(r.message, rig.state.lastError)
     }
 
     @Test fun unindexedBadRequestFailsAndKeepsOutbox() = runTest {

@@ -10,9 +10,12 @@ import de.wanderlogplus.shared.sync.parse
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 sealed interface SyncResult {
-    data class Ok(val pushed: Int, val pulled: Int) : SyncResult
+    data class Ok(val pushed: Int, val pulled: Int, val rejected: Int = 0) : SyncResult
     data class Failed(val kind: ApiErrorKind, val message: String) : SyncResult
 }
 
@@ -24,10 +27,14 @@ class SyncEngine(
     private val clock: HlcClock,
     private val tx: Transactor = NoTransaction,
     private val now: () -> Long = System::currentTimeMillis,
+    private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
     private val mutex = Mutex()
 
-    private class Counts(var pushed: Int = 0, var pulled: Int = 0)
+    private class Counts(var pushed: Int = 0, var pulled: Int = 0, var rejected: Int = 0)
+
+    /** Server clock from the latest health call, for the drift message. */
+    private var serverTime: Long? = null
 
     suspend fun sync(): SyncResult = mutex.withLock {
         try {
@@ -36,6 +43,7 @@ class SyncEngine(
                 state.pendingReset = false
             }
             val health = api.health()
+            serverTime = health.serverTime
             val known = state.epoch
             if (known == null) state.epoch = health.epoch
             else if (known != health.epoch) {
@@ -53,10 +61,10 @@ class SyncEngine(
                 pullAll(counts)
             }
             state.lastSyncAt = now()
-            state.lastError = null
-            SyncResult.Ok(counts.pushed, counts.pulled)
+            state.lastError = if (counts.rejected > 0) "${counts.rejected} Änderung(en) vom Server abgelehnt" else null
+            SyncResult.Ok(counts.pushed, counts.pulled, counts.rejected)
         } catch (e: ApiException) {
-            failed(e.kind, messageFor(e.kind))
+            failed(e.kind, if (e.kind == ApiErrorKind.CLOCK_DRIFT) driftMessage() else messageFor(e.kind))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -124,6 +132,7 @@ class SyncEngine(
                     val n = rejectedIndex(e)
                     if (n == null || n < 1 || n > block.size) throw e
                     outbox.remove(listOf(block.removeAt(n - 1).seq))
+                    counts.rejected++
                 }
             }
         }
@@ -147,6 +156,13 @@ class SyncEngine(
             }
             counts.pulled += page.records.size
         } while (page.hasMore)
+    }
+
+    private fun driftMessage(): String {
+        val fmt = DateTimeFormatter.ofPattern("dd.MM. HH:mm")
+        fun at(ms: Long) = fmt.format(Instant.ofEpochMilli(ms).atZone(zone))
+        val server = serverTime ?: return messageFor(ApiErrorKind.CLOCK_DRIFT)
+        return "Uhrzeit des Geräts weicht stark ab (Server: ${at(server)}, Gerät: ${at(now())})"
     }
 
     private fun messageFor(kind: ApiErrorKind) = when (kind) {

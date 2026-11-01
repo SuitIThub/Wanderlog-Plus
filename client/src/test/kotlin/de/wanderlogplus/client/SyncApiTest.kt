@@ -54,6 +54,21 @@ class SyncApiTest {
         assertEquals("/api/sync/push", seen!!.url.encodedPath)
     }
 
+    @Test fun pullDropsUnknownEntityTypes() = runTest {
+        val api = api {
+            json(
+                HttpStatusCode.OK,
+                """{"records":[
+                  {"type":"HOLOGRAM","id":"x","fields":{"a":{"value":"v","hlc":"0000000000001-0000-dev-aaaaaaaaaaaa"}}},
+                  {"type":"NOTE","id":"n1","fields":{"text":{"value":"v","hlc":"0000000000001-0000-dev-aaaaaaaaaaaa"}}}
+                ],"nextSeq":7,"hasMore":false,"epoch":"e1"}""",
+            )
+        }
+        val r = api.pull(0)
+        assertEquals(listOf("n1"), r.records.map { it.id })
+        assertEquals(7, r.nextSeq)
+    }
+
     @Test fun pullQuery() = runTest {
         var seen: HttpRequestData? = null
         val api = api { req ->
