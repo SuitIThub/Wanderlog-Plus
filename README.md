@@ -18,6 +18,16 @@ Begleit-App für Wanderlog mit eigenem Sync-Server: Reiseplan offline ansehen un
 ./gradlew :app:installDebug   # mit angeschlossenem Gerät
 ```
 
+## Karte
+
+Die Kartenansicht pro Region (Umschalter „Liste | Karte“) ist optional und erscheint nur mit einem eigenen Google-Maps-API-Key (Maps SDK for Android). Den Key in die nicht eingecheckte `local.properties` eintragen:
+
+```
+MAPS_API_KEY=dein-key
+```
+
+Ohne Key bleibt die App vollständig nutzbar (Navigation über Links). Nutzungsbedingungen und Kosten von Google Maps trägt der Nutzer selbst.
+
 ## Server
 
 Betrieb und Konfiguration: `server/README.md`.

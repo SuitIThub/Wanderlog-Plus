@@ -90,4 +90,18 @@ class PlacesScreenTest {
         rule.onNodeWithTag("place-sv-o").assertIsDisplayed()
         rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
     }
+
+    @Test fun noToggleWithoutKey() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = false) } }
+        rule.onNodeWithTag("view-map").assertDoesNotExist()
+        rule.onNodeWithTag("view-list").assertDoesNotExist()
+    }
+
+    @Test fun toggleShownWithKey() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = true) } }
+        rule.onNodeWithTag("view-map").assertExists()
+        rule.onNodeWithTag("view-list").assertExists()
+    }
 }
