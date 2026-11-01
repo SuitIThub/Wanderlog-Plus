@@ -25,6 +25,15 @@ sealed interface Movement {
 typealias FlightMove = Movement.FlightMove
 typealias TrainMove = Movement.TrainMove
 
+/**
+ * Flights and trains departing on [date], by departure time ("HH:mm"; missing or blank last, stable otherwise).
+ * The one implementation used by the "Heute" screen, the trip list and the day detail.
+ */
+fun movementsOn(flights: List<Flight>, trains: List<Train>, date: String): List<Movement> =
+    (flights.filter { it.depart.date == date }.map { Movement.FlightMove(it) } +
+        trains.filter { it.depart.date == date }.map { Movement.TrainMove(it) })
+        .sortedWith(compareBy(nullsLast()) { it.time?.takeIf { t -> t.isNotBlank() } })
+
 sealed interface TodayState {
     data class Before(val daysUntilStart: Long, val deadlines: List<Deadline>) : TodayState
     data class During(val day: DayView, val movements: List<Movement>) : TodayState
@@ -44,10 +53,7 @@ class TodayQueries(
         try { s?.let { LocalDate.parse(it) } } catch (_: DateTimeParseException) { null }
 
     /** Flights and trains departing on [date], by departure time (missing last). */
-    fun movementsOn(date: String): List<Movement> =
-        (flights.filter { it.depart.date == date }.map { Movement.FlightMove(it) } +
-            trains.filter { it.depart.date == date }.map { Movement.TrainMove(it) })
-            .sortedWith(compareBy(nullsLast()) { it.time })
+    fun movementsOn(date: String): List<Movement> = movementsOn(flights, trains, date)
 
     private fun deadlines(today: LocalDate): List<Deadline> =
         stays.mapNotNull { s ->

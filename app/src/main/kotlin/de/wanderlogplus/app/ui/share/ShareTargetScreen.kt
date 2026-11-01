@@ -1,12 +1,14 @@
 package de.wanderlogplus.app.ui.share
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import de.wanderlogplus.app.ui.design.PhotoCard
+import de.wanderlogplus.app.ui.design.SectionLabel
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -19,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import de.wanderlogplus.app.ui.design.EmptyHint
 
 /** Searchable, grouped list of attach targets. [fileCount] only shapes the title. */
 @Composable
@@ -39,32 +42,27 @@ fun ShareTargetScreen(targets: List<ShareTarget>, fileCount: Int, onPick: (Share
             modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("share-search"),
         )
         if (shown.isEmpty()) {
-            Text("Keine Treffer", Modifier.padding(16.dp).testTag("share-empty"))
+            EmptyHint("Keine Treffer", Modifier.padding(16.dp).testTag("share-empty"))
         } else {
-            LazyColumn(Modifier.fillMaxSize().testTag("share-list")) {
+            LazyColumn(Modifier.fillMaxSize().testTag("share-list"), verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
                 ShareGroup.entries.forEach { group ->
                     val inGroup = shown.filter { it.group == group }
                     if (inGroup.isNotEmpty()) {
                         item(key = "h-${group.name}") {
-                            Text(
-                                group.label,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                            )
+                            SectionLabel(group.label, Modifier.padding(horizontal = 16.dp))
                         }
                         items(inGroup.size, key = { "${group.name}-${inGroup[it].id}" }) { i ->
                             val t = inGroup[i]
-                            Column(
-                                Modifier.fillMaxWidth().clickable { onPick(t) }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp).testTag("share-${t.id}"),
-                            ) {
-                                Text(t.label, style = MaterialTheme.typography.bodyLarge)
-                                t.subtitle?.let {
-                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                            HorizontalDivider()
+                            val photo = group == ShareGroup.PLACE || group == ShareGroup.STAY
+                            PhotoCard(
+                                title = t.label,
+                                subtitle = t.subtitle,
+                                imageUrl = if (photo) t.imageUrl else null,
+                                placeholderSymbol = group.symbol,
+                                accent = MaterialTheme.colorScheme.primary,
+                                onClick = { onPick(t) },
+                                modifier = Modifier.padding(horizontal = 16.dp).testTag("share-${t.id}"),
+                            )
                         }
                     }
                 }

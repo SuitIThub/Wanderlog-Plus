@@ -30,8 +30,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.sync.SyncStatus
+import de.wanderlogplus.app.ui.design.SectionLabel
+import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.app.ui.relativeAgo
 
 /** What the settings screen shows about this installation. */
@@ -59,6 +62,8 @@ fun SettingsScreen(
     onRemindersEnabled: (Boolean) -> Unit = {},
     /** Null: read from the system (re-checked on resume). */
     notificationsAllowed: Boolean? = null,
+    /** "Kartenbilder neu laden": drops the cached route snapshots so they are rendered again. */
+    onReloadMaps: () -> Unit = {},
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
@@ -69,45 +74,76 @@ fun SettingsScreen(
     }
     val allowed = notificationsAllowed ?: systemAllowed
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("settings-screen"),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Server", style = MaterialTheme.typography.titleMedium)
-        Text("Adresse: ${info.serverUrl ?: "–"}")
-        Text("Token: ${maskToken(info.token)}")
-        OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
-
-        Text("Zeitzone", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-        for ((zone, label) in listOf(TripZone.JAPAN to "Japan (JST)", TripZone.DEVICE to "Gerätezeit verwenden")) {
-            Row(
-                Modifier.fillMaxWidth().selectable(selected = tripZone == zone, role = Role.RadioButton, onClick = { onTripZone(zone) }),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RadioButton(selected = tripZone == zone, onClick = null)
-                Text(label, modifier = Modifier.padding(start = 8.dp))
+        SectionLabel("Server")
+        SurfaceCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Adresse: ${info.serverUrl ?: "–"}")
+                Text("Token: ${maskToken(info.token)}")
+                OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
             }
         }
 
-        Text("Erinnerungen", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Erinnerungen an Fristen")
-            Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
-        }
-        if (remindersEnabled && !allowed) {
-            Text(
-                "Benachrichtigungen sind für die App ausgeschaltet.",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
+        SectionLabel("Synchronisation")
+        SurfaceCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Zuletzt synchronisiert: " + (status.lastSyncAt?.let { relativeAgo(it, now) } ?: "noch nie"))
+                status.lastError?.let { Text("Fehler: $it", color = MaterialTheme.colorScheme.error) }
+                Text("Wartende Änderungen: ${status.pending}")
+                Text("Geräte-ID: ${info.nodeId}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSyncNow, enabled = !status.running) { Text("Jetzt synchronisieren") }
+                    OutlinedButton(onClick = { confirmReset = true }) { Text("Sync-Zustand zurücksetzen") }
+                }
+            }
         }
 
-        Text("Synchronisation", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-        Text("Zuletzt synchronisiert: " + (status.lastSyncAt?.let { relativeAgo(it, now) } ?: "noch nie"))
-        status.lastError?.let { Text("Fehler: $it", color = MaterialTheme.colorScheme.error) }
-        Text("Wartende Änderungen: ${status.pending}")
-        Text("Geräte-ID: ${info.nodeId}")
-        Button(onClick = onSyncNow, enabled = !status.running) { Text("Jetzt synchronisieren") }
-        OutlinedButton(onClick = { confirmReset = true }) { Text("Sync-Zustand zurücksetzen") }
+        SectionLabel("Zeitzone")
+        SurfaceCard {
+            Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                for ((zone, label) in listOf(TripZone.JAPAN to "Japan (JST)", TripZone.DEVICE to "Gerätezeit verwenden")) {
+                    Row(
+                        Modifier.fillMaxWidth().selectable(selected = tripZone == zone, role = Role.RadioButton, onClick = { onTripZone(zone) })
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = tripZone == zone, onClick = null, modifier = Modifier.padding(horizontal = 8.dp))
+                        Text(label, modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+            }
+        }
+
+        SectionLabel("Erinnerungen")
+        SurfaceCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Erinnerungen an Fristen", Modifier.weight(1f))
+                    Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
+                }
+                if (remindersEnabled && !allowed) {
+                    Text(
+                        "Benachrichtigungen sind für die App ausgeschaltet.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+
+        SectionLabel("Karten")
+        SurfaceCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Gespeicherte Kartenbilder der Fahrten löschen und neu laden.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = onReloadMaps, modifier = Modifier.testTag("settings-reload-maps")) { Text("Kartenbilder neu laden") }
+            }
+        }
     }
     if (confirmReset) {
         AlertDialog(

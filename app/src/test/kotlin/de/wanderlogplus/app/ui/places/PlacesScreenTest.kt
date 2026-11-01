@@ -6,6 +6,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
 import de.wanderlogplus.app.ui.WanderlogPlusTheme
 import de.wanderlogplus.client.TripSnapshot
@@ -91,17 +94,80 @@ class PlacesScreenTest {
         rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
     }
 
-    @Test fun noToggleWithoutKey() {
+    @Test fun regionTilesShowCounts() {
         seedData()
-        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = false) } }
-        rule.onNodeWithTag("view-map").assertDoesNotExist()
-        rule.onNodeWithTag("view-list").assertDoesNotExist()
+        // Ids sort the day trip ("r0") before its main region ("r1"); the tiles must still put it right after r1.
+        seed(EntityType.REGION, "r0", Region("r0", "Nara", "#2ecc71", dayTripFromRegionId = "r1"))
+        seed(EntityType.REGION, "r5", Region("r5", "Osaka", "#e74c3c"))
+        seed(EntityType.PLACE, "pn", Place("pn", name = "Hirschpark"))
+        seed(EntityType.SAVED_PLACE, "sv-n", SavedPlace("sv-n", "pn", "r0", PlaceCategory.SIGHT))
+        rule.setContent { WanderlogPlusTheme { PlacesScreen(TripSnapshot.from(store.all()), onOpenRegion = {}) } }
+        rule.onNode(hasText("Kyoto") and hasTestTag("region-r1")).assertExists()
+        rule.onNode(hasText("3 Orte") and hasTestTag("region-r1")).assertExists()
+        rule.onNode(hasText("0 Orte") and hasTestTag("region-r5")).assertExists()
+        rule.onNode(hasText("1 Ort") and hasTestTag("region-r0")).assertExists()
+        rule.onNode(hasText("Tagesausflug", substring = true) and hasTestTag("region-r0")).assertExists()
+        rule.onNode(hasText("Tagesausflug", substring = true) and hasTestTag("region-r1")).assertDoesNotExist()
+        val order = listOf("region-r1", "region-r0", "region-r5", "region-none").map {
+            val b = rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot
+            b.top * 10_000 + b.left
+        }
+        assertEquals(order.sorted(), order)
     }
 
-    @Test fun toggleShownWithKey() {
+    @Test fun emptyNoRegionTileIsHidden() {
         seedData()
-        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}, mapAvailable = true) } }
+        seed(EntityType.SAVED_PLACE, "sv-o", SavedPlace("sv-o", "po", "r1", PlaceCategory.OTHER)) // now assigned
+        rule.setContent { WanderlogPlusTheme { PlacesScreen(TripSnapshot.from(store.all()), onOpenRegion = {}) } }
+        rule.onNodeWithTag("region-r1").assertExists()
+        rule.onNodeWithTag("region-none").assertDoesNotExist()
+    }
+
+    @Test fun chainedAndCyclicDayTripsAreNeverDropped() {
+        seedData()
+        seed(EntityType.REGION, "r2", Region("r2", "Nara", "#2ecc71", dayTripFromRegionId = "r1"))
+        seed(EntityType.REGION, "r3", Region("r3", "Yoshino", "#27ae60", dayTripFromRegionId = "r2")) // day trip of a day trip
+        seed(EntityType.REGION, "r8", Region("r8", "Insel A", "#16a085", dayTripFromRegionId = "r9"))
+        seed(EntityType.REGION, "r9", Region("r9", "Insel B", "#1abc9c", dayTripFromRegionId = "r8")) // cycle
+        val order = regionTileOrder(TripSnapshot.from(store.all())).map { it.id }
+        assertEquals(listOf("r1", "r2", "r3", "r8", "r9"), order)
+    }
+
+    @Test fun categoryFilterNarrowsList() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        rule.onNodeWithTag("hero").assertExists()
+        rule.onNodeWithTag("filter-category-ALL").assertExists()
+        rule.onNodeWithTag("place-sv-a").assertExists()
+        rule.onNodeWithTag("filter-category-FOOD").performClick()
+        rule.onNodeWithTag("place-sv-f").assertExists()
+        rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
+        rule.onNodeWithTag("place-sv-b").assertDoesNotExist()
+        rule.onNodeWithTag("filter-category-SHOPPING").performClick()
+        rule.onNodeWithText("Keine Orte", substring = true).assertExists()
+        rule.onNodeWithTag("filter-category-ALL").performClick()
+        rule.onNodeWithTag("place-sv-a").assertExists()
+        rule.onNodeWithTag("place-sv-f").assertExists()
+    }
+
+    @Test fun placeCardShowsStatusDotAndRating() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        rule.onNodeWithTag("status-dot-sv-b", useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("★ 4,9", substring = true) and hasTestTag("place-sv-b")).assertExists()
+    }
+
+    @Test fun toggleAlwaysShownAndMapUnavailableInTests() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
         rule.onNodeWithTag("view-map").assertExists()
         rule.onNodeWithTag("view-list").assertExists()
+        // Semantics click: Robolectric's injected touch does not reach the segmented buttons reliably.
+        rule.onNodeWithTag("view-map").performSemanticsAction(SemanticsActions.OnClick)
+        // LocalMapsEnabled defaults to false, so MapLibre is never loaded under Robolectric.
+        rule.onNodeWithText("Karte nicht verfügbar").assertIsDisplayed()
+        rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
+        rule.onNodeWithTag("view-list").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("place-sv-a").assertExists()
     }
 }

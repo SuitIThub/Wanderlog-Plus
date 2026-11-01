@@ -3,12 +3,23 @@ package de.wanderlogplus.app.ui.more
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import de.wanderlogplus.app.ui.design.Badge
+import de.wanderlogplus.app.ui.design.BadgeSpec
+import de.wanderlogplus.app.ui.design.BadgeTone
+import de.wanderlogplus.app.ui.design.EmptyHint
+import de.wanderlogplus.app.ui.design.SectionLabel
+import de.wanderlogplus.app.ui.design.SurfaceCard
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -100,27 +111,84 @@ internal fun importTimeText(iso: String): String = try {
 @Composable
 fun ImportScreen(vm: ImportViewModel, modifier: Modifier = Modifier) {
     val s by vm.state.collectAsState()
-    Column(modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = vm::import, enabled = !s.running) {
-                Text(if (s.running) "Importiere …" else "Aus Wanderlog importieren")
+    val log = s.log
+    LazyColumn(
+        modifier.fillMaxSize().testTag("import-log"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item(key = "trigger") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = vm::import, enabled = !s.running) {
+                    Text(if (s.running) "Importiere …" else "Aus Wanderlog importieren")
+                }
+                s.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import-message")) }
             }
-            s.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("import-message")) }
         }
-        val log = s.log
         when {
             log == null -> Unit
-            log.isEmpty() -> Text("Noch keine Importe", Modifier.padding(horizontal = 16.dp))
-            else -> LazyColumn(Modifier.fillMaxWidth().testTag("import-log")) {
-                items(log) { e ->
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        Text(importTimeText(e.startedAt) + " · " + if (e.ok) "OK" else "Fehler", style = MaterialTheme.typography.titleSmall)
-                        Text("neu ${e.created} · geändert ${e.updated} · Konflikte ${e.conflicts} · entfernt ${e.removed}")
-                        if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", color = MaterialTheme.colorScheme.error)
+            log.isEmpty() -> item(key = "none") { EmptyHint("Noch keine Importe") }
+            else -> {
+                item(key = "latest") {
+                    Column {
+                        SectionLabel("Letzter Import")
+                        LatestImportCard(log.first())
                     }
-                    HorizontalDivider()
+                }
+                if (log.size > 1) {
+                    item(key = "history-label") { SectionLabel("Protokoll") }
+                    items(log.drop(1)) { e -> LogRow(e) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StatusLine(e: ImportLogInfo) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(importTimeText(e.startedAt), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        Badge(BadgeSpec(if (e.ok) "OK" else "Fehler", if (e.ok) BadgeTone.Positive else BadgeTone.Warning))
+    }
+}
+
+@Composable
+private fun LatestImportCard(e: ImportLogInfo) {
+    SurfaceCard {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatusLine(e)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatTile(e.created, "neu", Modifier.weight(1f))
+                StatTile(e.updated, "geändert", Modifier.weight(1f))
+                StatTile(e.conflicts, "Konflikte", Modifier.weight(1f))
+                StatTile(e.removed, "entfernt", Modifier.weight(1f))
+            }
+            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun StatTile(value: Int, label: String, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Column(Modifier.padding(vertical = 10.dp, horizontal = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun LogRow(e: ImportLogInfo) {
+    SurfaceCard {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            StatusLine(e)
+            Text(
+                "neu ${e.created} · geändert ${e.updated} · Konflikte ${e.conflicts} · entfernt ${e.removed}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
     }
 }

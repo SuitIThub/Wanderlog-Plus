@@ -9,7 +9,7 @@ Stand: 2026-11-01. Ergebnis der Task-Reviews und des Gesamt-Reviews von Plan 4. 
   2. Ein PDF aus Gmail über das Teilen-Menü anhängen und auf dem zweiten Handy öffnen.
   3. Den Einrichtungslink aus der Kamera-App öffnen.
   4. Prüfen, ob Benachrichtigungen bei Stornofristen erscheinen.
-  5. Die Karte mit API-Key ansehen.
+  5. Die Karte mit API-Key ansehen (ersetzt durch MapLibre in Plan 5: kein Key mehr nötig).
   6. Den PDF-Viewer mit einem langen PDF testen.
 
   Ungetestet sind bisher alle Teile, die nur auf einem Gerät laufen: PdfRenderer, FileProvider-Intent, Dokumentauswahl, Teilen-Intent, QR-Scanner, GoogleMap, Notifications.
@@ -24,7 +24,7 @@ Stand: 2026-11-01. Ergebnis der Task-Reviews und des Gesamt-Reviews von Plan 4. 
   - Derselbe Anhang zweimal am selben Ziel ergibt zwei Datensätze.
 - **Externe Apps sehen als Dateinamen den Hash ohne Endung.** Manche Apps lehnen deshalb .pkpass- oder .docx-Dateien ab. Lösung wäre eine Kopie mit Originalnamen im Cache.
 - **Tabelog-Link** gibt es nur für die Kategorie Essen (Ruling R3).
-- **Karte** erscheint nur mit eigenem `MAPS_API_KEY` in `local.properties` (Ruling R4). Die Konditionen von Google Maps bleiben offener Punkt der Spec.
+- ~~**Karte** erscheint nur mit eigenem `MAPS_API_KEY` in `local.properties` (Ruling R4). Die Konditionen von Google Maps bleiben offener Punkt der Spec.~~ Ersetzt durch MapLibre in Plan 5: OpenStreetMap über OpenFreeMap, ohne Key; `MAPS_API_KEY` entfällt.
 - **Notiz im Programm** wird inline statt im Dialog eingegeben (Ruling R7, Robolectric-Problem mit einem TextField im Dialog).
 - **Tags:** Die Schalter ⭐ und ⚠️ erfassen alle Tags, die mit dem Emoji beginnen. Ein gespeichertes „⚠“ ohne Variationszeichen wird nicht erkannt.
 - **Erinnerungen:**

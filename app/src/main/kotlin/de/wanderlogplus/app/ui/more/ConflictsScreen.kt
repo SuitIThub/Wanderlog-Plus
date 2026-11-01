@@ -4,12 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
+import de.wanderlogplus.app.ui.design.EmptyHint
+import de.wanderlogplus.app.ui.design.SurfaceCard
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -40,34 +45,63 @@ fun ConflictsScreen(
     modifier: Modifier = Modifier,
 ) {
     if (snapshot.conflicts.isEmpty()) {
-        Text("Keine Konflikte", modifier.padding(16.dp).testTag("conflicts-empty"))
+        EmptyHint("Keine Konflikte", modifier.padding(16.dp).testTag("conflicts-empty"))
         return
     }
-    LazyColumn(modifier.fillMaxSize().testTag("conflicts-list")) {
+    LazyColumn(
+        modifier.fillMaxSize().testTag("conflicts-list"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         items(snapshot.conflicts, key = { "${it.type}/${it.id}/${it.field}" }) { c ->
-            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(c.label, style = MaterialTheme.typography.titleMedium)
-                Text(c.field, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                ValueRow("App:", c.appValue)
-                ValueRow("Wanderlog:", c.wanderlogValue)
-                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onKeepApp(c) }) { Text("App behalten") }
-                    Button(onClick = { onTakeWanderlog(c) }) { Text("Wanderlog übernehmen") }
+            SurfaceCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column {
+                        Text(c.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(conflictFieldLabel(c.field), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ValueBox("App:", c.appValue, Modifier.weight(1f))
+                        ValueBox("Wanderlog:", c.wanderlogValue, Modifier.weight(1f))
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { onKeepApp(c) }, modifier = Modifier.fillMaxWidth()) { Text("App behalten") }
+                        Button(onClick = { onTakeWanderlog(c) }, modifier = Modifier.fillMaxWidth()) { Text("Wanderlog übernehmen") }
+                    }
                 }
             }
-            HorizontalDivider()
         }
     }
 }
 
 @Composable
-private fun ValueRow(title: String, value: JsonElement) {
+private fun ValueBox(title: String, value: JsonElement, modifier: Modifier = Modifier) {
     val full = conflictValueText(value)
     var expanded by rememberSaveable(full) { mutableStateOf(false) }
     val long = full.length > MAX_CHARS
-    Column {
-        Text(title, style = MaterialTheme.typography.labelLarge)
-        Text(if (long && !expanded) full.take(MAX_CHARS) + "…" else full, style = MaterialTheme.typography.bodyMedium)
-        if (long) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "weniger" else "mehr") }
+    Surface(modifier, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        Column(Modifier.padding(10.dp)) {
+            Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(if (long && !expanded) full.take(MAX_CHARS) + "…" else full, style = MaterialTheme.typography.bodyMedium)
+            if (long) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "weniger" else "mehr") }
+        }
     }
+}
+
+/** German name of a conflicting field ("title" → "Titel"); unknown fields keep their technical name. */
+internal fun conflictFieldLabel(field: String): String = when (field) {
+    "title" -> "Titel"
+    "name" -> "Name"
+    "note" -> "Notiz"
+    "text" -> "Text"
+    "date" -> "Datum"
+    "time" -> "Uhrzeit"
+    "tags" -> "Tags"
+    "status" -> "Status"
+    "category" -> "Kategorie"
+    "regionId", "regionOverrideId" -> "Region"
+    "sortKey" -> "Reihenfolge"
+    "checkIn" -> "Check-in"
+    "checkOut" -> "Check-out"
+    else -> field
 }

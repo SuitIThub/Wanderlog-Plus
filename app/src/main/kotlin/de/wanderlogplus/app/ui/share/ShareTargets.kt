@@ -2,6 +2,7 @@ package de.wanderlogplus.app.ui.share
 
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.dayLabel
+import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.logistics.LogisticsEntry
 import de.wanderlogplus.app.ui.logistics.flightTitle
 import de.wanderlogplus.app.ui.logistics.logisticsEntries
@@ -21,7 +22,7 @@ enum class ShareGroup(val label: String) {
 }
 
 /** Something a shared file can be attached to. [id] is `date:<yyyy-mm-dd>` for a day that does not exist yet. */
-data class ShareTarget(val type: EntityType, val id: String, val label: String, val subtitle: String?, val group: ShareGroup)
+data class ShareTarget(val type: EntityType, val id: String, val label: String, val subtitle: String?, val group: ShareGroup, val imageUrl: String? = null)
 
 const val DATE_ID_PREFIX = "date:"
 
@@ -48,7 +49,7 @@ fun shareTargets(snapshot: TripSnapshot): List<ShareTarget> {
             is LogisticsEntry.StayEntry -> {
                 val s = e.stay
                 val range = listOf(s.checkIn, s.checkOut).filter { it.isNotBlank() }.joinToString(" – ") { dayLabel(it) }
-                ShareTarget(EntityType.STAY, e.id, e.name, range.ifEmpty { null }, ShareGroup.STAY)
+                ShareTarget(EntityType.STAY, e.id, e.name, range.ifEmpty { null }, ShareGroup.STAY, snapshot.places[s.placeId]?.heroImageUrl())
             }
         }
     }
@@ -72,7 +73,7 @@ fun shareTargets(snapshot: TripSnapshot): List<ShareTarget> {
 
     val places = snapshot.savedPlaces.map { sp ->
         val name = snapshot.places[sp.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Ort"
-        ShareTarget(EntityType.SAVED_PLACE, sp.id, name, categoryLabel(sp.category), ShareGroup.PLACE)
+        ShareTarget(EntityType.SAVED_PLACE, sp.id, name, categoryLabel(sp.category), ShareGroup.PLACE, snapshot.places[sp.placeId]?.heroImageUrl())
     }.sortedWith(compareBy<ShareTarget, String>(String.CASE_INSENSITIVE_ORDER) { it.label }.thenBy { it.id })
 
     return logistics.filter { it.group == ShareGroup.FLIGHT } +
@@ -87,3 +88,13 @@ fun filterTargets(targets: List<ShareTarget>, query: String): List<ShareTarget> 
     if (q.isEmpty()) return targets
     return targets.filter { it.label.contains(q, ignoreCase = true) || it.subtitle?.contains(q, ignoreCase = true) == true }
 }
+
+/** Emoji shown on a target's card when it has no photo. */
+val ShareGroup.symbol: String
+    get() = when (this) {
+        ShareGroup.FLIGHT -> "✈️"
+        ShareGroup.TRAIN -> "🚆"
+        ShareGroup.STAY -> "🏨"
+        ShareGroup.DAY -> "📅"
+        ShareGroup.PLACE -> "📍"
+    }

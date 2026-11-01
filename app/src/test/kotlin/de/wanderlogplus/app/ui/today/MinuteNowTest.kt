@@ -53,13 +53,13 @@ class MinuteNowTest {
 
     @Test fun minuteTickMovesFromBeforeToDuring() {
         show()
-        rule.onNodeWithText("Noch 1 Tag").assertIsDisplayed()
+        rule.onNodeWithText("1 Tag").assertIsDisplayed()
         clockNow = LocalDateTime.parse("2027-05-08T00:00:05")
         rule.mainClock.advanceTimeBy(60_000)
         rule.waitForIdle()
-        rule.onNodeWithText("Noch 1 Tag").assertDoesNotExist()
+        rule.onNodeWithText("1 Tag").assertDoesNotExist()
         rule.onNodeWithText("Kein Programm", substring = true).assertDoesNotExist()
-        rule.onNodeWithText("Programm").assertIsDisplayed()
+        rule.onNodeWithText("Tagesablauf", ignoreCase = true).assertIsDisplayed()
     }
 
     @Test fun resumeRefreshesNow() {
@@ -69,11 +69,11 @@ class MinuteNowTest {
         }
         rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.STARTED }
         show(owner)
-        rule.onNodeWithText("Noch 1 Tag").assertIsDisplayed()
+        rule.onNodeWithText("1 Tag").assertIsDisplayed()
         clockNow = LocalDateTime.parse("2027-05-08T08:00:00")
         rule.runOnUiThread { owner.registry.currentState = Lifecycle.State.RESUMED }
         rule.waitForIdle()
-        rule.onNodeWithText("Noch 1 Tag").assertDoesNotExist()
-        rule.onNodeWithText("Programm").assertIsDisplayed()
+        rule.onNodeWithText("1 Tag").assertDoesNotExist()
+        rule.onNodeWithText("Tagesablauf", ignoreCase = true).assertIsDisplayed()
     }
 }

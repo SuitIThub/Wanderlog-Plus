@@ -1,17 +1,11 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.roborazzi)
 }
-
-// Optional Google Maps key: read from the gitignored local.properties, empty by default (map toggle hidden).
-val mapsApiKey: String = Properties().also { props ->
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
-}.getProperty("MAPS_API_KEY", "").trim()
 
 android {
     namespace = "de.wanderlogplus.app"
@@ -21,10 +15,10 @@ android {
         applicationId = "de.wanderlogplus.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
-        buildConfigField("boolean", "HAS_MAPS_KEY", mapsApiKey.isNotEmpty().toString())
+        versionCode = 3
+        versionName = "0.3.0"
+        // MapLibre ships ~10 MB of native code per ABI; both target phones are arm64 (no emulator in use).
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {
@@ -40,11 +34,11 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { it.systemProperty("repoRoot", rootDir.path) }
     }
     sourceSets {
         // Robolectric unit tests read the debug variant's merged assets, so the Room schemas must live there (debug APK only).
@@ -55,6 +49,9 @@ android {
 kotlin { jvmToolchain(17) }
 
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
+
+// Screenshot tests only record (never compare); PNGs land under build/ and are never committed.
+roborazzi { outputDir.set(file("build/outputs/roborazzi")) }
 
 dependencies {
     implementation(project(":client"))
@@ -73,8 +70,8 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.coil.compose)
     implementation(libs.zxing.embedded)
-    implementation(libs.maps.compose)
-    implementation(libs.play.services.maps)
+    // OpenStreetMap maps (OpenFreeMap style, no key); never initialized in Robolectric tests.
+    implementation(libs.maplibre.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
@@ -93,6 +90,10 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    // Fixtures.realOrNull() runs the importer on the private real export when present.
+    testImplementation(project(":importer"))
 }
 
 // Compose UI tests need ui-test-manifest, which is debug-only; run unit tests for debug only.

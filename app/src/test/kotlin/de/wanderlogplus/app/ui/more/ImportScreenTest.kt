@@ -22,7 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], qualifiers = "w400dp-h2400dp")
 class ImportScreenTest {
     @get:Rule val rule = createComposeRule()
 
@@ -56,8 +56,13 @@ class ImportScreenTest {
         show(api { HttpStatusCode.OK to entry })
         rule.waitUntil(5_000) { rule.onAllNodesWithText("Noch keine Importe").fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("Aus Wanderlog importieren").performClick()
-        rule.waitUntil(5_000) { rule.onAllNodesWithText("neu 3", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("neu 3 · geändert 2 · Konflikte 1 · entfernt 0").assertIsDisplayed()
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("LETZTER IMPORT").fetchSemanticsNodes().isNotEmpty() }
+        // the latest import shows its numbers as small tiles: value above label
+        rule.onNodeWithText("3").assertIsDisplayed()
+        rule.onNodeWithText("neu").assertIsDisplayed()
+        rule.onNodeWithText("geändert").assertIsDisplayed()
+        rule.onNodeWithText("Konflikte").assertIsDisplayed()
+        rule.onNodeWithText("entfernt").assertIsDisplayed()
         assertEquals(1, imported)
         assertEquals(1, afterImport)
     }

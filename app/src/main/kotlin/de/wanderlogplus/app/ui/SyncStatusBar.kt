@@ -13,7 +13,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,12 +33,22 @@ fun SyncStatusBar(status: SyncStatus, now: Long = System.currentTimeMillis(), mo
         status.lastSyncAt != null -> "Zuletzt synchronisiert ${relativeAgo(status.lastSyncAt, now)}" to false
         else -> "Noch nicht synchronisiert" to false
     }
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-    )
+    val scheme = MaterialTheme.colorScheme
+    Box(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = if (isError) scheme.errorContainer else scheme.surfaceContainerHigh,
+            contentColor = if (isError) scheme.onErrorContainer else scheme.onSurfaceVariant,
+        ) {
+            Text(
+                text,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            )
+        }
+    }
 }
 
 /** Reusable empty state with a sync button. */

@@ -46,7 +46,11 @@ import de.wanderlogplus.app.ui.places.REGION_ROUTE
 import de.wanderlogplus.app.ui.places.RegionPlacesScreen
 import de.wanderlogplus.app.ui.places.placeRoute
 import de.wanderlogplus.app.ui.places.regionRoute
+import de.wanderlogplus.app.ui.logistics.LOGISTICS_DETAIL_ROUTE
+import de.wanderlogplus.app.ui.logistics.LogisticsDetailScreen
 import de.wanderlogplus.app.ui.logistics.LogisticsScreen
+import de.wanderlogplus.app.ui.logistics.logisticsDetailRoute
+import de.wanderlogplus.app.ui.logistics.logisticsTypeOf
 import de.wanderlogplus.app.ui.more.CONFLICTS_ROUTE
 import de.wanderlogplus.app.ui.more.ConflictsScreen
 import de.wanderlogplus.app.ui.more.IMPORT_ROUTE
@@ -101,6 +105,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
             else -> emptySet()
         }
@@ -108,6 +113,9 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
 
 /** Route of the server setup screen; "Mehr" (Task 9) navigates here to change the server. */
 const val SETUP_ROUTE = "setup"
+
+/** Snackbar after "Kartenbilder neu laden". */
+const val MSG_RELOAD_MAPS = "Kartenbilder werden neu geladen"
 
 private val EMPTY_AWARE_TABS = setOf(Tab.HEUTE, Tab.REISE, Tab.ORTE, Tab.LOGISTIK)
 
@@ -141,6 +149,8 @@ fun AppNavigation(
     /** Server settings from a setup deep link; shown on the setup screen (prefill only), then [onPendingSetupConsumed]. */
     pendingSetup: ServerSettings? = null,
     onPendingSetupConsumed: () -> Unit = {},
+    /** Deletes the cached route map pictures ("Kartenbilder neu laden" in Einstellungen). */
+    onReloadMapImages: suspend () -> Unit = {},
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -171,15 +181,16 @@ fun AppNavigation(
                         },
                         icon = { Icon(tab.icon, contentDescription = null) },
                         label = { Text(tab.label) },
+                        modifier = Modifier.testTag("nav-${tab.route}"),
                     )
                 }
             }
         },
     ) { padding ->
         val linkContext = LocalContext.current
-        val linkScope = rememberCoroutineScope()
+        val uiScope = rememberCoroutineScope()
         val onOpenLink: (ExternalLink) -> Unit = { link ->
-            if (!openExternalLink(linkContext, link)) linkScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+            if (!openExternalLink(linkContext, link)) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
         }
         val attachmentActions: AttachmentActions? =
             if (attachmentsViewModelFactory != null && attachmentFiles != null) {
@@ -231,7 +242,7 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) })
+                            else -> TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) }, today = rememberMinuteNow(clock).toLocalDate().toString())
                         }
                     }
                 }
@@ -293,7 +304,7 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory)
+                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory, today = rememberMinuteNow(clock).toLocalDate().toString())
                         }
                     }
                 }
@@ -307,7 +318,29 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> LogisticsScreen(s, attachments = attachmentActions, onOpenLink = onOpenLink)
+                            else -> LogisticsScreen(
+                                s,
+                                onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
+                                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                            )
+                        }
+                    }
+                }
+                composable(LOGISTICS_DETAIL_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val type = logisticsTypeOf(entry.arguments?.getString("type"))
+                    val id = entry.arguments?.getString("id").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            // An unknown type segment gets the same "nicht gefunden" page (with back) as a missing id.
+                            LogisticsDetailScreen(
+                                s, type, id,
+                                onBack = { nav.popBackStack() },
+                                attachments = attachmentActions,
+                                onOpenLink = onOpenLink,
+                                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                            )
                         }
                     }
                 }
@@ -342,7 +375,8 @@ fun AppNavigation(
                     }
                 }
                 composable(SETTINGS_ROUTE) {
-                    SyncedScreen(syncStatus, onRefresh) {
+                    // SettingsScreen scrolls itself; a scrollable wrapper would nest two vertical scrolls (crash).
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         SettingsScreen(
                             info = settingsInfo,
                             status = syncStatus,
@@ -353,6 +387,12 @@ fun AppNavigation(
                             onTripZone = onTripZone,
                             remindersEnabled = remindersEnabled,
                             onRemindersEnabled = onRemindersEnabled,
+                            onReloadMaps = {
+                                uiScope.launch {
+                                    onReloadMapImages()
+                                    snackbar.showSnackbar(MSG_RELOAD_MAPS)
+                                }
+                            },
                         )
                     }
                 }
