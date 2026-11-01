@@ -115,6 +115,24 @@ class PlacesScreenTest {
         assertEquals(order.sorted(), order)
     }
 
+    @Test fun emptyNoRegionTileIsHidden() {
+        seedData()
+        seed(EntityType.SAVED_PLACE, "sv-o", SavedPlace("sv-o", "po", "r1", PlaceCategory.OTHER)) // now assigned
+        rule.setContent { WanderlogPlusTheme { PlacesScreen(TripSnapshot.from(store.all()), onOpenRegion = {}) } }
+        rule.onNodeWithTag("region-r1").assertExists()
+        rule.onNodeWithTag("region-none").assertDoesNotExist()
+    }
+
+    @Test fun chainedAndCyclicDayTripsAreNeverDropped() {
+        seedData()
+        seed(EntityType.REGION, "r2", Region("r2", "Nara", "#2ecc71", dayTripFromRegionId = "r1"))
+        seed(EntityType.REGION, "r3", Region("r3", "Yoshino", "#27ae60", dayTripFromRegionId = "r2")) // day trip of a day trip
+        seed(EntityType.REGION, "r8", Region("r8", "Insel A", "#16a085", dayTripFromRegionId = "r9"))
+        seed(EntityType.REGION, "r9", Region("r9", "Insel B", "#1abc9c", dayTripFromRegionId = "r8")) // cycle
+        val order = regionTileOrder(TripSnapshot.from(store.all())).map { it.id }
+        assertEquals(listOf("r1", "r2", "r3", "r8", "r9"), order)
+    }
+
     @Test fun categoryFilterNarrowsList() {
         seedData()
         rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }

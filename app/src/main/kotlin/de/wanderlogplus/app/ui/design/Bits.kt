@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import de.wanderlogplus.app.ui.LocalDarkTheme
 
 data class BadgeSpec(val text: String, val tone: BadgeTone)
 
@@ -53,19 +55,17 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, color: Color = Mat
         style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 1.4.sp,
-        color = color,
+        color = readableOn(color, MaterialTheme.colorScheme.background),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
     )
 }
 
-private val isDark: Boolean @Composable get() = MaterialTheme.colorScheme.background.luminance() < 0.5f
-
 /** Status pill ("offen", "🎫 Ticket", "nicht offline"). */
 @Composable
 fun Badge(spec: BadgeSpec, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    val dark = isDark
+    val dark = LocalDarkTheme.current
     val (bg, fg) = when (spec.tone) {
         BadgeTone.Neutral -> scheme.surfaceVariant to scheme.onSurfaceVariant
         BadgeTone.Accent -> scheme.primaryContainer to scheme.onPrimaryContainer
@@ -150,6 +150,26 @@ fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 internal fun accentGradient(accent: Color): Brush = Brush.linearGradient(
     listOf(lerp(accent, Color.White, 0.22f), accent, lerp(accent, Color.Black, 0.38f)),
 )
+
+private fun contrast(a: Color, b: Color): Float {
+    val la = a.luminance()
+    val lb = b.luminance()
+    return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
+}
+
+/**
+ * [fg] (e.g. a region color used for small text) moved towards white on dark or towards black on light [bg] until
+ * it reaches a contrast of 4.5:1; colors that are readable already stay unchanged.
+ */
+fun readableOn(fg: Color, bg: Color): Color {
+    val target = if (bg.luminance() < 0.5f) Color.White else Color.Black
+    var x = fg
+    repeat(20) {
+        if (contrast(x, bg) >= 4.5f) return x
+        x = lerp(x, target, 0.1f)
+    }
+    return x
+}
 
 /** Highest luminance that still gives white text a contrast of at least 4.5:1 (with some margin). */
 private const val MAX_LUMINANCE_UNDER_WHITE = 0.16f
@@ -236,4 +256,16 @@ fun IconTile(icon: ImageVector, modifier: Modifier = Modifier) {
     ) {
         Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp)) }
     }
+}
+
+/** Widens the element by [by] on both sides beyond its parent's padding (e.g. a scrolling chip row reaching the screen edges). */
+fun Modifier.bleedHorizontally(by: androidx.compose.ui.unit.Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    val placeable = measurable.measure(
+        constraints.copy(
+            minWidth = constraints.minWidth + 2 * extra,
+            maxWidth = if (constraints.hasBoundedWidth) constraints.maxWidth + 2 * extra else constraints.maxWidth,
+        ),
+    )
+    layout((placeable.width - 2 * extra).coerceAtLeast(0), placeable.height) { placeable.place(-extra, 0) }
 }

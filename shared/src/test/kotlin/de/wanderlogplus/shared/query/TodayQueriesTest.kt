@@ -37,6 +37,21 @@ class TodayQueriesTest {
         assertEquals(listOf("t1", "f", "t2"), s.movements.map { (it as? Movement.FlightMove)?.flight?.id ?: (it as Movement.TrainMove).train.id })
     }
 
+    @Test fun movementsOnSortsByTimeWithMissingAndBlankLast() {
+        val fl = listOf(
+            Flight("late", depart = Endpoint(date = "2027-05-10", time = "18:05")),
+            Flight("blank", depart = Endpoint(date = "2027-05-10", time = "")),
+            Flight("other-day", depart = Endpoint(date = "2027-05-11", time = "06:00")),
+        )
+        val tr = listOf(
+            Train("none", depart = Endpoint(date = "2027-05-10")),
+            Train("early", depart = Endpoint(date = "2027-05-10", time = "06:40")),
+            Train("mid", depart = Endpoint(date = "2027-05-10", time = "09:12")),
+        )
+        val ids = movementsOn(fl, tr, "2027-05-10").map { (it as? Movement.FlightMove)?.flight?.id ?: (it as Movement.TrainMove).train.id }
+        assertEquals(listOf("early", "mid", "late", "blank", "none"), ids)
+    }
+
     @Test fun after() {
         assertIs<TodayState.After>(q().state(LocalDate.parse("2027-05-30")))
     }

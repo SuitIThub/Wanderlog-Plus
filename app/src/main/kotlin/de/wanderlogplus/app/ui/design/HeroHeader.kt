@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -35,11 +37,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.wanderlogplus.app.ui.HeroTitle
 
+/** Soft shadow under hero texts, so they stay readable on bright spots of a photo. */
+private val TextShadow = Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1f), blurRadius = 6f)
+
 private val Scrim = Brush.verticalGradient(
-    0f to Color.Black.copy(alpha = 0.28f),
-    0.3f to Color.Transparent,
-    0.45f to Color.Transparent,
-    1f to Color.Black.copy(alpha = 0.72f),
+    0f to Color.Black.copy(alpha = 0.30f),
+    0.28f to Color.Transparent,
+    // Darkens from just above the kicker: on low (140 dp) headers with busy photos the kicker sits mid-height.
+    0.38f to Color.Transparent,
+    0.55f to Color.Black.copy(alpha = 0.45f),
+    1f to Color.Black.copy(alpha = 0.78f),
 )
 
 /**
@@ -59,6 +66,8 @@ fun HeroHeader(
     modifier: Modifier = Modifier,
     /** Low headers with back/edit buttons pass 1 so kicker and title stay clear of the buttons. */
     titleMaxLines: Int = 2,
+    /** Told whether the title had to be cut (ellipsis), so a screen can show the full text elsewhere. */
+    onTitleOverflow: ((Boolean) -> Unit)? = null,
 ) {
     Box(modifier.fillMaxWidth().height(height).testTag("hero")) {
         PhotoOrGradient(imageUrl, accent, "hero-fallback", Modifier.matchParentSize(), gradient = heroGradient(accent))
@@ -77,7 +86,7 @@ fun HeroHeader(
             if (!kicker.isNullOrBlank()) {
                 Text(
                     kicker.uppercase(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(shadow = TextShadow),
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 1.6.sp,
                     color = Color.White.copy(alpha = 0.88f),
@@ -86,7 +95,16 @@ fun HeroHeader(
                 )
                 Spacer(Modifier.height(2.dp))
             }
-            Text(title, style = HeroTitle, color = Color.White, maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis)
+            Text(
+                title,
+                style = HeroTitle.copy(shadow = TextShadow),
+                color = Color.White,
+                maxLines = titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { r ->
+                    onTitleOverflow?.invoke(r.hasVisualOverflow || r.isLineEllipsized(r.lineCount - 1))
+                },
+            )
             if (chips.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {

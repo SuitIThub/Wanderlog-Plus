@@ -62,12 +62,22 @@ internal fun isDayTrip(snapshot: TripSnapshot, region: Region): Boolean =
     region.dayTripFromRegionId?.let { main -> main != region.id && snapshot.regions.any { it.id == main } } == true
 
 /**
- * Regions in tile order: every main region (snapshot order) directly followed by its day-trip regions. Day trips
- * whose main region is unknown count as main regions.
+ * Regions in tile order: every main region (snapshot order) directly followed by its day-trip regions, recursively
+ * (a day trip from a day trip follows that one). Day trips whose main region is unknown count as main regions.
+ * Every region appears exactly once: regions not reached that way (a cycle of day trips) are appended at the end.
  */
 internal fun regionTileOrder(snapshot: TripSnapshot): List<Region> {
     val dayTrips = snapshot.regions.filter { isDayTrip(snapshot, it) }.groupBy { it.dayTripFromRegionId }
-    return snapshot.regions.filterNot { isDayTrip(snapshot, it) }.flatMap { listOf(it) + dayTrips[it.id].orEmpty() }
+    val seen = mutableSetOf<String>()
+    val order = mutableListOf<Region>()
+    fun add(r: Region) {
+        if (!seen.add(r.id)) return
+        order += r
+        dayTrips[r.id].orEmpty().forEach(::add)
+    }
+    snapshot.regions.filterNot { isDayTrip(snapshot, it) }.forEach(::add)
+    snapshot.regions.forEach(::add) // leftovers, e.g. day trips that point at each other
+    return order
 }
 
 private data class RegionTile(val key: String, val name: String, val count: Int, val dayTrip: Boolean, val accent: Color, val imageUrl: String?)
@@ -80,7 +90,11 @@ fun PlacesScreen(snapshot: TripSnapshot, onOpenRegion: (regionKey: String) -> Un
     val tiles = remember(snapshot) {
         regionTileOrder(snapshot).map { r ->
             RegionTile(r.id, r.name, savedPlacesIn(snapshot, r.id).size, isDayTrip(snapshot, r), regionColor(r.color), regionHeroImage(snapshot, r.id))
-        } + RegionTile(NO_REGION, "Ohne Region", savedPlacesIn(snapshot, NO_REGION).size, false, NO_REGION_ACCENT, null)
+        } + listOfNotNull(
+            // "Ohne Region" only when something is in it.
+            savedPlacesIn(snapshot, NO_REGION).size.takeIf { it > 0 }
+                ?.let { RegionTile(NO_REGION, "Ohne Region", it, false, NO_REGION_ACCENT, null) },
+        )
     }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),

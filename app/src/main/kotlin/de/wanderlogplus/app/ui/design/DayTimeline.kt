@@ -35,11 +35,14 @@ import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.DayItem
 import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.query.isOpenAt
 import de.wanderlogplus.shared.sync.EntityType
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 
 private val HH_MM = DateTimeFormatter.ofPattern("HH:mm")
@@ -48,14 +51,18 @@ private val TextCardShape = RoundedCornerShape(18.dp)
 /**
  * Timeline of one day: [movements] first (marker = departure time, route map, ticket chips tagged `ticket-<id>`),
  * then the program [items] (marker = 1-based number; places as large photo cards with an "offen" badge when open at
- * [now], notes as text cards), finally the [stay] as "Nacht". Without items [emptyProgram] stands in for the program.
+ * [now], notes as text cards), finally the [stay] as "Nacht" – except on its check-out day ([date]), when nobody
+ * sleeps there any more. Without items [emptyProgram] stands in for the program. [movements] are shown in the given
+ * order; pass them time-sorted (shared `movementsOn`).
  *
- * Tags: `movement-<i>`, `<itemTagPrefix><item id>`, `timeline-night`. [itemActions] (e.g. a ⋮ menu) is shown at the end
- * of every program card.
+ * Tags: `<moveTagPrefix><i>`, `<itemTagPrefix><item id>`, `timeline-night`. [itemActions] (e.g. a ⋮ menu) is shown at the
+ * end of every program card.
  */
 @Composable
 fun DayTimeline(
     snapshot: TripSnapshot,
+    /** The day shown ("yyyy-MM-dd"); decides whether the [stay] still counts as tonight's. */
+    date: String,
     items: List<DayItem>,
     movements: List<Movement>,
     stay: Stay?,
@@ -67,6 +74,7 @@ fun DayTimeline(
     onOpenAttachment: (Attachment) -> Unit = {},
     available: (hash: String) -> Boolean = { true },
     itemTagPrefix: String = "day-item-",
+    moveTagPrefix: String = "movement-",
     itemActions: (@Composable (DayItem) -> Unit)? = null,
     emptyProgram: (@Composable () -> Unit)? = null,
 ) {
@@ -75,14 +83,14 @@ fun DayTimeline(
     Timeline(modifier, accent = accent) {
         movements.forEachIndexed { i, m ->
             item(m.time?.takeIf { it.isNotBlank() } ?: "Fahrt", key = "move-$i") {
-                MoveCard(snapshot, m, accent, onOpenAttachment, available, Modifier.testTag("movement-$i"))
+                MoveCard(snapshot, m, accent, onOpenAttachment, available, Modifier.testTag("$moveTagPrefix$i"))
             }
         }
         if (items.isEmpty() && emptyProgram != null) {
             item("Programm", key = "empty") { emptyProgram() }
         }
         items.forEachIndexed { i, item ->
-            item((i + 1).toString(), key = item.id) {
+            item((i + 1).toString(), key = "item-${item.id}") {
                 val tag = Modifier.testTag(itemTagPrefix + item.id)
                 val actions: (@Composable () -> Unit)? = itemActions?.let { a -> { a(item) } }
                 when (item.kind) {
@@ -117,11 +125,12 @@ fun DayTimeline(
                 }
             }
         }
-        if (stay != null) {
+        if (stay != null && stay.checkOut != date) {
             item("Nacht", key = "night") {
                 TextCard(
                     title = snapshot.places[stay.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft",
                     subtitle = "Übernachtung",
+                    titleMaxLines = 2,
                     modifier = Modifier.testTag("timeline-night"),
                 )
             }
@@ -138,17 +147,35 @@ fun Movement.routeTitle(): String {
     }
 }
 
-/** "09:12 – 09:58 · Carrier" (flights: airline code or name plus number); missing parts are left out. */
+/**
+ * "09:12 – 09:58 · Carrier" (flights: airline code or name plus number); missing parts are left out. An arrival on a
+ * later date than the departure gets "+n" days ("11:15 – 06:15 +1").
+ */
 fun Movement.timesLine(): String {
     val (dep, arr, carrier) = when (this) {
         is Movement.FlightMove -> Triple(
-            flight.depart.time, flight.arrive.time,
+            flight.depart, flight.arrive,
             listOfNotNull(flight.airlineCode ?: flight.airline, flight.number).filter { it.isNotBlank() }.joinToString(" "),
         )
-        is Movement.TrainMove -> Triple(train.depart.time, train.arrive.time, train.carrier.orEmpty())
+        is Movement.TrainMove -> Triple(train.depart, train.arrive, train.carrier.orEmpty())
     }
-    val times = listOfNotNull(dep, arr).filter { it.isNotBlank() }.joinToString(" – ")
-    return listOf(times, carrier.trim()).filter { it.isNotEmpty() }.joinToString(" · ")
+    return listOf(timesOf(dep, arr), carrier.trim()).filter { it.isNotEmpty() }.joinToString(" · ")
+}
+
+/** "09:12 – 09:58", with "+n" after the arrival when it is n days after the departure; empty without times. */
+fun timesOf(depart: Endpoint, arrive: Endpoint): String {
+    val arrTime = arrive.time?.takeIf { it.isNotBlank() }?.let { t ->
+        val days = dayOffset(depart.date, arrive.date)
+        if (days > 0) "$t +$days" else t
+    }
+    return listOfNotNull(depart.time?.takeIf { it.isNotBlank() }, arrTime).joinToString(" – ")
+}
+
+/** Whole days from [from] to [to] ("yyyy-MM-dd"); 0 when either is missing or unparsable. */
+private fun dayOffset(from: String?, to: String?): Long {
+    val a = from?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() } ?: return 0
+    val b = to?.let { runCatching { LocalDate.parse(it.take(10)) }.getOrNull() } ?: return 0
+    return ChronoUnit.DAYS.between(a, b)
 }
 
 @Composable
@@ -213,13 +240,15 @@ private fun TextCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /** Notes may run longer; names (the night's stay) keep the usual two lines. */
+    titleMaxLines: Int = 4,
 ) {
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     val elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     val body: @Composable () -> Unit = {
         Row(Modifier.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis)
                 if (!subtitle.isNullOrBlank()) {
                     Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

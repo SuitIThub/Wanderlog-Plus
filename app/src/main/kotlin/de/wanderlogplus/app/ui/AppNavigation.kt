@@ -327,15 +327,14 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("id").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
-                            if (type != null) {
-                                LogisticsDetailScreen(
-                                    s, type, id,
-                                    onBack = { nav.popBackStack() },
-                                    attachments = attachmentActions,
-                                    onOpenLink = onOpenLink,
-                                    today = rememberMinuteNow(clock).toLocalDate().toString(),
-                                )
-                            }
+                            // An unknown type segment gets the same "nicht gefunden" page (with back) as a missing id.
+                            LogisticsDetailScreen(
+                                s, type, id,
+                                onBack = { nav.popBackStack() },
+                                attachments = attachmentActions,
+                                onOpenLink = onOpenLink,
+                                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                            )
                         }
                     }
                 }

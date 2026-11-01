@@ -8,6 +8,8 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -92,6 +94,9 @@ val HeroTitle: TextStyle = TextStyle(
     lineHeight = 33.sp,
 )
 
+/** Whether [WanderlogPlusTheme] renders its dark scheme; read by components with hand-picked light/dark colors (badges). */
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
 /**
  * App theme. [dynamicColor] is off by default: on Android 12+ the wallpaper palette would otherwise replace the
  * warm scheme the design is built around.
@@ -110,5 +115,7 @@ fun WanderlogPlusTheme(
         darkTheme -> DarkColors
         else -> LightColors
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(colorScheme = colors, content = content)
+    }
 }

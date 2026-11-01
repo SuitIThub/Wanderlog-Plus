@@ -66,7 +66,7 @@ class ConflictsScreenTest {
         show()
         rule.onAllNodesWithText("App Titel").assertCountEquals(2) // label and App value
         rule.onNodeWithText("Wanderlog Titel").assertIsDisplayed()
-        rule.onNodeWithText("title").assertIsDisplayed()
+        rule.onNodeWithText("Titel").assertIsDisplayed() // German label of the field "title"
     }
 
     @Test fun takeWanderlogClearsListAndWritesBothFields() {

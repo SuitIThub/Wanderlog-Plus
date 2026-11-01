@@ -49,6 +49,7 @@ import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.filterSuggestions
+import de.wanderlogplus.shared.query.movementsOn
 import de.wanderlogplus.shared.query.sortSuggestions
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -90,7 +91,7 @@ fun DayDetailScreen(
     val region = remember(snapshot, view) { view?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } } }
     val accent = region?.let { regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
     val items = remember(snapshot, day) { day?.let { snapshot.dayItemsFor(it.id) }.orEmpty() }
-    val movements = remember(snapshot, date) { movementsOn(snapshot, date) }
+    val movements = remember(snapshot, date) { movementsOn(snapshot.flights, snapshot.trains, date) }
     val heroImage = remember(snapshot, date) { dayHeroImage(snapshot, date) }
     val derivedRegion = remember(snapshot, date) {
         queries?.derivedRegionFor(date)?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
@@ -145,6 +146,7 @@ fun DayDetailScreen(
             when (tab) {
                 TAB_PROGRAM -> DayProgramTab(
                     snapshot = snapshot,
+                    date = date,
                     items = items,
                     movements = movements,
                     stay = view?.stay,
@@ -194,12 +196,12 @@ fun DayDetailScreen(
         val auto = "Automatisch (" + (derivedRegion?.name ?: "keine Region") + ")"
         val options = listOf<Pair<String?, String>>(null to auto) + snapshot.regions.map { it.id to it.name }
         EditSheet("Tag bearbeiten", onDismiss = { editingDay = false }) {
-            DayEditForm(shownTitle, day?.regionOverrideId, options, onSave = { title, regionId ->
-                if (title != shownTitle) {
+            DayEditForm(shownTitle, day?.regionOverrideId, options, onSave = { changes ->
+                changes.title?.let { title ->
                     pendingTitle = title
                     onSetTitle(date, title)
                 }
-                if (regionId != day?.regionOverrideId) onSetRegion(date, regionId)
+                if (changes.regionChanged) onSetRegion(date, changes.regionId)
                 editingDay = false
             })
         }
@@ -235,14 +237,23 @@ private fun AddOption(icon: ImageVector, label: String, tag: String, onClick: ()
     }
 }
 
-/** Content of "Tag bearbeiten": title field and region dropdown; [onSave] gets the drafts. */
+/** What "Tag bearbeiten" changed: [title] null = untouched; [regionId] only counts when [regionChanged] (null = "Automatisch"). */
+internal data class DayEditChanges(val title: String?, val regionChanged: Boolean, val regionId: String?)
+
+/**
+ * Content of "Tag bearbeiten": title field and region dropdown. [onSave] gets only the fields the user changed, compared
+ * with the values when the sheet opened, so a sync arriving meanwhile is never overwritten with stale values.
+ */
 @Composable
 internal fun DayEditForm(
     initialTitle: String,
     initialRegion: String?,
     regionOptions: List<Pair<String?, String>>,
-    onSave: (title: String, regionId: String?) -> Unit,
+    onSave: (DayEditChanges) -> Unit,
 ) {
+    // Kept from the first composition: later recompositions may pass newer (synced) initial values.
+    val openedTitle = rememberSaveable { initialTitle }
+    val openedRegion = rememberSaveable { mutableStateOf(initialRegion) }.value
     var title by rememberSaveable { mutableStateOf(initialTitle) }
     var regionId by rememberSaveable { mutableStateOf(initialRegion) }
     Column(Modifier.fillMaxWidth().testTag("day-title-edit"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -261,7 +272,10 @@ internal fun DayEditForm(
             onSelect = { regionId = it },
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(onClick = { onSave(title, regionId) }, modifier = Modifier.align(Alignment.End).testTag("day-edit-save")) {
+        val save = {
+            onSave(DayEditChanges(title.takeIf { it != openedTitle }, regionId != openedRegion, regionId))
+        }
+        Button(onClick = save, modifier = Modifier.align(Alignment.End).testTag("day-edit-save")) {
             Text("Speichern")
         }
     }

@@ -98,9 +98,9 @@ class DayDetailEditTest {
     }
 
     @Test fun editTitleCallsSetDayTitle() {
-        var saved: Pair<String, String?>? = null
+        var saved: Pair<String?, String?>? = null
         rule.setContent {
-            WanderlogPlusTheme { DayEditForm("Tempeltag", null, regionOptions, onSave = { t, r -> saved = t to r }) }
+            WanderlogPlusTheme { DayEditForm("Tempeltag", null, regionOptions, onSave = { saved = it.title to it.regionId }) }
         }
         rule.onNodeWithTag("day-title-field").performTextClearance()
         rule.onNodeWithTag("day-title-field").performTextInput("Neuer Titel")
@@ -117,6 +117,46 @@ class DayDetailEditTest {
         assertEquals(emptyList<Pair<String, String>>(), c.titles)
         assertEquals(emptyList<Pair<String, String?>>(), c.regions)
         rule.onNodeWithText("Tag bearbeiten").assertDoesNotExist()
+    }
+
+    @Test fun sheetComparesWithValuesWhenOpened() {
+        seedTrip()
+        val c = Calls()
+        val snap = androidx.compose.runtime.mutableStateOf(TripSnapshot.from(store.all()))
+        rule.setContent {
+            WanderlogPlusTheme {
+                DayDetailScreen(
+                    snapshot = snap.value,
+                    date = "2027-05-09",
+                    onBack = {},
+                    onAddSuggestion = { _, _ -> },
+                    onMove = { _, _ -> },
+                    onRemove = {},
+                    onSetTitle = { d, t -> c.titles += d to t },
+                    onSetRegion = { d, r -> c.regions += d to r },
+                )
+            }
+        }
+        rule.onNodeWithTag("hero-edit").performClick()
+        // While the sheet is open a sync brings a new title and a region override from another device.
+        seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", "Vom Handy", "alte Notiz", regionOverrideId = "r2"))
+        snap.value = TripSnapshot.from(store.all())
+        rule.waitForIdle()
+        // Saving untouched drafts must not write the stale opened values back over the synced ones.
+        rule.onNodeWithTag("day-edit-save").tap()
+        assertEquals(emptyList<Pair<String, String>>(), c.titles)
+        assertEquals(emptyList<Pair<String, String?>>(), c.regions)
+    }
+
+    @Test fun formReportsOnlyChangedFields() {
+        var saved: DayEditChanges? = null
+        rule.setContent {
+            WanderlogPlusTheme { DayEditForm("Tempeltag", "r1", regionOptions, onSave = { saved = it }) }
+        }
+        rule.onNodeWithTag("region-dropdown").tap()
+        rule.onNodeWithTag("region-dropdown-option-2").tap()
+        rule.onNodeWithTag("day-edit-save").tap()
+        assertEquals(DayEditChanges(title = null, regionChanged = true, regionId = "r2"), saved)
     }
 
     @Test fun editNoteCallsSetDayNote() {

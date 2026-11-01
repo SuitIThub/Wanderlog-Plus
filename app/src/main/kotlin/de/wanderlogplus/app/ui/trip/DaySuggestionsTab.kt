@@ -25,6 +25,7 @@ import de.wanderlogplus.app.ui.categorySymbol
 import de.wanderlogplus.app.ui.design.BadgeSpec
 import de.wanderlogplus.app.ui.design.BadgeTone
 import de.wanderlogplus.app.ui.design.EmptyHint
+import de.wanderlogplus.app.ui.design.bleedHorizontally
 import de.wanderlogplus.app.ui.design.PhotoCard
 import de.wanderlogplus.app.ui.design.PhotoCardStyle
 import de.wanderlogplus.app.ui.design.heroImageUrl
@@ -56,7 +57,11 @@ internal fun DaySuggestionsTab(
             EmptyHint("Reisetag – keine Vorschläge")
             return@Column
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The chip row scrolls edge to edge (like in the region list) instead of being cut at the page padding.
+        Row(
+            Modifier.bleedHorizontally(16.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
                 FilterChip(
                     selected = category == c,

@@ -202,6 +202,7 @@ private fun During(
             SectionLabel("Tagesablauf", color = accent)
             DayTimeline(
                 snapshot = snapshot,
+                date = date,
                 items = items,
                 movements = state.movements,
                 stay = stay,

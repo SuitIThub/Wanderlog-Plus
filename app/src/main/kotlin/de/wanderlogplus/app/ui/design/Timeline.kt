@@ -50,6 +50,7 @@ fun Timeline(
     val entries = TimelineScope().apply(content).entries
     val ring = ringColor
     val line = accent.copy(alpha = 0.35f)
+    val markerColor = readableOn(accent, ringColor) // small text: region colors can be too dim on the dark background
     Column(modifier.fillMaxWidth()) {
         entries.forEachIndexed { i, e ->
             key(e.key ?: i) {
@@ -73,7 +74,7 @@ fun Timeline(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.6.sp,
-                            color = accent,
+                            color = markerColor,
                             maxLines = 1,
                         )
                         Spacer(Modifier.height(4.dp))

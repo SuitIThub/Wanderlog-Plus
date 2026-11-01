@@ -158,6 +158,9 @@ fun PlaceDetailScreen(
 
     val fileCount = snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id).size
 
+    // The one-line hero cuts long names; the full name then opens the details below it.
+    var titleCut by remember(saved.id) { mutableStateOf(false) }
+
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         HeroHeader(
             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
@@ -168,9 +171,18 @@ fun PlaceDetailScreen(
             onBack = onBack,
             onEdit = { editingTags = true },
             titleMaxLines = 1,
+            onTitleOverflow = { titleCut = it },
         )
 
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            place?.name?.takeIf { titleCut && it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.testTag("place-full-name"),
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 place?.let(::ratingText)?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                 Text(
@@ -236,6 +248,7 @@ fun PlaceDetailScreen(
                         snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id),
                         attachments,
                         onAdd = { attachments.onAdd(EntityType.SAVED_PLACE, saved.id) },
+                        showTitle = false, // "Dateien" label above
                     )
                 }
             }

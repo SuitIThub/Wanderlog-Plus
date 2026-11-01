@@ -30,6 +30,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w400dp-h2400dp")
@@ -79,6 +80,22 @@ class PlaceDetailTest {
 
     private fun outboxValue(field: String): JsonElement? =
         outbox.peek(100).map { it.change }.lastOrNull { it.field == field }?.value
+
+    // Native graphics: only real text measurement tells that the one-line hero title is cut.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun longNameIsShownInFullBelowHero() {
+        val long = "Hotel Gion Shinmonzen Kyoto Higashiyama Annex am Shirakawa-Kanal"
+        seedPlace(Place("p1", name = long))
+        show()
+        rule.onNode(hasTestTag("place-full-name") and hasText(long)).assertIsDisplayed()
+    }
+
+    @Test fun shortNameIsNotRepeated() {
+        seedPlace()
+        show()
+        rule.onNodeWithText("Schrein Alpha").assertExists()
+        rule.onNodeWithTag("place-full-name").assertDoesNotExist()
+    }
 
     @Test fun editNoteSavesAndShowsNewText() {
         seedPlace()

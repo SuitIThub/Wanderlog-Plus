@@ -15,10 +15,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.maps.RouteGeometry
@@ -59,12 +63,12 @@ private class BookingView(
 /**
  * Booking detail of a flight, train or stay: hero (route map below it for flights and trains, photo for stays), then
  * "Details" (endpoints, times, confirmation number, travelers, cancellation), "Notiz", "Navigation" (stays only) and
- * "Anhänge". The page scrolls.
+ * "Anhänge". The page scrolls. An unknown [type] (null: bad route segment) or [id] shows "Buchung nicht gefunden" with back.
  */
 @Composable
 fun LogisticsDetailScreen(
     snapshot: TripSnapshot,
-    type: EntityType,
+    type: EntityType?,
     id: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -77,13 +81,16 @@ fun LogisticsDetailScreen(
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
 
-    if (view == null) {
+    if (view == null || type == null) {
         Column(modifier.fillMaxSize()) {
             HeroHeader("Buchung nicht gefunden", kicker = null, imageUrl = null, accent = primary, height = 140.dp, onBack = onBack, titleMaxLines = 1)
             EmptyHint("Diese Buchung existiert nicht mehr.", Modifier.padding(16.dp))
         }
         return
     }
+
+    // The one-line hero cuts long names (stays); the full name then opens the page body.
+    var titleCut by remember(type, id) { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         HeroHeader(
@@ -94,10 +101,19 @@ fun LogisticsDetailScreen(
             height = 140.dp,
             onBack = onBack,
             titleMaxLines = 1,
+            onTitleOverflow = { titleCut = it },
         )
         RouteMap(view.route, view.accent, height = 160.dp)
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+            if (titleCut) {
+                Text(
+                    view.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 12.dp).testTag("logistics-full-title"),
+                )
+            }
             SectionLabel("Details", color = view.accent)
             InfoCard {
                 view.details.forEach { (label, value) -> DetailRow(label, value) }
@@ -138,7 +154,7 @@ fun LogisticsDetailScreen(
     }
 }
 
-private fun bookingView(snapshot: TripSnapshot, type: EntityType, id: String, today: String?, primary: Color): BookingView? =
+private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, today: String?, primary: Color): BookingView? =
     when (type) {
         EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let { f ->
             BookingView(

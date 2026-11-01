@@ -163,7 +163,7 @@ private fun LatestImportCard(e: ImportLogInfo) {
                 StatTile(e.conflicts, "Konflikte", Modifier.weight(1f))
                 StatTile(e.removed, "entfernt", Modifier.weight(1f))
             }
-            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", color = MaterialTheme.colorScheme.error)
+            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -188,7 +188,7 @@ private fun LogRow(e: ImportLogInfo) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", color = MaterialTheme.colorScheme.error)
+            if (!e.ok) Text("Der Import ist auf dem Server fehlgeschlagen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
     }
 }

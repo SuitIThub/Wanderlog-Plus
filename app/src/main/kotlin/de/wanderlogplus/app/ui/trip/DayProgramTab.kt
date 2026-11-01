@@ -33,6 +33,7 @@ import de.wanderlogplus.shared.query.Movement
 @Composable
 internal fun DayProgramTab(
     snapshot: TripSnapshot,
+    date: String,
     items: List<DayItem>,
     movements: List<Movement>,
     stay: Stay?,
@@ -44,6 +45,7 @@ internal fun DayProgramTab(
     Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp)) {
         DayTimeline(
             snapshot = snapshot,
+            date = date,
             items = items,
             movements = movements,
             stay = stay,
@@ -52,6 +54,7 @@ internal fun DayProgramTab(
             onOpenAttachment = { a -> attachments?.onOpen?.invoke(a) },
             available = attachments?.available ?: { true },
             itemTagPrefix = "program-row-",
+            moveTagPrefix = "program-move-",
             itemActions = { item ->
                 val i = items.indexOfFirst { it.id == item.id }
                 ItemMenu(item.id, first = i <= 0, last = i == items.lastIndex, onMove, onRemove)

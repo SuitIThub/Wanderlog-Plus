@@ -76,11 +76,13 @@ internal fun DayNotesTab(
             }
         }
         if (attachments != null) {
+            // Same section label as "Tagesnotiz" instead of the section's own plain title.
+            SectionLabel("Anhänge", color = accent)
             AttachmentsFor(
                 day?.let { snapshot.attachmentsFor(EntityType.DAY, it.id) }.orEmpty(),
                 attachments,
                 onAdd = { attachments.onAddToDay(date) },
-                modifier = Modifier.padding(top = 8.dp),
+                showTitle = false,
             )
         }
     }

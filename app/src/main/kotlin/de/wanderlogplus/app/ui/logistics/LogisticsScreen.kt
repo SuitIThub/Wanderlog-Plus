@@ -43,6 +43,7 @@ import de.wanderlogplus.app.ui.design.PhotoCardStyle
 import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.design.routeTitle
+import de.wanderlogplus.app.ui.design.timesOf
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Endpoint
@@ -160,9 +161,8 @@ internal fun cancellationOpen(s: Stay, today: String?): Boolean {
     return !deadline.isBefore(now)
 }
 
-/** "10:00 – 20:00"; empty without times. */
-internal fun timesText(depart: Endpoint, arrive: Endpoint): String =
-    listOfNotNull(depart.time, arrive.time).filter { it.isNotBlank() }.joinToString(" – ")
+/** "10:00 – 20:00" ("+1" after an arrival on the next day); empty without times. Same helper as the timeline. */
+internal fun timesText(depart: Endpoint, arrive: Endpoint): String = timesOf(depart, arrive)
 
 private const val TAB_MOVES = 0
 private const val TAB_STAYS = 1

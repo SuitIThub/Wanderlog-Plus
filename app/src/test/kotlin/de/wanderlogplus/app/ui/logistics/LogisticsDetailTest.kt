@@ -89,4 +89,16 @@ class LogisticsDetailTest {
         rule.onNodeWithTag("hero-back").performClick()
         assertEquals(1, back)
     }
+
+    @Test fun unknownTypeShowsNotFoundWithBack() {
+        val snap = LogisticsFixture.snapshot()
+        var back = 0
+        val type = logisticsTypeOf("boat")
+        assertEquals(null, type)
+        rule.setContent { WanderlogPlusTheme { LogisticsDetailScreen(snap, type, "f1", onBack = { back++ }) } }
+        rule.onNodeWithText("Buchung nicht gefunden").assertIsDisplayed()
+        rule.onNodeWithText("Diese Buchung existiert nicht mehr.").assertIsDisplayed()
+        rule.onNodeWithTag("hero-back").performClick()
+        assertEquals(1, back)
+    }
 }

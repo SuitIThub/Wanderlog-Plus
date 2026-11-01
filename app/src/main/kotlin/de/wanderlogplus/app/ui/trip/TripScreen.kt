@@ -42,6 +42,7 @@ import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.query.DayView
 import de.wanderlogplus.shared.query.Movement
+import de.wanderlogplus.shared.query.movementsOn
 
 /** Route of the day detail, nested in the Reise tab. */
 const val DAY_ROUTE = "trip/day/{date}"
@@ -54,12 +55,6 @@ fun RegionChip(name: String, color: Color, modifier: Modifier = Modifier) {
         Text(name, style = MaterialTheme.typography.labelLarge)
     }
 }
-
-/** Flights and trains departing on [date], by departure time (missing last). */
-fun movementsOn(snapshot: TripSnapshot, date: String): List<Movement> =
-    (snapshot.flights.filter { it.depart.date == date }.map { Movement.FlightMove(it) } +
-        snapshot.trains.filter { it.depart.date == date }.map { Movement.TrainMove(it) })
-        .sortedWith(compareBy(nullsLast()) { it.time })
 
 /** Small symbol of a movement for compact hints ("3 geplant · 🚄"). */
 fun Movement.symbol(): String = when (this) {
@@ -83,11 +78,13 @@ fun TripScreen(snapshot: TripSnapshot, onOpenDay: (String) -> Unit, modifier: Mo
         val regionsById = snapshot.regions.associateBy { it.id }
         snapshot.queries()?.days().orEmpty().map { d ->
             val region = d.regionId?.let { regionsById[it] }
-            val title = d.day?.title?.takeIf { it.isNotBlank() } ?: region?.name ?: if (d.isTravelDay) "Reisetag" else "Kein Titel"
+            val ownTitle = d.day?.title?.takeIf { it.isNotBlank() } ?: region?.name
+            // "Reisetag" either stands in for a missing title or, below a real title, goes into the subtitle.
+            val title = ownTitle ?: if (d.isTravelDay) "Reisetag" else "Kein Titel"
             val planned = d.day?.let { snapshot.dayItemsFor(it.id).size } ?: 0
-            val moves = movementsOn(snapshot, d.date).map { it.symbol() }.distinct()
+            val moves = movementsOn(snapshot.flights, snapshot.trains, d.date).map { it.symbol() }.distinct()
             val subtitle = listOfNotNull(
-                "Reisetag".takeIf { d.isTravelDay && title != "Reisetag" },
+                "Reisetag".takeIf { d.isTravelDay && ownTitle != null },
                 "$planned geplant".takeIf { planned > 0 },
                 moves.joinToString(" ").takeIf { it.isNotEmpty() },
             ).joinToString(" · ").ifEmpty { "Noch nichts geplant" }

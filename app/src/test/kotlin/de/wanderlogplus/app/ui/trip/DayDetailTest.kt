@@ -245,6 +245,21 @@ class DayDetailTest {
         assertEquals("2027-05-09", opened)
     }
 
+    @Test fun tripListTravelDayFallbackTitleIsNotRepeated() {
+        seedTrip(withStay = false) // no stay: no region, every day is a travel day
+        seed(EntityType.DAY, "d3", Day("d3", "2027-05-11", "Reisetag"))
+        rule.setContent { WanderlogPlusTheme { TripScreen(TripSnapshot.from(store.all()), onOpenDay = {}) } }
+        // Untitled travel day: "Reisetag" is the title, the subtitle does not repeat it.
+        rule.onNode(hasText("Reisetag") and hasTestTag("day-2027-05-10")).assertExists()
+        rule.onNode(hasText("Noch nichts geplant") and hasTestTag("day-2027-05-10")).assertExists()
+        // A day the user titled himself keeps the travel-day hint, whatever the title says.
+        rule.onNode(hasText("Tempeltag") and hasTestTag("day-2027-05-09")).assertExists()
+        rule.onNode(hasText("Reisetag", substring = true) and hasText("1 geplant", substring = true) and hasTestTag("day-2027-05-09")).assertExists()
+        // Even when that title is literally "Reisetag": the subtitle carries the hint instead of "Noch nichts geplant".
+        rule.onNode(hasText("Noch nichts geplant") and hasTestTag("day-2027-05-11")).assertDoesNotExist()
+        rule.onNode(hasText("Noch nichts geplant") and hasTestTag("day-2027-05-12")).assertExists()
+    }
+
     @Test fun tripListShowsMovementSymbolAndHighlightsToday() {
         seedTrip()
         seed(

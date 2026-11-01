@@ -58,7 +58,7 @@ fun ConflictsScreen(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Column {
                         Text(c.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(c.field, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(conflictFieldLabel(c.field), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ValueBox("App:", c.appValue, Modifier.weight(1f))
@@ -86,4 +86,22 @@ private fun ValueBox(title: String, value: JsonElement, modifier: Modifier = Mod
             if (long) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "weniger" else "mehr") }
         }
     }
+}
+
+/** German name of a conflicting field ("title" → "Titel"); unknown fields keep their technical name. */
+internal fun conflictFieldLabel(field: String): String = when (field) {
+    "title" -> "Titel"
+    "name" -> "Name"
+    "note" -> "Notiz"
+    "text" -> "Text"
+    "date" -> "Datum"
+    "time" -> "Uhrzeit"
+    "tags" -> "Tags"
+    "status" -> "Status"
+    "category" -> "Kategorie"
+    "regionId", "regionOverrideId" -> "Region"
+    "sortKey" -> "Reihenfolge"
+    "checkIn" -> "Check-in"
+    "checkOut" -> "Check-out"
+    else -> field
 }
