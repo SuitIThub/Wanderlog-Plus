@@ -65,3 +65,27 @@ fun openingHoursLines(periods: List<de.wanderlogplus.shared.model.OpeningPeriod>
 
 /** "★ 4,5" (German decimal comma). */
 fun ratingLabel(rating: Double): String = "★ " + String.format(java.util.Locale.GERMAN, "%.1f", rating)
+
+private val MONTHS_DE = listOf(
+    "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember",
+)
+
+/**
+ * Hero kicker "Do · 20. Mai · Tag 13"; the day number counts from [tripStart] (day 1) and is left out when that is
+ * missing or unparsable. Unparsable [date] is returned unchanged.
+ */
+fun dayKicker(date: String, tripStart: String?): String {
+    val d = try { java.time.LocalDate.parse(date) } catch (_: java.time.format.DateTimeParseException) { return date }
+    val start = try { tripStart?.let { java.time.LocalDate.parse(it) } } catch (_: java.time.format.DateTimeParseException) { null }
+    val head = "${WEEKDAYS_DE[d.dayOfWeek.value - 1]} · ${d.dayOfMonth}. ${MONTHS_DE[d.monthValue - 1]}"
+    return if (start == null) head else "$head · Tag ${java.time.temporal.ChronoUnit.DAYS.between(start, d) + 1}"
+}
+
+/** Small symbol for photo placeholders by category. */
+fun categorySymbol(c: de.wanderlogplus.shared.model.PlaceCategory?) = when (c) {
+    de.wanderlogplus.shared.model.PlaceCategory.SIGHT -> "⛩"
+    de.wanderlogplus.shared.model.PlaceCategory.FOOD -> "🍜"
+    de.wanderlogplus.shared.model.PlaceCategory.SHOPPING -> "🛍"
+    de.wanderlogplus.shared.model.PlaceCategory.NIGHTLIFE -> "🍸"
+    de.wanderlogplus.shared.model.PlaceCategory.OTHER, null -> "📍"
+}
