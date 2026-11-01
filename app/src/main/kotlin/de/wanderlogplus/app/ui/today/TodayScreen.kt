@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.EmptyState
 import de.wanderlogplus.app.ui.dayLabel
+import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.trip.RegionChip
 import de.wanderlogplus.client.TripSnapshot
@@ -169,7 +170,7 @@ private fun During(
                             Text(s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", style = MaterialTheme.typography.bodyLarge)
                             s.place?.rating?.let {
                                 Text(
-                                    "★ %.1f".format(java.util.Locale.ROOT, it),
+                                    ratingLabel(it),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.categoryLabel
+import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.statusLabel
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.PlaceCategory
@@ -68,7 +69,7 @@ fun RegionPlacesScreen(
                         Text(s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", style = MaterialTheme.typography.bodyLarge)
                         s.place?.rating?.let {
                             Text(
-                                "★ %.1f".format(java.util.Locale.ROOT, it),
+                                ratingLabel(it),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

@@ -62,3 +62,6 @@ fun openingHoursLines(periods: List<de.wanderlogplus.shared.model.OpeningPeriod>
         }
         name to text
     }
+
+/** "★ 4,5" (German decimal comma). */
+fun ratingLabel(rating: Double): String = "★ " + String.format(java.util.Locale.GERMAN, "%.1f", rating)

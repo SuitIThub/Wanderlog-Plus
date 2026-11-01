@@ -93,6 +93,20 @@ class PlaceDetailTest {
         rule.onNodeWithTag("note-field").assertDoesNotExist()
     }
 
+    @Test fun savedNoteShowsImmediatelyBeforeSnapshotCatchesUp() {
+        seedPlace()
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> })
+            }
+        }
+        rule.onNodeWithText("Bearbeiten").performClick()
+        rule.onNodeWithTag("note-field").performTextClearance()
+        rule.onNodeWithTag("note-field").performTextInput("Sofort sichtbar")
+        rule.onNodeWithText("Speichern").performClick()
+        rule.onNodeWithText("Sofort sichtbar").assertIsDisplayed()
+    }
+
     @Test fun cancelEditWritesNothing() {
         seedPlace()
         show()
@@ -126,7 +140,7 @@ class PlaceDetailTest {
             ),
         )
         show()
-        rule.onNodeWithText("★ 4.5 (1.234)").assertIsDisplayed()
+        rule.onNodeWithText("★ 4,5 (1.234)").assertIsDisplayed()
         rule.onNodeWithText("60–90 Min.", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Gion 1").assertIsDisplayed()
         rule.onNodeWithText("Alter Schrein").assertIsDisplayed()

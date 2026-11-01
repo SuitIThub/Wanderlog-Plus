@@ -34,6 +34,7 @@ import de.wanderlogplus.app.ui.places.RegionPlacesScreen
 import de.wanderlogplus.app.ui.places.placeRoute
 import de.wanderlogplus.app.ui.places.regionRoute
 import de.wanderlogplus.app.ui.today.TodayScreen
+import de.wanderlogplus.app.ui.today.rememberMinuteNow
 import de.wanderlogplus.app.ui.trip.DAY_ROUTE
 import de.wanderlogplus.app.ui.trip.DayDetailScreen
 import de.wanderlogplus.app.ui.trip.TripScreen
@@ -134,12 +135,13 @@ fun AppNavigation(
             if (tripViewModelFactory != null) {
                 composable(Tab.HEUTE.route) {
                     val s = snapshot
+                    val now = rememberMinuteNow(clock)
                     SyncedScreen(syncStatus, onRefresh, scrollable = s?.isEmpty != false) {
                         if (s == null) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         } else {
                             TodayScreen(
-                                s, clock(),
+                                s, now,
                                 onOpenDay = { nav.navigate(dayRoute(it)) },
                                 onOpenTrip = { nav.navigateToTab(Tab.REISE) },
                                 onSyncNow = onRefresh,

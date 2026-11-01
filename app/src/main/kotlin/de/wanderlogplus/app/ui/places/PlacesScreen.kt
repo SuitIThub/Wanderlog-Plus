@@ -24,8 +24,8 @@ import de.wanderlogplus.shared.model.SavedPlace
 /** Routes of the Orte tab (nested: region list -> region places -> place detail). */
 const val REGION_ROUTE = "orte/region/{regionKey}"
 const val PLACE_ROUTE = "orte/place/{savedPlaceId}"
-fun regionRoute(regionKey: String) = "orte/region/$regionKey"
-fun placeRoute(savedPlaceId: String) = "orte/place/$savedPlaceId"
+fun regionRoute(regionKey: String) = "orte/region/${android.net.Uri.encode(regionKey)}"
+fun placeRoute(savedPlaceId: String) = "orte/place/${android.net.Uri.encode(savedPlaceId)}"
 
 /** Pseudo region key for saved places without (a known) region. */
 const val NO_REGION = "none"

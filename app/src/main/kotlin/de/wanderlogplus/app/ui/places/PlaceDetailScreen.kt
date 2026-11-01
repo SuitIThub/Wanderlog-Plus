@@ -2,6 +2,8 @@ package de.wanderlogplus.app.ui.places
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,12 +17,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import coil.compose.AsyncImage
 import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.openingHoursLines
+import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.statusLabel
 import de.wanderlogplus.app.ui.today.Section
 import de.wanderlogplus.client.TripSnapshot
@@ -48,7 +50,7 @@ private const val IMAGE_BASE = "https://itin-dev.wanderlogstatic.com/freeImageMe
 internal fun ratingText(place: Place): String? {
     val r = place.rating ?: return null
     val count = place.numRatings?.let { " (" + String.format(Locale.GERMAN, "%,d", it) + ")" }.orEmpty()
-    return "★ " + String.format(Locale.ROOT, "%.1f", r) + count
+    return ratingLabel(r) + count
 }
 
 internal fun durationText(place: Place): String? {
@@ -61,6 +63,7 @@ internal fun durationText(place: Place): String? {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlaceDetailScreen(
     snapshot: TripSnapshot,
@@ -74,6 +77,9 @@ fun PlaceDetailScreen(
     val place = saved?.let { snapshot.places[it.placeId] }
     var editing by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
+    // Shown right after saving, until the snapshot carries the new note.
+    var pendingNote by remember(savedPlaceId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(saved?.note) { pendingNote = null }
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -118,14 +124,13 @@ fun PlaceDetailScreen(
         }
 
         Section("Status") {
-            val statuses = PlaceStatus.entries
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                statuses.forEachIndexed { i, s ->
-                    SegmentedButton(
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PlaceStatus.entries.forEach { s ->
+                    FilterChip(
                         selected = saved.status == s,
                         onClick = { if (saved.status != s) onSetStatus(saved.id, s) },
-                        shape = SegmentedButtonDefaults.itemShape(i, statuses.size),
-                    ) { Text(statusLabel(s), maxLines = 1) }
+                        label = { Text(statusLabel(s)) },
+                    )
                 }
             }
         }
@@ -139,13 +144,14 @@ fun PlaceDetailScreen(
                     minLines = 3,
                 )
                 Row {
-                    Button(onClick = { onSaveNote(saved.id, draft); editing = false }) { Text("Speichern") }
+                    Button(onClick = { pendingNote = draft; onSaveNote(saved.id, draft); editing = false }) { Text("Speichern") }
                     TextButton(onClick = { editing = false }) { Text("Abbrechen") }
                 }
             } else {
-                if (saved.note.isNotBlank()) MarkdownText(saved.note, Modifier.testTag("place-note"))
+                val shownNote = pendingNote ?: saved.note
+                if (shownNote.isNotBlank()) MarkdownText(shownNote, Modifier.testTag("place-note"))
                 else Text("Keine Notiz", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { draft = saved.note; editing = true }) { Text("Bearbeiten") }
+                TextButton(onClick = { draft = pendingNote ?: saved.note; editing = true }) { Text("Bearbeiten") }
             }
         }
     }

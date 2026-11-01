@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.MarkdownText
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.dayLabel
+import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.DayItem
@@ -162,7 +163,7 @@ private fun SuggestionCard(s: Suggestion, date: String, onAdd: (String, String) 
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", style = MaterialTheme.typography.titleSmall)
             if (s.saved.tags.isNotEmpty()) Text(s.saved.tags.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-            val rating = s.place?.rating?.let { "★ %.1f".format(java.util.Locale.GERMAN, it) }
+            val rating = s.place?.rating?.let { ratingLabel(it) }
             Text(
                 listOfNotNull(categoryLabel(s.saved.category), rating).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
