@@ -59,7 +59,11 @@ class ApiException(
 
 class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     private val base = baseUrl.trimEnd('/')
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        // The server omits null fields (e.g. PushResponse.maxHlc when nothing was written).
+        explicitNulls = false
+    }
     private val client = http.config {
         install(ContentNegotiation) { json(json) }
         install(HttpTimeout) {
