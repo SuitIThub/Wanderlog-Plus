@@ -15,6 +15,7 @@ import java.io.InputStream
 class AttachmentsViewModelTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
     private val calls = mutableListOf<Triple<EntityType, String, String>>()
+    private var daysCreated = 0
 
     private fun source(name: String = "Ticket.pdf") = object : AttachmentSource {
         override fun fileName() = name
@@ -22,12 +23,19 @@ class AttachmentsViewModelTest {
         override fun open(): InputStream? = ByteArrayInputStream(ByteArray(3))
     }
 
-    private fun vm(add: suspend (EntityType, String, InputStream, String, String) -> String = { t, id, _, n, _ -> calls += Triple(t, id, n); "x" }) =
-        AttachmentsViewModel(edit = {}, addAttachment = add, ensureDay = { "day-$it" }, writeScope = scope)
+    private fun vm(add: suspend (EntityType, suspend () -> String, InputStream, String, String) -> String = { t, id, _, n, _ -> calls += Triple(t, id(), n); "x" }) =
+        AttachmentsViewModel(edit = {}, addAttachment = add, ensureDay = { daysCreated++; "day-$it" }, writeScope = scope)
 
     @Test fun addToDayCreatesDayFirstAndTargetsIt() = runBlocking {
         vm().add(AttachmentTarget.Day("2027-05-20"), source()).join()
         assertEquals(listOf(Triple(EntityType.DAY, "day-2027-05-20", "Ticket.pdf")), calls)
+    }
+
+    @Test fun tooLargeFileForDayCreatesNoDay() = runBlocking {
+        val v = vm { _, _, _, _, _ -> throw AttachmentTooLargeException() } // rejects before resolving the target
+        v.add(AttachmentTarget.Day("2027-05-20"), source()).join()
+        assertEquals(0, daysCreated)
+        assertEquals(MSG_TOO_LARGE, v.message.value)
     }
 
     @Test fun tooLargeShowsFixedMessage() = runBlocking {

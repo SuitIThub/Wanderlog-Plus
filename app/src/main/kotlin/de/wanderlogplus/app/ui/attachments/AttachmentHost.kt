@@ -43,13 +43,14 @@ class ContentUriSource(private val resolver: ContentResolver, private val uri: U
 }
 
 const val MSG_NO_APP = "Keine App zum Öffnen gefunden"
+const val MSG_UNAVAILABLE = "Datei nicht verfügbar"
 const val MSG_NOT_OFFLINE = "Datei nicht offline verfügbar"
 
 fun fileProviderAuthority(context: Context) = "${context.packageName}.files"
 
-/** ACTION_VIEW with a FileProvider URI; false when no app handles it. */
-fun openExternally(context: Context, file: File, mimeType: String): Boolean {
-    val uri = FileProvider.getUriForFile(context, fileProviderAuthority(context), file)
+/** ACTION_VIEW with a FileProvider URI; false when no app handles it, null when the file cannot be shared. */
+fun openExternally(context: Context, file: File, mimeType: String): Boolean? {
+    val uri = try { FileProvider.getUriForFile(context, fileProviderAuthority(context), file) } catch (_: IllegalArgumentException) { return null }
     val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, mimeType).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     return try {
         context.startActivity(intent)
@@ -98,7 +99,11 @@ fun rememberAttachmentActions(
                     OpenTarget.Unavailable -> scope.launch { snackbar.showSnackbar(MSG_NOT_OFFLINE) }
                     is OpenTarget.Image, is OpenTarget.Pdf -> onViewState.value(a)
                     is OpenTarget.External ->
-                        if (!openExternally(context, t.file, t.mimeType)) scope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+                        when (openExternally(context, t.file, t.mimeType)) {
+                            false -> scope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+                            null -> scope.launch { snackbar.showSnackbar(MSG_UNAVAILABLE) }
+                            true -> Unit
+                        }
                 }
             },
             onDelete = { vm.delete(it) },

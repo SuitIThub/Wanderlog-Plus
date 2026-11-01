@@ -52,7 +52,7 @@ fun openTargetFor(a: Attachment, files: AttachmentFiles): OpenTarget {
 /** "1,2 MB" (one decimal from MB), "332 KB", "12 B"; base 1024. */
 fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
-    bytes < 1024L * 1024 -> "${Math.round(bytes / 1024.0)} KB"
+    bytes < 1_048_064L -> "${Math.round(bytes / 1024.0)} KB" // from here KB would round up to 1024
     else -> String.format(Locale.GERMAN, "%.1f MB", bytes / (1024.0 * 1024.0))
 }
 

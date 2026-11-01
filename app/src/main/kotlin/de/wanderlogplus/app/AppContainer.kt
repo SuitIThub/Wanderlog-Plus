@@ -121,13 +121,23 @@ class AppContainer(context: Context) {
         input: InputStream,
         fileName: String,
         mimeType: String,
+    ): String = addAttachment(targetType, { targetId }, input, fileName, mimeType)
+
+    /** Like above, but [targetId] is resolved only after the file was imported (a rejected file creates nothing). */
+    suspend fun addAttachment(
+        targetType: EntityType,
+        targetId: suspend () -> String,
+        input: InputStream,
+        fileName: String,
+        mimeType: String,
     ): String {
         val imported = withContext(Dispatchers.IO) {
             attachmentFiles.importStream(input).also {
                 db.pendingUploads().insert(PendingUploadEntity(it.hash, fileName, mimeType, System.currentTimeMillis()))
             }
         }
-        val id = edit { e, _ -> e.addAttachment(targetType, targetId, imported.hash, fileName, mimeType, imported.size) }
+        val resolvedTarget = targetId()
+        val id = edit { e, _ -> e.addAttachment(targetType, resolvedTarget, imported.hash, fileName, mimeType, imported.size) }
         syncScheduler.requestFiles()
         return id
     }

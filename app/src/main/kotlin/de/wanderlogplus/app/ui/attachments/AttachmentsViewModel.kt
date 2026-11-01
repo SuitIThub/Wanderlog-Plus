@@ -32,7 +32,7 @@ const val MSG_DELETE_FAILED = "Anhang konnte nicht gelöscht werden"
 
 class AttachmentsViewModel(
     private val edit: EditFn,
-    private val addAttachment: suspend (EntityType, String, InputStream, String, String) -> String,
+    private val addAttachment: suspend (EntityType, suspend () -> String, InputStream, String, String) -> String,
     /** Creates the Day for [date] when missing (empty title) and returns its id. */
     private val ensureDay: suspend (date: String) -> String,
     /** Process-wide scope: leaving a screen must not cancel an import. */
@@ -48,11 +48,11 @@ class AttachmentsViewModel(
         try {
             val input = source.open() ?: run { _message.value = MSG_ADD_FAILED; return@launch }
             input.use {
-                val (type, id) = when (target) {
-                    is AttachmentTarget.Entity -> target.type to target.id
-                    is AttachmentTarget.Day -> EntityType.DAY to ensureDay(target.date)
+                // The Day is created only after the file was imported, so a rejected file leaves nothing behind.
+                when (target) {
+                    is AttachmentTarget.Entity -> addAttachment(target.type, { target.id }, it, source.fileName(), source.mimeType())
+                    is AttachmentTarget.Day -> addAttachment(EntityType.DAY, { ensureDay(target.date) }, it, source.fileName(), source.mimeType())
                 }
-                addAttachment(type, id, it, source.fileName(), source.mimeType())
             }
         } catch (e: CancellationException) {
             throw e

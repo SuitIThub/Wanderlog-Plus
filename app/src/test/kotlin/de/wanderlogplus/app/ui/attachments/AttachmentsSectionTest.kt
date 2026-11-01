@@ -73,5 +73,8 @@ class AttachmentsSectionTest {
         assertEquals("1,2 MB", formatBytes(1_234_567))
         assertEquals("332 KB", formatBytes(340_000))
         assertEquals("12 B", formatBytes(12))
+        assertEquals("1,0 MB", formatBytes(1_048_064))
+        assertEquals("1,0 MB", formatBytes(1_048_575))
+        assertEquals("1023 KB", formatBytes(1_047_551))
     }
 }

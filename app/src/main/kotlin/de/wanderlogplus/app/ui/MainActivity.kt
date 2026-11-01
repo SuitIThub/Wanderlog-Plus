@@ -133,9 +133,11 @@ class MainActivity : ComponentActivity() {
             addAttachment = { type, id, input, name, mime -> container.addAttachment(type, id, input, name, mime) },
             ensureDay = { date ->
                 container.edit { e, s ->
-                    if (s.queries()?.dayFor(date) == null) e.setDayFields(s, date, mapOf("title" to JsonPrimitive("")))
+                    s.queries()?.dayFor(date)?.id ?: run {
+                        e.setDayFields(s, date, mapOf("title" to JsonPrimitive("")))
+                        Ids.dayId(requireNotNull(s.trip).id, date)
+                    }
                 }
-                container.edit { _, s -> s.queries()?.dayFor(date)?.id ?: Ids.dayId(requireNotNull(s.trip).id, date) }
             },
             writeScope = container.scope,
         ) as T

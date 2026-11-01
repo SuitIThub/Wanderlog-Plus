@@ -37,6 +37,8 @@ import coil.compose.AsyncImage
 import de.wanderlogplus.app.files.AttachmentFiles
 import de.wanderlogplus.shared.model.Attachment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -89,7 +91,7 @@ private fun PdfPages(file: File, modifier: Modifier = Modifier) {
     }
     DisposableEffect(opened) {
         onDispose {
-            // After the composition left, no page render may be running anymore (they synchronize on the renderer).
+            // Closing synchronizes on the renderer, so it waits for a running render; later renders see the cancelled scope and skip.
             opened?.let { (fd, renderer) ->
                 synchronized(renderer) {
                     try { renderer.close() } catch (_: Exception) {}
@@ -109,7 +111,10 @@ private fun PdfPages(file: File, modifier: Modifier = Modifier) {
         LazyColumn(Modifier.fillMaxSize()) {
             items((0 until pageCount).toList(), key = { it }) { index ->
                 val bitmap by produceState<Bitmap?>(null, renderer, index, widthPx) {
-                    value = withContext(Dispatchers.Default) { renderPage(renderer, index, widthPx) }
+                    value = withContext(Dispatchers.Default) {
+                        val ctx = currentCoroutineContext()
+                        renderPage(renderer, index, widthPx) { ctx.isActive }
+                    }
                 }
                 val b = bitmap
                 if (b != null) {
@@ -125,12 +130,18 @@ private fun PdfPages(file: File, modifier: Modifier = Modifier) {
     }
 }
 
-private fun renderPage(renderer: PdfRenderer, index: Int, widthPx: Int): Bitmap? = synchronized(renderer) {
+private fun renderPage(renderer: PdfRenderer, index: Int, widthPx: Int, active: () -> Boolean): Bitmap? = synchronized(renderer) {
+    if (!active()) return@synchronized null
     try {
         val page = renderer.openPage(index)
         try {
-            val w = widthPx.coerceAtLeast(1)
-            val h = (w.toFloat() * page.height / page.width).toInt().coerceAtLeast(1)
+            // Very tall pages are scaled down so the bitmap stays at most 4x as high as wide.
+            var w = widthPx.coerceAtLeast(1)
+            var h = (w.toFloat() * page.height / page.width).toInt().coerceAtLeast(1)
+            if (h > 4 * w) {
+                h = 4 * w
+                w = (h.toFloat() * page.width / page.height).toInt().coerceAtLeast(1)
+            }
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             bmp.eraseColor(Color.WHITE)
             page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
@@ -139,6 +150,8 @@ private fun renderPage(renderer: PdfRenderer, index: Int, widthPx: Int): Bitmap?
             page.close()
         }
     } catch (e: Exception) {
+        null
+    } catch (e: OutOfMemoryError) {
         null
     }
 }
