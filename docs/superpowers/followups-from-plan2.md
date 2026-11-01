@@ -25,5 +25,5 @@ Stand: 2026-11-01. Ergebnis der Task-Reviews und des Gesamt-Reviews von Plan 2. 
 
 ## Offen
 
-- Das Docker-Image ist noch nie gebaut worden, weil der Docker-Daemon zur Umsetzungszeit nicht lief. Vor dem ersten Deployment: `docker build -f server/Dockerfile -t wanderlog-plus-server .` und den Smoke-Test aus Plan 2, Task 7 ausführen.
+- Docker-Image am 2026-11-01 gebaut und per Smoke-Test geprüft: Health, 401, whoami, Import, Pull, Datei-Upload/-Download und Neustart mit Volume.
 - Der Trip-Key steht weiterhin in den Dokumenten zu Spec und Plan 1. Vor einem öffentlichen Push entfernen.
