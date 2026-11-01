@@ -9,6 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.http.content.LocalFileContent
 import io.ktor.http.content.PartData
 import io.ktor.http.content.forEachPart
+import io.ktor.server.request.contentLength
 import io.ktor.server.request.receiveMultipart
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
@@ -127,6 +128,8 @@ fun Application.module(services: Services) {
             }
             post("/api/files") {
                 var stored: StoredFile? = null
+                val declared = call.request.contentLength()
+                if (declared != null && declared > services.config.maxFileBytes + MULTIPART_HEADROOM) throw FileTooLarge()
                 // Ktor applies formFieldLimit to file parts too: leave headroom so FileStore's own limit fires first.
                 val multipart = call.receiveMultipart(formFieldLimit = services.config.maxFileBytes + MULTIPART_HEADROOM)
                 try {
@@ -156,6 +159,7 @@ fun Application.module(services: Services) {
                 if (path == null) {
                     call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
                 } else {
+                    call.response.headers.append("X-Content-Type-Options", "nosniff")
                     call.respond(LocalFileContent(path.toFile(), ContentType.Application.OctetStream))
                 }
             }

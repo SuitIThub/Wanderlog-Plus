@@ -128,4 +128,35 @@ class FileRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, r.status)
         assertEquals(0, fileCount())
     }
+
+    @Test
+    fun hugeUploadRejectedEarly413() = app(maxBytes = 1024) {
+        val r = jsonClient().upload(Random(5).nextBytes(200 * 1024))
+        assertEquals(HttpStatusCode.PayloadTooLarge, r.status)
+        assertTrue(r.bodyAsText().contains("\"file_too_large\""))
+        assertEquals(0, fileCount())
+    }
+
+    @Test
+    fun emptyFileRoundTrip() = app {
+        val c = jsonClient()
+        val stored: StoredFile = c.upload(ByteArray(0)).body()
+        assertEquals(sha256(ByteArray(0)), stored.hash)
+        assertEquals(0L, stored.size)
+        val d = c.get("/api/files/${stored.hash}") { authed() }
+        assertEquals(HttpStatusCode.OK, d.status)
+        assertEquals(0, d.bodyAsBytes().size)
+        assertEquals("nosniff", d.headers["X-Content-Type-Options"])
+    }
+
+    @Test
+    fun initRemovesLeftoverTempFiles() {
+        val fd = filesDir()
+        Files.createDirectories(fd)
+        val tmp = Files.createFile(fd.resolve("upload-123.tmp"))
+        val keep = Files.createFile(fd.resolve("0".repeat(64)))
+        FileStore(fd, 1024)
+        assertTrue(!Files.exists(tmp))
+        assertTrue(Files.exists(keep))
+    }
 }

@@ -2,6 +2,7 @@ package de.wanderlogplus.server
 
 import kotlinx.serialization.Serializable
 import java.io.InputStream
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -17,6 +18,8 @@ data class StoredFile(val hash: String, val size: Long, val duplicate: Boolean)
 class FileStore(private val dir: Path, private val maxBytes: Long) {
     init {
         Files.createDirectories(dir)
+        // Leftovers of crashed uploads.
+        Files.newDirectoryStream(dir, "upload-*.tmp").use { it.forEach { f -> Files.deleteIfExists(f) } }
     }
 
     fun save(input: InputStream): StoredFile {
@@ -41,7 +44,11 @@ class FileStore(private val dir: Path, private val maxBytes: Long) {
                 Files.deleteIfExists(tmp)
                 return StoredFile(hash, size, duplicate = true)
             }
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
+            try {
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE)
+            } catch (e: FileAlreadyExistsException) {
+                return StoredFile(hash, size, duplicate = true)
+            }
             return StoredFile(hash, size, duplicate = false)
         } finally {
             Files.deleteIfExists(tmp)
