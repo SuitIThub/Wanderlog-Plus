@@ -1,7 +1,17 @@
 package de.wanderlogplus.server
 
 import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
+import de.wanderlogplus.shared.sync.PushRequest
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
+import io.ktor.server.routing.get
+import io.ktor.server.routing.post
+import io.ktor.server.routing.routing
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
@@ -67,5 +77,64 @@ class ApplicationTest {
         val r = client.get("/api/whoami") { authed(TOKEN_B) }
         assertEquals(HttpStatusCode.OK, r.status)
         assertEquals("""{"name":"bob"}""", r.bodyAsText())
+    }
+
+    @Test
+    fun handlerNotRunOnProtocolMismatch() {
+        var counter = 0
+        testApplication {
+            application {
+                module(testServices(tmp))
+                routing {
+                    protectedApi {
+                        post("/api/test-sideeffect") { counter++; call.respond(HttpStatusCode.OK) }
+                    }
+                }
+            }
+            val bad = client.post("/api/test-sideeffect") {
+                header(HttpHeaders.Authorization, "Bearer $TOKEN_A")
+                header(PROTOCOL_HEADER, "2")
+            }
+            assertEquals(HttpStatusCode.Conflict, bad.status)
+            assertEquals(0, counter)
+            assertEquals(HttpStatusCode.OK, client.post("/api/test-sideeffect") { authed() }.status)
+            assertEquals(1, counter)
+        }
+    }
+
+    @Test
+    fun malformedJsonGives400WithoutMessage() {
+        testApplication {
+            application {
+                module(testServices(tmp))
+                routing {
+                    protectedApi {
+                        post("/api/test-body") { call.receive<PushRequest>(); call.respond(HttpStatusCode.OK) }
+                    }
+                }
+            }
+            val r = client.post("/api/test-body") {
+                authed()
+                contentType(ContentType.Application.Json)
+                setBody("{not json secret-booking-data")
+            }
+            assertEquals(HttpStatusCode.BadRequest, r.status)
+            assertEquals("""{"error":"bad_request"}""", r.bodyAsText())
+        }
+    }
+
+    @Test
+    fun runtimeExceptionGives500() {
+        testApplication {
+            application {
+                module(testServices(tmp))
+                routing {
+                    protectedApi { get("/api/test-boom") { throw RuntimeException("secret-booking-data") } }
+                }
+            }
+            val r = client.get("/api/test-boom") { authed() }
+            assertEquals(HttpStatusCode.InternalServerError, r.status)
+            assertEquals("""{"error":"internal"}""", r.bodyAsText())
+        }
     }
 }

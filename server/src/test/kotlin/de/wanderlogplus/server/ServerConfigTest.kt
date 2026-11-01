@@ -42,6 +42,7 @@ class ServerConfigTest {
     @Test fun missingTokens() = bad(emptyMap())
     @Test fun shortToken() = bad(mapOf("WLP_TOKENS" to "alice:short"))
     @Test fun duplicateName() = bad(mapOf("WLP_TOKENS" to "alice:$TOKEN_A,alice:$TOKEN_B"))
+    @Test fun duplicateToken() = bad(mapOf("WLP_TOKENS" to "alice:$TOKEN_A,bob:$TOKEN_A"))
     @Test fun entryWithoutColon() = bad(mapOf("WLP_TOKENS" to "alice$TOKEN_A"))
     @Test fun badPort() = bad(ok + ("WLP_PORT" to "abc"))
 }

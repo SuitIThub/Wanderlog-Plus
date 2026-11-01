@@ -27,6 +27,7 @@ data class ServerConfig(
                     "WLP_TOKENS token for '$name' must be at least $MIN_TOKEN_LENGTH characters"
                 }
                 require(name !in tokens) { "WLP_TOKENS contains duplicate name '$name'" }
+                require(token !in tokens.values) { "WLP_TOKENS assigns the same token to more than one name" }
                 tokens[name] = token
             }
             require(tokens.isNotEmpty()) { "WLP_TOKENS must contain at least one entry" }

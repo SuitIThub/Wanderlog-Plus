@@ -26,7 +26,9 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import org.slf4j.event.Level
 import java.security.MessageDigest
 
@@ -83,13 +85,13 @@ fun Application.module(services: Services) {
         format { call -> "${call.request.httpMethod.value} ${call.request.path()} -> ${call.response.status()?.value}" }
     }
     install(StatusPages) {
-        exception<BadRequestException> { call, _ ->
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", "Invalid request"))
-        }
-        exception<IllegalArgumentException> { call, e ->
-            call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request", e.message))
-        }
-        exception<Throwable> { call, _ ->
+        // Never echo exception messages: they can contain request data.
+        exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        exception<IllegalArgumentException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        exception<SerializationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
+        exception<Throwable> { call, e ->
+            // Class name and path only: messages and stack traces may contain booking data.
+            LoggerFactory.getLogger("de.wanderlogplus.server").error("Unhandled {} on {}", e.javaClass.name, call.request.path())
             call.respond(HttpStatusCode.InternalServerError, ErrorResponse("internal"))
         }
     }
