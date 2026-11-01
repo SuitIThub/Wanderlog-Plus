@@ -1,7 +1,9 @@
 package de.wanderlogplus.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -38,13 +40,15 @@ fun SyncStatusBar(status: SyncStatus, now: Long = System.currentTimeMillis(), mo
 /** Reusable empty state with a sync button. */
 @Composable
 fun EmptyState(onSyncNow: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("Noch keine Daten – jetzt synchronisieren", style = MaterialTheme.typography.titleMedium)
-        Button(onClick = onSyncNow, modifier = Modifier.padding(top = 16.dp)) { Text("Jetzt synchronisieren") }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = maxHeight).padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("Noch keine Daten – jetzt synchronisieren", style = MaterialTheme.typography.titleMedium)
+            Button(onClick = onSyncNow, modifier = Modifier.padding(top = 16.dp)) { Text("Jetzt synchronisieren") }
+        }
     }
 }
 

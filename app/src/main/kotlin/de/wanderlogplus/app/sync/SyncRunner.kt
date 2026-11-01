@@ -3,6 +3,7 @@ package de.wanderlogplus.app.sync
 import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.data.roomTransactor
+import de.wanderlogplus.client.ApiErrorKind
 import de.wanderlogplus.client.SyncApi
 import de.wanderlogplus.client.SyncEngine
 import de.wanderlogplus.client.SyncResult
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicInteger
 
 data class SyncStatus(
     val running: Boolean = false,
@@ -29,6 +31,8 @@ data class SyncStatus(
 class SyncRunner(private val container: AppContainer) {
     private val _status = MutableStateFlow(SyncStatus())
     val status: StateFlow<SyncStatus> = _status
+
+    private val runners = AtomicInteger(0)
 
     private var engineFor: ServerSettings? = null
     private var engine: SyncEngine? = null
@@ -54,13 +58,22 @@ class SyncRunner(private val container: AppContainer) {
         val server = container.settings.server.first() ?: return@withContext null
         val ready = container.ready.await()
         val engine = engineFor(server, ready.clock)
+        runners.incrementAndGet()
         _status.update { it.copy(running = true) }
         try {
-            val result = engine.sync()
+            val result = try {
+                engine.sync()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Message omitted on purpose: it could carry field values.
+                SyncResult.Failed(ApiErrorKind.SERVER, "Unerwarteter Fehler beim Synchronisieren")
+            }
             _status.update { it.copy(lastError = (result as? SyncResult.Failed)?.message) }
             result
         } finally {
-            _status.update { it.copy(running = false) }
+            val last = runners.decrementAndGet() == 0
+            _status.update { if (last) it.copy(running = false) else it }
             refreshAsync()
         }
     }

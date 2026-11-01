@@ -39,8 +39,9 @@ class SyncSchedulerTest {
 
     @Test fun requestNowEnqueuesUniqueWork() {
         scheduler.requestNow()
+        val first = infos("sync-now").single().id
         scheduler.requestNow()
-        assertEquals(1, infos("sync-now").size)
+        assertEquals(listOf(first), infos("sync-now").map { it.id }) // KEEP: second request does not replace
     }
 
     @Test fun schedulePeriodicIsFifteenMinutesWithNetworkConstraint() {

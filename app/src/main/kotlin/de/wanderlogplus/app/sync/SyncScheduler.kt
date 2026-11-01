@@ -40,7 +40,8 @@ class SyncScheduler(context: Context) {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .build()
-        work.enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
+        // KEEP: pull-to-refresh must not cancel an in-flight sync.
+        work.enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
     }
 
     private companion object {
