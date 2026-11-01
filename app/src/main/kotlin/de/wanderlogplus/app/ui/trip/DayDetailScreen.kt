@@ -64,7 +64,7 @@ private const val TAB_NOTES = 2
 
 /**
  * Day detail: hero header (✎ opens "Tag bearbeiten" for title and region) above the tabs Programm (timeline with ⋮
- * menus and an add FAB), Vorschläge and Notizen & Dateien. The selected tab survives recreation.
+ * menus and an add FAB), Vorschläge and Notizen & Anhänge. The selected tab survives recreation.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +126,7 @@ fun DayDetailScreen(
         HeroHeader(
             title = shownTitle.ifBlank { region?.name ?: dayLabel(date) },
             // Region in the kicker instead of a chip: the 140 dp header has no room for chips below the buttons.
-            kicker = listOfNotNull(dayKicker(date, snapshot.trip?.startDate), region?.name?.takeIf { shownTitle.isNotBlank() })
+            kicker = listOfNotNull(dayKicker(date, snapshot.trip?.startDate, snapshot.trip?.endDate), region?.name?.takeIf { shownTitle.isNotBlank() })
                 .joinToString(" · "),
             imageUrl = heroImage,
             accent = accent,
@@ -140,7 +140,7 @@ fun DayDetailScreen(
             ScreenTab(if (hasSuggestions) "Vorschläge (${shown.size})" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions", maxLines = 2) {
                 tab = TAB_SUGGESTIONS
             }
-            ScreenTab("Notizen & Dateien", tab == TAB_NOTES, "tab-notes", maxLines = 2) { tab = TAB_NOTES }
+            ScreenTab("Notizen & Anhänge", tab == TAB_NOTES, "tab-notes", maxLines = 2) { tab = TAB_NOTES }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -135,12 +136,23 @@ class LogisticsScreenTest {
         assertEquals(listOf("f1", "s1"), opened.map { it.id })
     }
 
+    /** A flight and a train may share an id (different entity types): the list keys must not collide. */
+    @Test fun flightAndTrainWithSameIdDoNotCollide() {
+        val base = LogisticsFixture.snapshot()
+        val snap = base.copy(
+            flights = listOf(base.flights.single().copy(id = "x")),
+            trains = listOf(base.trains.single().copy(id = "x", depart = base.trains.single().depart.copy(date = "2027-05-08"))),
+        )
+        rule.setContent { WanderlogPlusTheme { LogisticsScreen(snap) } }
+        assertEquals(2, rule.onAllNodesWithTag("logistics-x").fetchSemanticsNodes().size)
+    }
+
     @Test fun emptyTabsShowHints() {
         val snap = TripSnapshot.from(emptyList())
         rule.setContent { WanderlogPlusTheme { LogisticsScreen(snap) } }
-        rule.onNodeWithText("Keine Fahrten.").assertIsDisplayed()
+        rule.onNodeWithText("Keine Fahrten").assertIsDisplayed()
         rule.onNodeWithTag("tab-stays").performClick()
-        rule.onNodeWithText("Keine Unterkünfte.").assertIsDisplayed()
+        rule.onNodeWithText("Keine Unterkünfte").assertIsDisplayed()
     }
 
     /** Former `entriesAreChronologicalAndShowConfirmationNumbers`: order stays; booking data moved to the detail page. */

@@ -29,7 +29,7 @@ import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Day
 import de.wanderlogplus.shared.sync.EntityType
 
-/** Notizen & Dateien tab: the day note (Markdown, edited inline) and the day's attachments. */
+/** Notizen & Anhänge tab: the day note (Markdown, edited inline) and the day's attachments. */
 @Composable
 internal fun DayNotesTab(
     snapshot: TripSnapshot,

@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FilledTonalIconButton
@@ -49,39 +51,43 @@ internal fun DaySuggestionsTab(
     onOpenOnly: (Boolean) -> Unit,
     onAdd: (date: String, savedPlaceId: String) -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+    if (!hasRegion) {
+        EmptyHint("Reisetag – keine Vorschläge", Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp))
+        return
+    }
+    val dow = dayOfWeekSunday0(date)
+    // Lazy: a region can hold many places; the filters scroll away with the list as its first item.
+    LazyColumn(
+        Modifier.fillMaxSize().testTag("suggestion-list"),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (!hasRegion) {
-            EmptyHint("Reisetag – keine Vorschläge")
-            return@Column
-        }
-        // The chip row scrolls edge to edge (like in the region list) instead of being cut at the page padding.
-        Row(
-            Modifier.bleedHorizontally(16.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
+        item(key = "filters") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // The chip row scrolls edge to edge (like in the region list) instead of being cut at the page padding.
+                Row(
+                    Modifier.bleedHorizontally(16.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
+                        FilterChip(
+                            selected = category == c,
+                            onClick = { onCategory(c) },
+                            label = { Text(categoryLabel(c)) },
+                            modifier = Modifier.testTag("filter-category-${c?.name ?: "ALL"}"),
+                        )
+                    }
+                }
                 FilterChip(
-                    selected = category == c,
-                    onClick = { onCategory(c) },
-                    label = { Text(categoryLabel(c)) },
-                    modifier = Modifier.testTag("filter-category-${c?.name ?: "ALL"}"),
+                    selected = openOnly,
+                    onClick = { onOpenOnly(!openOnly) },
+                    label = { Text("an diesem Wochentag geöffnet") },
+                    modifier = Modifier.testTag("filter-weekday"),
                 )
             }
         }
-        FilterChip(
-            selected = openOnly,
-            onClick = { onOpenOnly(!openOnly) },
-            label = { Text("an diesem Wochentag geöffnet") },
-            modifier = Modifier.testTag("filter-weekday"),
-        )
-        val dow = dayOfWeekSunday0(date)
-        Column(Modifier.fillMaxWidth().testTag("suggestion-list"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (shown.isEmpty()) EmptyHint("Keine Vorschläge")
-            shown.forEach { s -> SuggestionCard(s, dow, accent) { onAdd(date, s.saved.id) } }
-        }
+        if (shown.isEmpty()) item(key = "empty") { EmptyHint("Keine Vorschläge") }
+        items(shown, key = { it.saved.id }) { s -> SuggestionCard(s, dow, accent) { onAdd(date, s.saved.id) } }
     }
 }
 

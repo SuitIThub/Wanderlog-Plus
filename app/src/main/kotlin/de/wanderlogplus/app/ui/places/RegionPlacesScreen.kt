@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
@@ -136,16 +138,19 @@ fun RegionPlacesScreen(
             RegionMap(markers, onOpenPlace, Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp))
             return@Column
         }
-        Column(
-            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (groups.isEmpty()) {
-                EmptyHint(if (category == null) "Keine Orte" else "Keine Orte in „${categoryLabel(category)}“", Modifier.padding(top = 8.dp))
+                item(key = "empty") {
+                    EmptyHint(if (category == null) "Keine Orte" else "Keine Orte in „${categoryLabel(category)}“", Modifier.padding(top = 8.dp))
+                }
             }
             groups.forEach { (c, list) ->
-                SectionLabel(categoryLabel(c), Modifier.testTag("category-${c.name}"), color = accent)
-                list.forEach { s -> PlaceCard(s, accent) { onOpenPlace(s.saved.id) } }
+                item(key = "category-${c.name}") { SectionLabel(categoryLabel(c), Modifier.testTag("category-${c.name}"), color = accent) }
+                items(list, key = { it.saved.id }) { s -> PlaceCard(s, accent) { onOpenPlace(s.saved.id) } }
             }
         }
     }

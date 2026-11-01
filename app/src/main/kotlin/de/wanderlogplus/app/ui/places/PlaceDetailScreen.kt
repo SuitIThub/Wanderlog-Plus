@@ -112,7 +112,7 @@ internal fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
 
 /**
  * Place detail: photo hero (✎ opens "Ort bearbeiten" for tags, region and category), rating/category/tags, status
- * chips, link action circles, then the tabs Info, Notiz and Dateien. The whole page scrolls.
+ * chips, link action circles, then the tabs Info, Notiz and Anhänge. The whole page scrolls.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -161,7 +161,7 @@ fun PlaceDetailScreen(
     // The one-line hero cuts long names; the full name then opens the details below it.
     var titleCut by remember(saved.id) { mutableStateOf(false) }
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("place-detail")) {
         HeroHeader(
             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
             kicker = region?.name ?: NO_REGION_LABEL,
@@ -224,7 +224,7 @@ fun PlaceDetailScreen(
         PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp)) {
             ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
             ScreenTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
-            ScreenTab(if (fileCount > 0) "Dateien ($fileCount)" else "Dateien", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
+            ScreenTab(if (fileCount > 0) "Anhänge ($fileCount)" else "Anhänge", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
         }
 
         when (tab) {
@@ -240,15 +240,15 @@ fun PlaceDetailScreen(
                 onCancel = { editing = false },
             )
             else -> Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-                SectionLabel("Dateien", color = accent)
+                SectionLabel("Anhänge", color = accent)
                 if (attachments == null) {
-                    EmptyHint("Dateien sind hier nicht verfügbar", Modifier.padding(top = 6.dp))
+                    EmptyHint("Anhänge sind hier nicht verfügbar", Modifier.padding(top = 6.dp))
                 } else {
                     AttachmentsFor(
                         snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id),
                         attachments,
                         onAdd = { attachments.onAdd(EntityType.SAVED_PLACE, saved.id) },
-                        showTitle = false, // "Dateien" label above
+                        showTitle = false, // "Anhänge" label above
                     )
                 }
             }

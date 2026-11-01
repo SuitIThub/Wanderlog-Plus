@@ -9,6 +9,12 @@ import java.util.Locale
 
 data class LatLngD(val lat: Double, val lng: Double)
 
+/**
+ * Version of the route snapshot rendering, part of every cache key. Raising it orphans all cached PNGs, so a changed
+ * renderer (or a bug that cached bad pictures) never keeps showing old snapshots.
+ */
+const val RENDER_VERSION = 1
+
 /** Straight line (train) or arc (flight) between two endpoints; an "as the crow flies" route, not real track geometry. */
 data class RouteGeometry(val from: LatLngD, val to: LatLngD, val arc: Boolean) {
 
@@ -30,10 +36,10 @@ data class RouteGeometry(val from: LatLngD, val to: LatLngD, val arc: Boolean) {
         }
     }
 
-    /** SHA-256 hex of the coordinates (rounded to 5 decimals), [arc] and the pixel size. */
-    fun cacheKey(widthPx: Int, heightPx: Int): String {
+    /** SHA-256 hex of the render [version], the coordinates (rounded to 5 decimals), [arc] and the pixel size. */
+    fun cacheKey(widthPx: Int, heightPx: Int, version: Int = RENDER_VERSION): String {
         fun r(v: Double) = String.format(Locale.ROOT, "%.5f", v + 0.0) // + 0.0 folds -0.0 into 0.0
-        val raw = listOf(r(from.lat), r(from.lng), r(to.lat), r(to.lng), arc.toString(), widthPx.toString(), heightPx.toString())
+        val raw = listOf("v$version", r(from.lat), r(from.lng), r(to.lat), r(to.lng), arc.toString(), widthPx.toString(), heightPx.toString())
             .joinToString("|")
         return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
     }

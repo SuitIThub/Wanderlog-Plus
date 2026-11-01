@@ -67,7 +67,7 @@ fun NotesScreen(snapshot: TripSnapshot, onOpen: (String) -> Unit, modifier: Modi
 @Composable
 fun NoteDetailScreen(snapshot: TripSnapshot, noteId: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val note = snapshot.notes.firstOrNull { it.id == noteId }
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().testTag("note-detail")) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
         if (note == null) {
             Text("Notiz nicht gefunden", Modifier.padding(16.dp))

@@ -92,7 +92,7 @@ fun LogisticsDetailScreen(
     // The one-line hero cuts long names (stays); the full name then opens the page body.
     var titleCut by remember(type, id) { mutableStateOf(false) }
 
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("logistics-detail")) {
         HeroHeader(
             title = view.title,
             kicker = view.kicker,
@@ -131,7 +131,7 @@ fun LogisticsDetailScreen(
             if (view.note.isNotBlank()) {
                 InfoCard { MarkdownText(view.note, Modifier.testTag("logistics-note")) }
             } else {
-                EmptyHint("Keine Notiz.", Modifier.padding(top = 6.dp))
+                EmptyHint("Keine Notiz", Modifier.padding(top = 6.dp))
             }
 
             if (onOpenLink != null && view.links.isNotEmpty()) {

@@ -171,7 +171,7 @@ private fun During(
         Box(Modifier.fillMaxWidth().clickable { onOpenDay(date) }.testTag("today-header")) {
             HeroHeader(
                 title = dayTitle ?: region?.name ?: dayLabel(date),
-                kicker = dayKicker(date, snapshot.trip?.startDate),
+                kicker = dayKicker(date, snapshot.trip?.startDate, snapshot.trip?.endDate),
                 imageUrl = heroImage,
                 accent = accent,
                 chips = if (dayTitle != null && region != null) listOf(region.name) else emptyList(),

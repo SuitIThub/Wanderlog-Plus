@@ -11,6 +11,7 @@ import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
@@ -53,6 +54,8 @@ class RouteMapRenderer(
     private val snapshot: suspend (RouteGeometry, Int, Int) -> Bitmap? = { route, w, h ->
         RouteSnapshots.snapshot(context.applicationContext, route, w, h)
     },
+    /** Where [snapshot] runs (MapSnapshotter needs the main thread); tests pass an unconfined dispatcher. */
+    private val snapshotDispatcher: CoroutineDispatcher = Dispatchers.Main,
 ) {
     private val mutex = Mutex() // one snapshotter at a time: they are memory-heavy
 
@@ -65,14 +68,16 @@ class RouteMapRenderer(
     /** The cached or freshly rendered PNG; null on any failure (e.g. no network). Never logs coordinates. */
     suspend fun render(route: RouteGeometry, widthPx: Int, heightPx: Int): File? {
         if (widthPx <= 0 || heightPx <= 0) return null
-        cachedFile(route, widthPx, heightPx)?.let { return it }
+        withContext(Dispatchers.IO) { cachedFile(route, widthPx, heightPx) }?.let { return it }
         return try {
             if (!isOnline()) return null // fallback now; rendered on a later composition once online
             mutex.withLock {
-                cachedFile(route, widthPx, heightPx)?.let { return@withLock it }
+                withContext(Dispatchers.IO) { cachedFile(route, widthPx, heightPx) }?.let { return@withLock it }
                 val bitmap = withTimeoutOrNull(RENDER_TIMEOUT_MS) {
-                    withContext(Dispatchers.Main) { snapshot(route, widthPx, heightPx) }
+                    withContext(snapshotDispatcher) { snapshot(route, widthPx, heightPx) }
                 } ?: return@withLock null
+                // A blank picture (tiles not loaded) would be cached for good: show the fallback and try again next time.
+                if (isAlmostSolid(bitmap)) return@withLock null
                 withContext(Dispatchers.IO) { writeAtomically(bitmap, fileFor(route, widthPx, heightPx)) }
             }
         } catch (e: CancellationException) {
@@ -80,6 +85,11 @@ class RouteMapRenderer(
         } catch (e: Throwable) {
             null // no details: they could carry coordinates
         }
+    }
+
+    /** Deletes every cached snapshot ("Kartenbilder neu laden"); they are rendered again on the next view. */
+    suspend fun clearCache() {
+        withContext(Dispatchers.IO) { cacheDir.deleteRecursively() }
     }
 
     private fun writeAtomically(bitmap: Bitmap, target: File): File? {
@@ -97,6 +107,23 @@ class RouteMapRenderer(
     private companion object {
         const val RENDER_TIMEOUT_MS = 30_000L
     }
+}
+
+/**
+ * True when the picture is (almost) one solid color: of an 8 x 8 grid of samples over the upper three quarters (the
+ * attribution box sits at the bottom), more than 95 % have the same color. Typical for a snapshot whose tiles did not load.
+ */
+internal fun isAlmostSolid(bitmap: Bitmap): Boolean =
+    isAlmostSolid(bitmap.width, bitmap.height) { x, y -> bitmap.getPixel(x, y) }
+
+internal fun isAlmostSolid(width: Int, height: Int, pixel: (x: Int, y: Int) -> Int): Boolean {
+    if (width <= 0 || height <= 0) return true
+    val grid = 8
+    val samples = (0 until grid).flatMap { gy ->
+        (0 until grid).map { gx -> pixel((width * (2 * gx + 1)) / (2 * grid), (height * 3 * (2 * gy + 1)) / (4 * 2 * grid)) }
+    }
+    val most = samples.groupingBy { it }.eachCount().values.max()
+    return most > samples.size * 0.95
 }
 
 /** True when the active network has validated internet access (not just a captive portal or a dead Wi-Fi). */

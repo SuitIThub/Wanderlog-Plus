@@ -202,7 +202,7 @@ private val ListPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, 
 @Composable
 private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen: (LogisticsEntry) -> Unit) {
     if (moves.isEmpty()) {
-        EmptyHint("Keine Fahrten.", Modifier.padding(16.dp).testTag("logistics-empty"))
+        EmptyHint("Keine Fahrten", Modifier.padding(16.dp).testTag("logistics-empty"))
         return
     }
     val groups = remember(moves) { moves.groupBy { it.date } }
@@ -218,7 +218,7 @@ private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen
                     modifier = Modifier.padding(top = 10.dp).testTag("logistics-date-$date"),
                 )
             }
-            items(group, key = { it.id }) { e -> MoveCard(snapshot, e, accent) { onOpen(e) } }
+            items(group, key = { "${it.type}-${it.id}" }) { e -> MoveCard(snapshot, e, accent) { onOpen(e) } }
         }
     }
 }
@@ -264,12 +264,12 @@ private fun MoveCard(snapshot: TripSnapshot, e: LogisticsEntry, accent: Color, o
 @Composable
 private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntry>, onOpen: (LogisticsEntry) -> Unit, today: String?) {
     if (stays.isEmpty()) {
-        EmptyHint("Keine Unterkünfte.", Modifier.padding(16.dp).testTag("logistics-empty"))
+        EmptyHint("Keine Unterkünfte", Modifier.padding(16.dp).testTag("logistics-empty"))
         return
     }
     val fallback = MaterialTheme.colorScheme.primary
     LazyColumn(Modifier.fillMaxSize().testTag("logistics-list"), contentPadding = ListPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(stays, key = { it.id }) { e ->
+        items(stays, key = { "${it.type}-${it.id}" }) { e ->
             val s = e.stay
             val region = s.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
             val files = snapshot.attachmentsFor(EntityType.STAY, s.id).size

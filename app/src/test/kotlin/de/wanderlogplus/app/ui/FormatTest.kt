@@ -39,4 +39,20 @@ class FormatTest {
         assertEquals(Color(0x803498DB), regionColor("#803498db"))
         assertNotEquals(fallback, regionColor("#3498db"))
     }
+
+    @Test fun dayKickerNumbersOnlyDaysInsideTheTrip() {
+        // 2027-05-20 is a Thursday; trip 2027-05-08 .. 2027-05-25.
+        assertEquals("Do · 20. Mai · Tag 13", dayKicker("2027-05-20", "2027-05-08", "2027-05-25"))
+        assertEquals("Sa · 8. Mai · Tag 1", dayKicker("2027-05-08", "2027-05-08", "2027-05-25"))
+        assertEquals("Di · 25. Mai · Tag 18", dayKicker("2027-05-25", "2027-05-08", "2027-05-25"))
+        // Before the start (would be "Tag 0" / negative) and after the end: no day number.
+        assertEquals("Fr · 7. Mai", dayKicker("2027-05-07", "2027-05-08", "2027-05-25"))
+        assertEquals("Mo · 3. Mai", dayKicker("2027-05-03", "2027-05-08", "2027-05-25"))
+        assertEquals("Mi · 26. Mai", dayKicker("2027-05-26", "2027-05-08", "2027-05-25"))
+        // Missing/unparsable start or end; unparsable date.
+        assertEquals("Do · 20. Mai", dayKicker("2027-05-20", null, "2027-05-25"))
+        assertEquals("Do · 20. Mai · Tag 13", dayKicker("2027-05-20", "2027-05-08", ""))
+        assertEquals("Fr · 7. Mai", dayKicker("2027-05-07", "2027-05-08", null))
+        assertEquals("kaputt", dayKicker("kaputt", "2027-05-08", "2027-05-25"))
+    }
 }

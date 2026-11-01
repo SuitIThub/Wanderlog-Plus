@@ -146,6 +146,7 @@ class MainActivity : ComponentActivity() {
                         clock = { tripZone.now() },
                         attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                         attachmentFiles = container.attachmentFiles,
+                        onReloadMapImages = routeMaps::clearCache,
                         onResetSync = {
                             scope.launch {
                                 container.syncRunner.resetCursor()

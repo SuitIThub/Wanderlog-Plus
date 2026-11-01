@@ -47,6 +47,9 @@ class RouteGeometryTest {
         assertNotEquals(k, r.cacheKey(600, 241))
         assertNotEquals(k, RouteGeometry(a, b, arc = false).cacheKey(600, 240))
         assertNotEquals(k, RouteGeometry(LatLngD(35.0001, 135.0), b, true).cacheKey(600, 240))
+        // The renderer version is salted in: a new version never reuses an old (possibly blank) snapshot.
+        assertEquals(k, r.cacheKey(600, 240, RENDER_VERSION))
+        assertNotEquals(k, r.cacheKey(600, 240, RENDER_VERSION + 1))
     }
 
     @Test fun routeForMissingCoordsIsNull() {

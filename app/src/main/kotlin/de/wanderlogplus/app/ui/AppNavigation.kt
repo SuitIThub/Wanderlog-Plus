@@ -114,6 +114,9 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
 /** Route of the server setup screen; "Mehr" (Task 9) navigates here to change the server. */
 const val SETUP_ROUTE = "setup"
 
+/** Snackbar after "Kartenbilder neu laden". */
+const val MSG_RELOAD_MAPS = "Kartenbilder werden neu geladen"
+
 private val EMPTY_AWARE_TABS = setOf(Tab.HEUTE, Tab.REISE, Tab.ORTE, Tab.LOGISTIK)
 
 /**
@@ -146,6 +149,8 @@ fun AppNavigation(
     /** Server settings from a setup deep link; shown on the setup screen (prefill only), then [onPendingSetupConsumed]. */
     pendingSetup: ServerSettings? = null,
     onPendingSetupConsumed: () -> Unit = {},
+    /** Deletes the cached route map pictures ("Kartenbilder neu laden" in Einstellungen). */
+    onReloadMapImages: suspend () -> Unit = {},
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -176,15 +181,16 @@ fun AppNavigation(
                         },
                         icon = { Icon(tab.icon, contentDescription = null) },
                         label = { Text(tab.label) },
+                        modifier = Modifier.testTag("nav-${tab.route}"),
                     )
                 }
             }
         },
     ) { padding ->
         val linkContext = LocalContext.current
-        val linkScope = rememberCoroutineScope()
+        val uiScope = rememberCoroutineScope()
         val onOpenLink: (ExternalLink) -> Unit = { link ->
-            if (!openExternalLink(linkContext, link)) linkScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
+            if (!openExternalLink(linkContext, link)) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
         }
         val attachmentActions: AttachmentActions? =
             if (attachmentsViewModelFactory != null && attachmentFiles != null) {
@@ -369,7 +375,8 @@ fun AppNavigation(
                     }
                 }
                 composable(SETTINGS_ROUTE) {
-                    SyncedScreen(syncStatus, onRefresh) {
+                    // SettingsScreen scrolls itself; a scrollable wrapper would nest two vertical scrolls (crash).
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         SettingsScreen(
                             info = settingsInfo,
                             status = syncStatus,
@@ -380,6 +387,12 @@ fun AppNavigation(
                             onTripZone = onTripZone,
                             remindersEnabled = remindersEnabled,
                             onRemindersEnabled = onRemindersEnabled,
+                            onReloadMaps = {
+                                uiScope.launch {
+                                    onReloadMapImages()
+                                    snackbar.showSnackbar(MSG_RELOAD_MAPS)
+                                }
+                            },
                         )
                     }
                 }

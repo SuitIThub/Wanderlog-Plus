@@ -74,14 +74,18 @@ private val MONTHS_DE = listOf(
 )
 
 /**
- * Hero kicker "Do · 20. Mai · Tag 13"; the day number counts from [tripStart] (day 1) and is left out when that is
- * missing or unparsable. Unparsable [date] is returned unchanged.
+ * Hero kicker "Do · 20. Mai · Tag 13"; the day number counts from [tripStart] (day 1). It is left out when the start is
+ * missing or unparsable and when [date] lies outside the trip (before [tripStart] or after [tripEnd]), so there is never
+ * a "Tag 0" or a negative day. Unparsable [date] is returned unchanged.
  */
-fun dayKicker(date: String, tripStart: String?): String {
-    val d = try { java.time.LocalDate.parse(date) } catch (_: java.time.format.DateTimeParseException) { return date }
-    val start = try { tripStart?.let { java.time.LocalDate.parse(it) } } catch (_: java.time.format.DateTimeParseException) { null }
+fun dayKicker(date: String, tripStart: String?, tripEnd: String? = null): String {
+    fun parse(s: String?) = try { s?.let { java.time.LocalDate.parse(it) } } catch (_: java.time.format.DateTimeParseException) { null }
+    val d = parse(date) ?: return date
+    val start = parse(tripStart)
+    val end = parse(tripEnd)
     val head = "${WEEKDAYS_DE[d.dayOfWeek.value - 1]} · ${d.dayOfMonth}. ${MONTHS_DE[d.monthValue - 1]}"
-    return if (start == null) head else "$head · Tag ${java.time.temporal.ChronoUnit.DAYS.between(start, d) + 1}"
+    if (start == null || d.isBefore(start) || (end != null && d.isAfter(end))) return head
+    return "$head · Tag ${java.time.temporal.ChronoUnit.DAYS.between(start, d) + 1}"
 }
 
 /** Small symbol for photo placeholders by category. */

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -29,10 +30,14 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+
+private const val MAX_RETRIES = 1
 
 /** Snapshot renderer for [RouteMap]; provided by MainActivity, null in tests (they see [RouteMapFallback]). */
 val LocalRouteMapRenderer = staticCompositionLocalOf<RouteMapRenderer?> { null }
@@ -54,21 +59,35 @@ fun RouteMap(
         val density = LocalDensity.current
         val widthPx = constraints.maxWidth.takeIf { constraints.hasBoundedWidth } ?: with(density) { 360.dp.roundToPx() }
         val heightPx = with(density) { height.roundToPx() }
-        var file by remember(route, widthPx, heightPx, renderer) { mutableStateOf(renderer?.cachedFile(route, widthPx, heightPx)) }
-        var failed by remember(file) { mutableStateOf(false) }
-        LaunchedEffect(route, widthPx, heightPx, renderer) {
-            if (renderer != null && file == null) file = renderer.render(route, widthPx, heightPx)
+        val key = arrayOf<Any?>(route, widthPx, heightPx, renderer)
+        var file by remember(*key) { mutableStateOf<File?>(null) }
+        // An undecodable PNG (truncated, corrupt) is deleted by the effect and rendered once more; a second failure keeps the fallback.
+        var corrupt by remember(*key) { mutableStateOf<File?>(null) }
+        var retries by remember(*key) { mutableIntStateOf(0) }
+        var broken by remember(*key) { mutableStateOf(false) }
+        LaunchedEffect(route, widthPx, heightPx, renderer, retries) {
+            if (renderer == null) return@LaunchedEffect
+            // Disk work off the main thread: the cache check, too, never runs during composition.
+            val stale = corrupt
+            corrupt = null
+            val cached = withContext(Dispatchers.IO) {
+                stale?.delete()
+                renderer.cachedFile(route, widthPx, heightPx)
+            }
+            file = cached ?: renderer.render(route, widthPx, heightPx)
         }
         val shown: File? = file
-        if (shown == null || failed) {
+        if (shown == null || broken) {
             RouteMapFallback(route, accent, Modifier.fillMaxSize())
         } else {
             AsyncImage(
                 model = shown,
                 contentDescription = "Routenkarte",
                 contentScale = ContentScale.Crop,
-                // An undecodable cache file (truncated, corrupt) is deleted, so the next composition renders it anew.
-                onError = { failed = true; shown.delete() },
+                onError = {
+                    file = null
+                    if (retries < MAX_RETRIES) { corrupt = shown; retries++ } else broken = true
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
