@@ -47,6 +47,10 @@ import de.wanderlogplus.app.ui.places.RegionPlacesScreen
 import de.wanderlogplus.app.ui.places.placeRoute
 import de.wanderlogplus.app.ui.places.regionRoute
 import de.wanderlogplus.app.ui.logistics.LOGISTICS_DETAIL_ROUTE
+import de.wanderlogplus.app.ui.logistics.LOGISTICS_EDIT_ROUTE
+import de.wanderlogplus.app.ui.logistics.LogisticsEditScreen
+import de.wanderlogplus.app.ui.logistics.PlaceSearch
+import de.wanderlogplus.app.ui.logistics.logisticsEditRoute
 import de.wanderlogplus.app.ui.logistics.LogisticsDetailScreen
 import de.wanderlogplus.app.ui.logistics.LogisticsScreen
 import de.wanderlogplus.app.ui.logistics.logisticsDetailRoute
@@ -105,7 +109,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
-            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
             else -> emptySet()
         }
@@ -126,6 +130,8 @@ private val EMPTY_AWARE_TABS = setOf(Tab.HEUTE, Tab.REISE, Tab.ORTE, Tab.LOGISTI
 @Composable
 fun AppNavigation(
     hasServer: Boolean? = true,
+    /** Place search for stopovers (OpenStreetMap); null hides the search buttons. */
+    placeSearch: PlaceSearch? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -267,6 +273,9 @@ fun AppNavigation(
                                 onSetRegion = vm::setRegionOverride,
                                 onAddNote = vm::addNote,
                                 failureCount = dayFailures,
+                                onShowLegs = vm::setShowLegs,
+                                onLegMode = vm::setLegMode,
+                                onOpenLink = onOpenLink,
                             )
                         }
                     }
@@ -340,7 +349,21 @@ fun AppNavigation(
                                 attachments = attachmentActions,
                                 onOpenLink = onOpenLink,
                                 today = rememberMinuteNow(clock).toLocalDate().toString(),
+                                onEdit = { t, i -> nav.navigate(logisticsEditRoute(t, i)) },
+                                onMerge = vm::mergeMoves,
+                                onDelete = { t, i -> vm.deleteMove(t, i); nav.popBackStack() },
                             )
+                        }
+                    }
+                }
+                composable(LOGISTICS_EDIT_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val type = logisticsTypeOf(entry.arguments?.getString("type"))
+                    val id = entry.arguments?.getString("id").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch)
                         }
                     }
                 }

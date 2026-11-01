@@ -14,6 +14,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import de.wanderlogplus.shared.sync.EntityType
+import kotlinx.serialization.json.JsonElement
 
 /**
  * Resolves [conflict] only if [fresh] still contains it with the same values; otherwise (Wanderlog or another
@@ -57,6 +59,13 @@ class MoreViewModel(
             _error.value = e.javaClass.simpleName
         }
     }
+
+    fun saveFields(type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) =
+        write { e, _ -> e.setChanged(type, id, before, after) }
+
+    fun mergeMoves(type: EntityType, firstId: String, secondId: String) = write { e, s -> e.mergeMoves(s, type, firstId, secondId) }
+
+    fun deleteMove(type: EntityType, id: String) = write { e, _ -> e.delete(type, id) }
 
     fun keepApp(c: Conflict) = write { e, s -> resolveConflict(e, s, c, takeWanderlog = false) }
     fun takeWanderlog(c: Conflict) = write { e, s -> resolveConflict(e, s, c, takeWanderlog = true) }

@@ -43,6 +43,7 @@ import de.wanderlogplus.app.ui.design.PhotoCardStyle
 import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.heroImageUrl
 import de.wanderlogplus.app.ui.design.routeTitle
+import de.wanderlogplus.app.ui.design.viaLine
 import de.wanderlogplus.app.ui.design.timesOf
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.client.TripSnapshot
@@ -252,6 +253,9 @@ private fun MoveCard(snapshot: TripSnapshot, e: LogisticsEntry, accent: Color, o
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                movement.viaLine()?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("move-via"))
+                }
                 if (times.isNotEmpty()) {
                     Text(times, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }

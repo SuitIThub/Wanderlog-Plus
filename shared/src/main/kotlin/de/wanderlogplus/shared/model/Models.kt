@@ -105,11 +105,11 @@ data class Flight(
     val number: String? = null,
     val depart: Endpoint = Endpoint(),
     val arrive: Endpoint = Endpoint(),
-    /** Stopovers between [depart] and [arrive], in travel order. */
-    val via: List<Endpoint> = emptyList(),
     val confirmationNumber: String? = null,
     val travelerNames: List<String> = emptyList(),
     val note: String = "",
+    /** Stopovers between [depart] and [arrive], in travel order. */
+    val via: List<Endpoint> = emptyList(),
 )
 
 @Serializable
@@ -118,11 +118,11 @@ data class Train(
     val carrier: String? = null,
     val depart: Endpoint = Endpoint(),
     val arrive: Endpoint = Endpoint(),
-    /** Changes or stops between [depart] and [arrive] (e.g. Frankfurt Hbf), in travel order. */
-    val via: List<Endpoint> = emptyList(),
     val confirmationNumber: String? = null,
     val travelerNames: List<String> = emptyList(),
     val note: String = "",
+    /** Changes or stops between [depart] and [arrive] (e.g. Frankfurt Hbf), in travel order. */
+    val via: List<Endpoint> = emptyList(),
 )
 
 @Serializable
