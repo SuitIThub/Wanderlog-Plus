@@ -2,6 +2,7 @@ package de.wanderlogplus.shared.model
 
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.TravelMode
+import de.wanderlogplus.shared.sync.Worth
 import kotlinx.serialization.Serializable
 
 /** Dates are ISO strings ("2027-05-09"), times are "HH:mm". */
@@ -67,6 +68,9 @@ data class SavedPlace(
     val note: String = "",
     val tags: List<String> = emptyList(),
     val status: PlaceStatus = PlaceStatus.IDEA,
+    /** The assistant's judgement of how worthwhile a visit is; null = not judged yet. */
+    val worth: Worth? = null,
+    val worthReason: String = "",
 )
 
 @Serializable

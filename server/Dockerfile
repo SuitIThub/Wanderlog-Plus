@@ -7,7 +7,11 @@ COPY . .
 RUN gradle :server:installDist --no-daemon
 
 FROM eclipse-temurin:17-jre
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# ffmpeg zerlegt Reels in Einzelbilder und Ton, yt-dlp lädt sie. yt-dlp kommt bewusst als aktuelle Release-Datei
+# statt aus apt: Instagram ändert sich oft, ältere Versionen scheitern dann. Neu bauen holt ein neues yt-dlp.
+RUN apt-get update && apt-get install -y --no-install-recommends curl ffmpeg ca-certificates \
+    && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
+    && chmod 755 /usr/local/bin/yt-dlp \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin wlp \
     && mkdir /data && chown 10001 /data

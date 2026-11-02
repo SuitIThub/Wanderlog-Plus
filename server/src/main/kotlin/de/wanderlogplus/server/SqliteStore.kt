@@ -63,6 +63,7 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             }
             conn.createStatement().use { st ->
                 st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                st.execute("CREATE TABLE IF NOT EXISTS ai_jobs(id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL, json TEXT NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS route_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, created_at INTEGER NOT NULL)")
             }
             conn.prepareStatement("INSERT OR IGNORE INTO meta(key, value) VALUES ('db_epoch', ?)").use { ps ->
@@ -267,4 +268,32 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             ps.executeUpdate()
         }
     }
+
+    /** Stores (or replaces) an assistant job as JSON. */
+    @Synchronized
+    fun putAiJob(id: String, kind: String, createdAt: Long, json: String) {
+        conn.prepareStatement("INSERT OR REPLACE INTO ai_jobs(id, kind, created_at, json) VALUES (?,?,?,?)").use { ps ->
+            ps.setString(1, id); ps.setString(2, kind); ps.setLong(3, createdAt); ps.setString(4, json)
+            ps.executeUpdate()
+        }
+    }
+
+    @Synchronized
+    fun aiJob(id: String): String? =
+        conn.prepareStatement("SELECT json FROM ai_jobs WHERE id = ?").use { ps ->
+            ps.setString(1, id)
+            ps.executeQuery().use { if (it.next()) it.getString(1) else null }
+        }
+
+    /** Newest first. */
+    @Synchronized
+    fun aiJobs(kind: String?, limit: Int): List<String> =
+        conn.prepareStatement(
+            if (kind == null) "SELECT json FROM ai_jobs ORDER BY created_at DESC LIMIT ?" else "SELECT json FROM ai_jobs WHERE kind = ? ORDER BY created_at DESC LIMIT ?",
+        ).use { ps ->
+            var i = 1
+            if (kind != null) ps.setString(i++, kind)
+            ps.setInt(i, limit)
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
 }

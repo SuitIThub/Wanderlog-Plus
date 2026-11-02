@@ -5,6 +5,16 @@ import de.wanderlogplus.shared.sync.PROTOCOL_HEADER
 import de.wanderlogplus.shared.sync.PROTOCOL_VERSION
 import de.wanderlogplus.shared.sync.PushRequest
 import de.wanderlogplus.shared.sync.RouteRequest
+import de.wanderlogplus.shared.sync.ReelRequest
+import de.wanderlogplus.shared.sync.AssessRequest
+import de.wanderlogplus.server.ai.AiJobs
+import de.wanderlogplus.server.ai.AiNotConfigured
+import de.wanderlogplus.server.ai.ReelInput
+import de.wanderlogplus.server.ai.ToolReelMedia
+import de.wanderlogplus.server.ai.firstUrlIn
+import de.wanderlogplus.server.ai.isSupportedVideoUrl
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -51,6 +61,9 @@ import java.security.MessageDigest
 
 private const val MULTIPART_HEADROOM = 64L * 1024
 
+/** Largest video accepted for reel analysis (reels are usually 5–40 MB). */
+private const val MAX_REEL_BYTES = 200L * 1024 * 1024
+
 /** Container for server components; later tasks add store, sync, files, imports. */
 class Services(
     val config: ServerConfig,
@@ -59,6 +72,7 @@ class Services(
     val files: FileStore,
     val imports: ImportService,
     val routes: RoutesService = RoutesService(store, null),
+    val ai: AiJobs = AiJobs(store, null, ToolReelMedia(), config.dataDir.resolve("ai-work")),
 )
 
 @Serializable
@@ -119,6 +133,7 @@ fun Application.module(services: Services) {
         exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
         exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
+        exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
         exception<BadInput> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<ContentTransformationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -191,6 +206,58 @@ fun Application.module(services: Services) {
             post("/api/routes") {
                 val req = call.receive<RouteRequest>()
                 call.respond(withContext(Dispatchers.IO) { services.routes.compute(req) })
+            }
+            post("/api/ai/reels") {
+                if (!services.ai.configured) throw AiNotConfigured()
+                val url = firstUrlIn(call.receive<ReelRequest>().url)?.takeIf { isSupportedVideoUrl(it) } ?: throw BadInput()
+                call.respond(services.ai.startReel(ReelInput.Link(url)))
+            }
+            post("/api/ai/reels/upload") {
+                if (!services.ai.configured) throw AiNotConfigured()
+                val work = services.config.dataDir.resolve("ai-work")
+                withContext(Dispatchers.IO) { Files.createDirectories(work) }
+                var video: java.nio.file.Path? = null
+                var caption: String? = null
+                val multipart = call.receiveMultipart(formFieldLimit = MAX_REEL_BYTES + MULTIPART_HEADROOM)
+                try {
+                    multipart.forEachPart { part ->
+                        try {
+                            if (part is PartData.FileItem && part.name == "file" && video == null) {
+                                val target = withContext(Dispatchers.IO) { Files.createTempFile(work, "upload-", ".mp4") }
+                                video = target
+                                val size = withContext(Dispatchers.IO) {
+                                    part.provider().toInputStream().use { input -> Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING) }
+                                }
+                                if (size > MAX_REEL_BYTES) throw FileTooLarge()
+                            } else if (part is PartData.FormItem && part.name == "caption") {
+                                caption = part.value.take(10_000).ifBlank { null }
+                            }
+                        } finally {
+                            part.dispose()
+                        }
+                    }
+                } catch (e: Exception) {
+                    video?.let { withContext(Dispatchers.IO) { Files.deleteIfExists(it) } }
+                    if (e is java.io.IOException && e.message?.startsWith("Multipart content length exceeds limit") == true) throw FileTooLarge()
+                    throw e
+                }
+                val v = video ?: throw BadInput()
+                call.respond(services.ai.startReel(ReelInput.Video(v, caption)))
+            }
+            post("/api/ai/assess") {
+                if (!services.ai.configured) throw AiNotConfigured()
+                call.respond(services.ai.startAssessment(call.receive<AssessRequest>().savedPlaceIds))
+            }
+            get("/api/ai/jobs") {
+                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
+                if (limit !in 1..100) throw BadInput()
+                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess") }
+                call.respond(withContext(Dispatchers.IO) { services.ai.list(kind, limit) })
+            }
+            get("/api/ai/jobs/{id}") {
+                val id = call.parameters["id"].orEmpty()
+                val job = withContext(Dispatchers.IO) { services.ai.get(id) }
+                if (job == null) call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) else call.respond(job)
             }
             post("/api/import/wanderlog") {
                 val entry = withContext(Dispatchers.IO) { services.imports.runImport() }

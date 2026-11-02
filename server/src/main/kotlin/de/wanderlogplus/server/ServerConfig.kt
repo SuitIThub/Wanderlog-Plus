@@ -11,9 +11,15 @@ data class ServerConfig(
     val importFile: Path?,
     /** Google Routes API key; without it, route computation answers `routes_not_configured`. */
     val googleRoutesKey: String? = null,
+    /** OpenRouter key for the assistant (reel analysis, worth judgements); without it those answer `ai_not_configured`. */
+    val openRouterKey: String? = null,
+    val aiModel: String = DEFAULT_AI_MODEL,
+    /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
+    val instagramCookies: Path? = null,
 ) {
     companion object {
         const val MIN_TOKEN_LENGTH = 16
+        const val DEFAULT_AI_MODEL = "google/gemini-2.5-flash"
 
         fun fromEnv(env: Map<String, String>): ServerConfig {
             val raw = env["WLP_TOKENS"]?.takeIf { it.isNotBlank() }
@@ -51,6 +57,9 @@ data class ServerConfig(
                 tripKey = env["WLP_TRIP_KEY"]?.takeIf { it.isNotBlank() },
                 importFile = env["WLP_IMPORT_FILE"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
                 googleRoutesKey = env["WLP_GOOGLE_ROUTES_KEY"]?.takeIf { it.isNotBlank() },
+                openRouterKey = env["WLP_OPENROUTER_KEY"]?.takeIf { it.isNotBlank() },
+                aiModel = env["WLP_AI_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL,
+                instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
             )
         }
     }
