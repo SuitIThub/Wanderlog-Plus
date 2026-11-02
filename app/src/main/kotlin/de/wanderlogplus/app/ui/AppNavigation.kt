@@ -145,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
             else -> emptySet()
         }
 }
@@ -624,19 +624,60 @@ fun AppNavigation(
                         val job by vm.job.collectAsState()
                         val snap by vm.snapshot.collectAsState()
                         val imported by vm.importedNow.collectAsState()
+                        val positions by vm.positions.collectAsState()
                         val msg by vm.message.collectAsState()
                         LaunchedEffect(id) { vm.watch(id) }
                         LaunchedEffect(msg) { msg?.let { vm.consumeMessage(); snackbar.showSnackbar(it) } }
                         SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                             ReelJobScreen(
-                                job = job?.takeIf { it.id == id },
+                                job = job?.takeIf { it.id == id }?.let { j ->
+                                    j.copy(candidates = j.candidates.mapIndexed { i, c -> positions[i]?.let { p -> de.wanderlogplus.app.ui.reels.withPosition(c, p) } ?: c })
+                                },
                                 snapshot = snap,
                                 imported = imported,
                                 onImport = { picks -> vm.import(id, picks, job?.source) },
                                 onOpenPlaces = { nav.navigateToTab(Tab.ORTE) },
                                 onBack = { nav.popBackStack() },
                                 onShowProgress = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(id)) },
+                                onFindPosition = geoSearch?.let { { i -> nav.navigate(de.wanderlogplus.app.ui.reels.reelPositionRoute(id, i)) } },
                             )
+                        }
+                    }
+                    composable(de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE) { entry ->
+                        // The reel screen below owns the view model that keeps the picked positions.
+                        val owner = nav.previousBackStackEntry ?: entry
+                        val vm: ReelsViewModel = viewModel(factory = reelsViewModelFactory, viewModelStoreOwner = owner)
+                        val index = entry.arguments?.getString("index")?.toIntOrNull() ?: 0
+                        val job by vm.job.collectAsState()
+                        val snap by vm.snapshot.collectAsState()
+                        val c = job?.candidates?.getOrNull(index)
+                        val geo = geoSearch
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            if (c != null && geo != null) {
+                                val start = remember(snap) {
+                                    snap?.let { regionCentres(it) }?.values?.takeIf { it.isNotEmpty() }?.let { cs ->
+                                        de.wanderlogplus.app.maps.LatLngD(cs.map { it.lat }.average(), cs.map { it.lng }.average())
+                                    }
+                                }
+                                val model = rememberPlaceSearchModel(
+                                    search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                    lookup = { lat, lng -> geo.reverse(lat, lng) },
+                                    home = start,
+                                )
+                                LaunchedEffect(index) {
+                                    if (model.query.isBlank()) {
+                                        model.query = listOfNotNull(c.name, c.city).joinToString(" ")
+                                        model.submit()
+                                    }
+                                }
+                                PlaceSearchScreen(
+                                    model = model,
+                                    start = start,
+                                    addLabel = "Als Position übernehmen",
+                                    onAdd = { place -> vm.setPosition(index, place); nav.popBackStack() },
+                                    onBack = { nav.popBackStack() },
+                                )
+                            }
                         }
                     }
                     composable(de.wanderlogplus.app.ui.reels.JOB_ROUTE) { entry ->

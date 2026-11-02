@@ -53,6 +53,14 @@ class ReelsViewModel(
 
     private var watching: Job? = null
 
+    /** Positions set by hand for candidates of the watched job (index -> place). */
+    private val _positions = MutableStateFlow<Map<Int, de.wanderlogplus.client.GeoPlace>>(emptyMap())
+    val positions: StateFlow<Map<Int, de.wanderlogplus.client.GeoPlace>> = _positions
+
+    fun setPosition(index: Int, place: de.wanderlogplus.client.GeoPlace) {
+        _positions.value = _positions.value + (index to place)
+    }
+
     init {
         viewModelScope.launch { snapshots().collect { _snapshot.value = it } }
     }
@@ -78,6 +86,7 @@ class ReelsViewModel(
     /** Follows job [id] until it is done or failed. */
     fun watch(id: String) {
         if (_job.value?.id == id && watching?.isActive == true) return
+        if (_job.value?.id != id) _positions.value = emptyMap()
         watching?.cancel()
         _importedNow.value = imported.contains(id)
         watching = viewModelScope.launch {

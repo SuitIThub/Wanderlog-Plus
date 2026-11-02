@@ -105,16 +105,11 @@ class Assistant(
     /** Coordinates, distance to the trip and the full research for one place found in a reel. */
     fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}): ReelCandidate {
         say("Lage wird gesucht (Photon) …")
-        val hit = listOfNotNull(
-            listOfNotNull(p.name, p.city).joinToString(" "),
-            p.localName,
-            p.name,
-        ).distinct().firstNotNullOfOrNull { geocoder.find(it) }
+        val (hit, issue) = locate(p, say)
         val near = hit?.let { context.nearest(it.lat, it.lng) }
-        say(
-            if (hit == null) "Lage nicht gefunden"
-            else "Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty(),
-        )
+        if (hit != null) {
+            say("Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty())
+        }
         val r = try {
             researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence), config, say)
         } catch (e: AiFailed) {
@@ -141,7 +136,34 @@ class Assistant(
             evidence = p.evidence,
             sources = d?.sources.orEmpty(),
             dossier = d,
+            positionIssue = issue,
         )
+    }
+
+    /**
+     * Coordinates of a reel place: the full name with city, the local name, the bare name; then ever shorter names
+     * ("Sunshine 60 Observatory TENBOU PARK" -> "Sunshine 60") with the city, accepted only within [SHORT_NAME_MAX_KM]
+     * of the city. Returns the hit or why there is none ("not_found", "unavailable").
+     */
+    internal fun locate(p: FoundPlace, say: (String) -> Unit = {}): Pair<GeoHit?, String?> = try {
+        val full = listOfNotNull(listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name).distinct()
+        full.firstNotNullOfOrNull { geocoder.find(it) }?.let { return it to null }
+        val words = p.name.trim().split(Regex("\\s+"))
+        val city = p.city?.takeIf { it.isNotBlank() && words.size > 2 }?.let { geocoder.find(it) }
+        val shortHit = city?.let { c ->
+            (words.size - 1 downTo 2).asSequence()
+                .map { k -> words.take(k).joinToString(" ") }
+                .filter { it.length >= 4 }
+                .firstNotNullOfOrNull { short ->
+                    geocoder.find("$short ${p.city}")
+                        ?.takeIf { distanceKm(c.lat, c.lng, it.lat, it.lng) <= SHORT_NAME_MAX_KM }
+                        ?.also { say("Lage über den kürzeren Namen „$short“ gefunden") }
+                }
+        }
+        if (shortHit != null) shortHit to null else { say("Lage nicht gefunden"); null to "not_found" }
+    } catch (e: GeocoderUnavailable) {
+        say("Ortsdienst (Photon) antwortet nicht, Lage fehlt")
+        null to "unavailable"
     }
 
     /** Researches several reel places at once (at most [RESEARCH_PARALLELISM] at a time), keeping their order. */
@@ -270,6 +292,9 @@ class Assistant(
 
     companion object {
         const val MAX_PLACES = 8
+
+        /** A hit for a shortened name must lie this close to the named city. */
+        const val SHORT_NAME_MAX_KM = 25.0
         const val ASSESS_BATCH = 25
         internal val CATEGORIES = setOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER")
 
