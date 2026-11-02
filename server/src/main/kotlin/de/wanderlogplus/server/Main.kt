@@ -3,6 +3,9 @@ package de.wanderlogplus.server
 import de.wanderlogplus.server.ai.AiJobs
 import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
+import de.wanderlogplus.server.ai.OpenRouterResearcher
+import de.wanderlogplus.server.ai.ParallelResearcher
+import de.wanderlogplus.server.ai.HttpParallelTransport
 import de.wanderlogplus.server.ai.PhotonGeocoder
 import de.wanderlogplus.server.ai.ToolReelMedia
 import io.ktor.server.engine.embeddedServer
@@ -27,7 +30,11 @@ fun main() {
         RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) }),
         AiJobs(
             store,
-            config.openRouterKey?.let { Assistant(OpenRouterModel(it, config.aiModel), PhotonGeocoder()) },
+            config.openRouterKey?.let { key ->
+                val model = OpenRouterModel(key, config.aiModel)
+                val researcher = config.parallelKey?.let { ParallelResearcher(HttpParallelTransport(it), config.parallelProcessor) } ?: OpenRouterResearcher(model)
+                Assistant(model, PhotonGeocoder(), researcher)
+            },
             ToolReelMedia(cookies = config.instagramCookies),
             config.dataDir.resolve("ai-work"),
         ),

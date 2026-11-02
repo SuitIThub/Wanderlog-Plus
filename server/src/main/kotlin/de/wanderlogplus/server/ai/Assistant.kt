@@ -27,7 +27,12 @@ private val WORTH_SCALE = """Stufen für "worth": MUST = muss man gesehen haben,
  * trip, research them on the web and describe them in German; and judge saved places' worth. Prompts never contain
  * booking data, only place names, regions and reel content.
  */
-class Assistant(private val model: ChatModel, private val geocoder: Geocoder) {
+class Assistant(
+    private val model: ChatModel,
+    private val geocoder: Geocoder,
+    /** Web research per place: Parallel when configured, else the chat model's web search. */
+    private val researcher: PlaceResearcher = OpenRouterResearcher(model),
+) {
 
     /** Places named or shown in the reel; empty when there are none. */
     fun findPlaces(caption: String?, media: Media, context: TripContext): Pair<String?, List<FoundPlace>> {
@@ -65,25 +70,8 @@ class Assistant(private val model: ChatModel, private val geocoder: Geocoder) {
             p.name,
         ).distinct().firstNotNullOfOrNull { geocoder.find(it) }
         val near = hit?.let { context.nearest(it.lat, it.lng) }
-        val system = """
-            Du schreibst für eine Reise-App kurze, sachliche Ortsinfos auf Deutsch, im Stil eines Reiseführers.
-            Recherchiere im Web Bewertungen, Tipps und praktische Hinweise (Öffnungszeiten, Reservierung, Andrang, Preise, beste Zeit).
-            $WORTH_SCALE
-            Antworte nur mit JSON: {"description": "2–4 Sätze, was der Ort ist und was ihn ausmacht",
-            "tips": ["höchstens 4 kurze Tipps"], "hints": ["höchstens 4 Hinweise/Warnungen"],
-            "worth": "MUST|WORTH|OPTIONAL|SKIP", "worthReason": "1 Satz Begründung",
-            "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER"}
-        """.trimIndent()
-        val prompt = buildString {
-            append("Ort: ").append(p.name)
-            p.localName?.let { append(" (").append(it).append(")") }
-            p.city?.let { append(", ").append(it) }
-            p.country?.let { append(", ").append(it) }
-            append("\nArt laut Video: ").append(p.kind)
-            if (p.evidence.isNotBlank()) append("\nIm Reel: ").append(p.evidence)
-        }
-        val o = try {
-            OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(prompt)), webSearch = true))
+        val r = try {
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence))
         } catch (e: AiFailed) {
             null // a place without research is still worth showing
         }
@@ -93,16 +81,17 @@ class Assistant(private val model: ChatModel, private val geocoder: Geocoder) {
             lat = hit?.lat,
             lng = hit?.lng,
             address = hit?.address,
-            category = o?.str("category")?.uppercase()?.takeIf { it in CATEGORIES } ?: categoryOf(p.kind),
-            description = o?.str("description").orEmpty(),
-            tips = o.strings("tips").take(4),
-            hints = o.strings("hints").take(4),
-            worth = o?.str("worth")?.let { w -> Worth.entries.firstOrNull { it.name == w.uppercase() } },
-            worthReason = o?.str("worthReason").orEmpty(),
+            category = r?.category?.uppercase()?.takeIf { it in CATEGORIES } ?: categoryOf(p.kind),
+            description = r?.description.orEmpty(),
+            tips = r?.tips.orEmpty().take(4),
+            hints = r?.hints.orEmpty().take(4),
+            worth = r?.worth?.let { w -> Worth.entries.firstOrNull { it.name == w.uppercase() } },
+            worthReason = r?.worthReason.orEmpty(),
             distanceKm = near?.second?.let { (it * 10).roundToInt() / 10.0 },
             nearestAnchor = near?.first?.name,
             onRoute = near != null && near.second <= ON_ROUTE_KM,
             evidence = p.evidence,
+            sources = r?.sources.orEmpty(),
         )
     }
 
@@ -158,5 +147,39 @@ class Assistant(private val model: ChatModel, private val geocoder: Geocoder) {
             "nightlife" -> "NIGHTLIFE"
             else -> "OTHER"
         }
+    }
+}
+
+/** Research with the chat model's web search plugin (OpenRouter), used when no Parallel key is configured. */
+class OpenRouterResearcher(private val model: ChatModel) : PlaceResearcher {
+    override fun research(query: ResearchQuery): PlaceResearch? {
+        val system = """
+            Du schreibst für eine Reise-App kurze, sachliche Ortsinfos auf Deutsch, im Stil eines Reiseführers.
+            Recherchiere im Web Bewertungen, Tipps und praktische Hinweise (Öffnungszeiten, Reservierung, Andrang, Preise, beste Zeit).
+            $WORTH_SCALE
+            Antworte nur mit JSON: {"description": "2–4 Sätze, was der Ort ist und was ihn ausmacht",
+            "tips": ["höchstens 4 kurze Tipps"], "hints": ["höchstens 4 Hinweise/Warnungen"],
+            "worth": "MUST|WORTH|OPTIONAL|SKIP", "worthReason": "1 Satz Begründung",
+            "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER"}
+        """.trimIndent()
+        val prompt = buildString {
+            append("Ort: ").append(query.name)
+            query.localName?.let { append(" (").append(it).append(")") }
+            query.city?.let { append(", ").append(it) }
+            query.country?.let { append(", ").append(it) }
+            append("\nArt laut Video: ").append(query.kind)
+            if (query.evidence.isNotBlank()) append("\nIm Reel: ").append(query.evidence)
+        }
+        val o = OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(prompt)), webSearch = true))
+        fun strings(key: String) = (o[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
+        return PlaceResearch(
+            description = o.str("description").orEmpty(),
+            tips = strings("tips"),
+            hints = strings("hints"),
+            worth = o.str("worth"),
+            worthReason = o.str("worthReason").orEmpty(),
+            category = o.str("category"),
+            sources = emptyList(),
+        )
     }
 }

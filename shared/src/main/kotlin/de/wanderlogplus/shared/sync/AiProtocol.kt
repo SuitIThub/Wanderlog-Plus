@@ -34,6 +34,8 @@ data class ReelCandidate(
     val onRoute: Boolean = false,
     /** Why the model thinks the reel shows this place (caption, speech, sign in the video). */
     val evidence: String = "",
+    /** Web pages the description and tips rely on. */
+    val sources: List<String> = emptyList(),
 )
 
 /** The judgement for one saved place. */
