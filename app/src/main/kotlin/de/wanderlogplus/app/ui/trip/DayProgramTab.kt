@@ -9,7 +9,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.maps.LatLngD
+import de.wanderlogplus.app.ui.design.InsertButton
 import de.wanderlogplus.app.ui.design.LegRow
+import de.wanderlogplus.client.ItemPosition
 import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.sync.TravelMode
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +58,8 @@ internal fun DayProgramTab(
     onShowLegs: ((Boolean) -> Unit)? = null,
     onLegMode: (itemId: String, mode: TravelMode) -> Unit = { _, _ -> },
     onOpenLink: ((ExternalLink) -> Unit)? = null,
+    /** Opens "Hinzufügen" for a position between items; null hides the ＋ elements. */
+    onInsert: ((ItemPosition) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         if (onShowLegs != null && items.count { it.kind == DayItemKind.PLACE } >= 2) {
@@ -86,6 +90,7 @@ internal fun DayProgramTab(
             emptyProgram = {
                 EmptyHint("Noch nichts geplant – füge Orte aus den Vorschlägen hinzu.", Modifier.testTag("program-empty"))
             },
+            insertSlot = onInsert?.let { insert -> { pos -> InsertButton(pos.encode(), onClick = { insert(pos) }) } },
             legs = if (!showLegs) null else { from, to ->
                 LegRow(
                     tag = to.id,

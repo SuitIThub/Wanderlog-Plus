@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -268,4 +269,27 @@ fun Modifier.bleedHorizontally(by: androidx.compose.ui.unit.Dp): Modifier = layo
         ),
     )
     layout((placeable.width - 2 * extra).coerceAtLeast(0), placeable.height) { placeable.place(-extra, 0) }
+}
+
+/** Thin "insert here" element between program items: a short line with a small ＋ in the middle. Tag `insert-<tag>`. */
+@Composable
+fun InsertButton(tag: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.layout.Row(
+        modifier.fillMaxWidth().padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+        androidx.compose.material3.FilledTonalIconButton(
+            onClick = onClick,
+            modifier = Modifier.padding(horizontal = 8.dp).size(30.dp).testTag("insert-$tag"),
+        ) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Default.Add,
+                contentDescription = "Hier einfügen",
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        androidx.compose.material3.HorizontalDivider(Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    }
 }

@@ -31,6 +31,7 @@ import de.wanderlogplus.app.maps.routeFor
 import de.wanderlogplus.app.ui.categoryLabel
 import de.wanderlogplus.app.ui.categorySymbol
 import de.wanderlogplus.app.ui.ratingLabel
+import de.wanderlogplus.client.ItemPosition
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.DayItem
@@ -79,6 +80,8 @@ fun DayTimeline(
     emptyProgram: (@Composable () -> Unit)? = null,
     /** The way to a place from the previous place of the program (notes in between are skipped); null shows none. */
     legs: (@Composable (from: DayItem, to: DayItem) -> Unit)? = null,
+    /** A small "insert here" element above the first program item and below every item; null shows none. */
+    insertSlot: (@Composable (ItemPosition) -> Unit)? = null,
 ) {
     val dow = now?.let { it.dayOfWeek.value % 7 } // 0 = Sunday
     val time = now?.format(HH_MM)
@@ -93,6 +96,8 @@ fun DayTimeline(
         }
         items.forEachIndexed { i, item ->
             item((i + 1).toString(), key = "item-${item.id}") {
+              Column {
+                if (i == 0) insertSlot?.invoke(ItemPosition.Start)
                 val tag = Modifier.testTag(itemTagPrefix + item.id)
                 val actions: (@Composable () -> Unit)? = itemActions?.let { a -> { a(item) } }
                 when (item.kind) {
@@ -127,6 +132,8 @@ fun DayTimeline(
                         modifier = tag,
                     )
                 }
+                insertSlot?.invoke(ItemPosition.After(item.id))
+              }
             }
         }
         if (stay != null && stay.checkOut != date) {

@@ -1,7 +1,9 @@
 package de.wanderlogplus.client
 
+import de.wanderlogplus.shared.model.PlaceCategory
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -14,13 +16,45 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import java.io.IOException
+import java.util.Locale
 
-/** A search hit: display [name], a short [detail] line (city, country) and its coordinates. */
-data class GeoPlace(val name: String, val detail: String, val lat: Double, val lng: Double)
+/**
+ * A search hit: display [name], a short [detail] line (street, city, country), its coordinates and the OpenStreetMap
+ * tag it was found by ([osmKey]/[osmValue], e.g. amenity/restaurant), when known.
+ */
+data class GeoPlace(
+    val name: String,
+    val detail: String,
+    val lat: Double,
+    val lng: Double,
+    val osmKey: String? = null,
+    val osmValue: String? = null,
+) {
+    /** Best guess of the trip category from the OpenStreetMap tag. */
+    val category: PlaceCategory
+        get() = when {
+            osmKey == "amenity" && osmValue in setOf("bar", "pub", "nightclub", "biergarten") -> PlaceCategory.NIGHTLIFE
+            osmKey == "amenity" && osmValue in setOf("restaurant", "cafe", "fast_food", "food_court", "ice_cream") -> PlaceCategory.FOOD
+            osmKey == "shop" -> PlaceCategory.SHOPPING
+            osmKey in setOf("tourism", "historic", "leisure", "natural") -> PlaceCategory.SIGHT
+            osmKey == "amenity" && osmValue in setOf("place_of_worship", "theatre", "arts_centre") -> PlaceCategory.SIGHT
+            else -> PlaceCategory.OTHER
+        }
+}
+
+/** A map area: west/south/east/north in degrees. */
+data class BBox(val west: Double, val south: Double, val east: Double, val north: Double) {
+    val centerLat get() = (south + north) / 2
+    val centerLng get() = (west + east) / 2
+
+    fun contains(lat: Double, lng: Double) = lat in south..north && lng in west..east
+
+    internal fun param(): String = listOf(west, south, east, north).joinToString(",") { String.format(Locale.ROOT, "%.6f", it) }
+}
 
 /**
  * Place search via Photon (OpenStreetMap data, no key). Never sends the server token: this is a third-party service.
- * [near] biases results towards a coordinate (e.g. the trip leg), without restricting them.
+ * [near] biases results towards a coordinate; [bbox] restricts them to a map area.
  */
 class GeoSearch(http: HttpClient, private val baseUrl: String = "https://photon.komoot.io") {
     private val client = http.config {
@@ -33,15 +67,30 @@ class GeoSearch(http: HttpClient, private val baseUrl: String = "https://photon.
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Empty list for a blank query; [ApiException] (NETWORK/SERVER) when the service fails. */
-    suspend fun search(query: String, near: Pair<Double, Double>? = null, limit: Int = 8): List<GeoPlace> {
+    suspend fun search(query: String, near: Pair<Double, Double>? = null, limit: Int = 8, bbox: BBox? = null): List<GeoPlace> {
         val q = query.trim()
         if (q.isEmpty()) return emptyList()
+        return get("api/") {
+            parameter("q", q)
+            parameter("limit", limit)
+            parameter("lang", "de")
+            near?.let { (lat, lng) -> parameter("lat", lat); parameter("lon", lng) }
+            bbox?.let { parameter("bbox", it.param()) }
+        }
+    }
+
+    /** The nearest named place or address at a point (e.g. a long press on the map); null when there is none. */
+    suspend fun reverse(lat: Double, lng: Double): GeoPlace? = get("reverse") {
+        parameter("lat", lat)
+        parameter("lon", lng)
+        parameter("lang", "de")
+        parameter("limit", 1)
+    }.firstOrNull()
+
+    private suspend fun get(path: String, params: HttpRequestBuilder.() -> Unit): List<GeoPlace> {
         val response = try {
-            client.get("${baseUrl.trimEnd('/')}/api/") {
-                parameter("q", q)
-                parameter("limit", limit)
-                parameter("lang", "de")
-                near?.let { (lat, lng) -> parameter("lat", lat); parameter("lon", lng) }
+            client.get("${baseUrl.trimEnd('/')}/$path") {
+                params()
                 header(HttpHeaders.UserAgent, "WanderlogPlus")
             }
         } catch (e: CancellationException) {
@@ -68,8 +117,10 @@ class GeoSearch(http: HttpClient, private val baseUrl: String = "https://photon.
             val lat = (coords.getOrNull(1) as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
             val props = feature["properties"] as? JsonObject ?: JsonObject(emptyMap())
             fun p(key: String) = (props[key] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
-            val name = p("name") ?: p("street") ?: return@mapNotNull null
-            val detail = listOfNotNull(p("city") ?: p("county"), p("state"), p("country")).distinct().joinToString(", ")
-            GeoPlace(name, detail, lat, lng)
+            val street = listOfNotNull(p("street"), p("housenumber")).joinToString(" ").takeIf { it.isNotBlank() }
+            val name = p("name") ?: street ?: return@mapNotNull null
+            val detail = listOfNotNull(street.takeIf { p("name") != null }, p("city") ?: p("county"), p("state"), p("country"))
+                .distinct().joinToString(", ")
+            GeoPlace(name, detail, lat, lng, p("osm_key"), p("osm_value"))
         }
 }

@@ -10,6 +10,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import de.wanderlogplus.client.GeoPlace
+import de.wanderlogplus.client.ItemPosition
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.TravelMode
 import kotlinx.serialization.json.JsonNull
@@ -65,6 +67,16 @@ class TripViewModel(
         write { e, s -> e.setDayFields(s, date, mapOf("regionOverrideId" to (regionId?.let { JsonPrimitive(it) } ?: JsonNull))) }
 
     fun addNote(date: String, text: String) = write { e, s -> e.addNoteToDay(s, date, text) }
+
+    fun addSuggestionAt(date: String, savedPlaceId: String, position: ItemPosition) =
+        write { e, s -> e.addSuggestionToDay(s, date, savedPlaceId, position) }
+
+    fun addNoteAt(date: String, text: String, position: ItemPosition) = write { e, s -> e.addNoteToDay(s, date, text, position) }
+
+    /** A place found by name or on the map becomes a planned place of the day's region and a program item at [position]. */
+    fun addSearchedPlace(date: String, position: ItemPosition, place: GeoPlace) = write { e, s ->
+        e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position)
+    }
 
     fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
 
