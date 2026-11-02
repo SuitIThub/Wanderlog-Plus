@@ -76,7 +76,8 @@ private const val TAB_NOTES = 2
 fun DayDetailScreen(
     snapshot: TripSnapshot,
     date: String,
-    onBack: () -> Unit,
+    /** Null hides the back button (detail pane beside its list). */
+    onBack: (() -> Unit)?,
     onAddSuggestion: (date: String, savedPlaceId: String) -> Unit,
     onMove: (itemId: String, up: Boolean) -> Unit,
     onRemove: (itemId: String) -> Unit,

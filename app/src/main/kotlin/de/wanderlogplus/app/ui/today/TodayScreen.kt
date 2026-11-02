@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import de.wanderlogplus.app.ui.design.isWideLayout
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.Navigation
@@ -178,7 +180,7 @@ private fun During(
             )
         }
 
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val stayBlock: @Composable () -> Unit = {
             if (stay != null) {
                 SectionLabel("Unterkunft", color = accent)
                 val hint = when (date) {
@@ -198,7 +200,29 @@ private fun During(
                     modifier = Modifier.testTag("today-stay"),
                 )
             }
-
+        }
+        val openBlock: @Composable () -> Unit = {
+            if (openNow.isNotEmpty()) {
+                SectionLabel("Jetzt geöffnet", color = accent)
+                Column(Modifier.testTag("open-now-list"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    openNow.forEach { s ->
+                        PhotoCard(
+                            title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
+                            subtitle = listOfNotNull(
+                                categoryLabel(s.saved.category),
+                                s.place?.rating?.let { ratingLabel(it) },
+                            ).joinToString(" · "),
+                            imageUrl = s.place?.heroImageUrl(),
+                            placeholderSymbol = categorySymbol(s.saved.category),
+                            accent = accent,
+                            style = PhotoCardStyle.Compact,
+                            modifier = Modifier.testTag("open-now-${s.saved.id}"),
+                        )
+                    }
+                }
+            }
+        }
+        val timeline: @Composable () -> Unit = {
             SectionLabel("Tagesablauf", color = accent)
             DayTimeline(
                 snapshot = snapshot,
@@ -220,25 +244,19 @@ private fun During(
                 },
                 modifier = Modifier.testTag("today-program"),
             )
-
-            if (openNow.isNotEmpty()) {
-                SectionLabel("Jetzt geöffnet", color = accent)
-                Column(Modifier.testTag("open-now-list"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    openNow.forEach { s ->
-                        PhotoCard(
-                            title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
-                            subtitle = listOfNotNull(
-                                categoryLabel(s.saved.category),
-                                s.place?.rating?.let { ratingLabel(it) },
-                            ).joinToString(" · "),
-                            imageUrl = s.place?.heroImageUrl(),
-                            placeholderSymbol = categorySymbol(s.saved.category),
-                            accent = accent,
-                            style = PhotoCardStyle.Compact,
-                            modifier = Modifier.testTag("open-now-${s.saved.id}"),
-                        )
-                    }
-                }
+        }
+        if (isWideLayout()) {
+            // Unfolded: the day's timeline on the left, stay and "Jetzt geöffnet" on the right.
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Column(Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(8.dp)) { timeline() }
+                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) { stayBlock(); openBlock() }
+            }
+        } else {
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Stay first, then the timeline, then what is open now.
+                stayBlock()
+                timeline()
+                openBlock()
             }
         }
     }

@@ -12,6 +12,19 @@ import androidx.compose.material.icons.filled.Train
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.unit.dp
+import de.wanderlogplus.app.ui.design.EmptyHint
+import de.wanderlogplus.app.ui.design.TwoPane
+import de.wanderlogplus.app.ui.design.isWideLayout
+import de.wanderlogplus.app.ui.trip.defaultDayFor
+import de.wanderlogplus.shared.sync.EntityType
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -184,10 +197,15 @@ fun AppNavigation(
     }
 
     val snackbar = remember { SnackbarHostState() }
+    // Unfolded (or tablet/landscape): navigation rail on the left and two panes where a screen has list and detail.
+    val wide = isWideLayout()
+    val onTab: (Tab) -> Unit = { tab ->
+        if (!(current in tab.nestedRoutes && nav.popBackStack(tab.route, inclusive = false))) nav.navigateToTab(tab)
+    }
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            if (current != SETUP_ROUTE) NavigationBar {
+            if (current != SETUP_ROUTE && !wide) NavigationBar {
                 Tab.entries.forEach { tab ->
                     NavigationBarItem(
                         selected = current == tab.route || current in tab.nestedRoutes,
@@ -217,10 +235,71 @@ fun AppNavigation(
             } else {
                 null
             }
+        @Composable
+        fun DayDetailFor(vm: TripViewModel, snap: TripSnapshot, date: String, onBack: (() -> Unit)?) {
+            val dayFailures by vm.failures.collectAsState()
+            DayDetailScreen(
+                snapshot = snap,
+                date = date,
+                onBack = onBack,
+                onAddSuggestion = vm::addSuggestion,
+                onMove = vm::move,
+                onRemove = vm::remove,
+                attachments = attachmentActions,
+                onSetTitle = vm::setDayTitle,
+                onSetNote = vm::setDayNote,
+                onSetRegion = vm::setRegionOverride,
+                onAddNote = vm::addNote,
+                failureCount = dayFailures,
+                onShowLegs = vm::setShowLegs,
+                onLegMode = vm::setLegMode,
+                onOpenLink = onOpenLink,
+                onAddSuggestionAt = vm::addSuggestionAt,
+                onAddNoteAt = vm::addNoteAt,
+                onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
+                onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
+                onAddStayAt = vm::addStayAt,
+            )
+        }
+
+        @Composable
+        fun PlaceDetailFor(vm: PlacesViewModel, snap: TripSnapshot, id: String, onBack: (() -> Unit)?) {
+            val failures by vm.failures.collectAsState()
+            PlaceDetailScreen(snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory, today = rememberMinuteNow(clock).toLocalDate().toString())
+        }
+
+        @Composable
+        fun LogisticsDetailFor(vm: MoreViewModel, snap: TripSnapshot, type: EntityType?, id: String, onBack: (() -> Unit)?, afterDelete: () -> Unit) {
+            LogisticsDetailScreen(
+                snap, type, id,
+                onBack = onBack,
+                attachments = attachmentActions,
+                onOpenLink = onOpenLink,
+                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                onEdit = { t, i -> nav.navigate(logisticsEditRoute(t, i)) },
+                onMerge = vm::mergeMoves,
+                onDelete = { t, i -> vm.deleteMove(t, i); afterDelete() },
+            )
+        }
+
+        Row(Modifier.padding(padding).fillMaxSize()) {
+        if (wide && current != SETUP_ROUTE) {
+            NavigationRail(modifier = Modifier.testTag("nav-rail")) {
+                Tab.entries.forEach { tab ->
+                    NavigationRailItem(
+                        selected = current == tab.route || current in tab.nestedRoutes,
+                        onClick = { onTab(tab) },
+                        icon = { Icon(tab.icon, contentDescription = null) },
+                        label = { Text(tab.label) },
+                        modifier = Modifier.testTag("rail-${tab.route}"),
+                    )
+                }
+            }
+        }
         NavHost(
             nav,
             startDestination = if (hasServer) Tab.HEUTE.route else SETUP_ROUTE,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.weight(1f).fillMaxHeight(),
         ) {
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
@@ -260,6 +339,15 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                            wide -> {
+                                val today = rememberMinuteNow(clock).toLocalDate().toString()
+                                var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
+                                val date = selectedDay ?: defaultDayFor(s, today)
+                                TwoPane(
+                                    list = { TripScreen(s, onOpenDay = { selectedDay = it }, today = today, selected = date) },
+                                    detail = { if (date != null) DayDetailFor(vm, s, date, onBack = null) },
+                                )
+                            }
                             else -> TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) }, today = rememberMinuteNow(clock).toLocalDate().toString())
                         }
                     }
@@ -268,33 +356,9 @@ fun AppNavigation(
                     val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     TripErrors(vm, snackbar)
-                    val dayFailures by vm.failures.collectAsState()
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
-                        snap?.let {
-                            DayDetailScreen(
-                                snapshot = it,
-                                date = date,
-                                onBack = { nav.popBackStack() },
-                                onAddSuggestion = vm::addSuggestion,
-                                onMove = vm::move,
-                                onRemove = vm::remove,
-                                attachments = attachmentActions,
-                                onSetTitle = vm::setDayTitle,
-                                onSetNote = vm::setDayNote,
-                                onSetRegion = vm::setRegionOverride,
-                                onAddNote = vm::addNote,
-                                failureCount = dayFailures,
-                                onShowLegs = vm::setShowLegs,
-                                onLegMode = vm::setLegMode,
-                                onOpenLink = onOpenLink,
-                                onAddSuggestionAt = vm::addSuggestionAt,
-                                onAddNoteAt = vm::addNoteAt,
-                                onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
-                                onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
-                                onAddStayAt = vm::addStayAt,
-                            )
-                        }
+                        snap?.let { DayDetailFor(vm, it, date, onBack = { nav.popBackStack() }) }
                     }
                 }
                 composable(DAY_MAP_ROUTE) { entry ->
@@ -350,7 +414,19 @@ fun AppNavigation(
                     val key = entry.arguments?.getString("regionKey").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
+                            if (wide) {
+                                var selectedPlace by rememberSaveable(key) { mutableStateOf<String?>(null) }
+                                TwoPane(
+                                    list = { RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> selectedPlace = id }) },
+                                    detail = {
+                                        val id = selectedPlace
+                                        if (id == null) EmptyHint("Ort in der Liste antippen", Modifier.padding(24.dp))
+                                        else PlaceDetailFor(vm, it, id, onBack = null)
+                                    },
+                                )
+                            } else {
+                                RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
+                            }
                         }
                     }
                 }
@@ -358,12 +434,9 @@ fun AppNavigation(
                     val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     ErrorSnack(vm.error, vm::consumeError, snackbar)
-                    val failures by vm.failures.collectAsState()
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
-                        snap?.let {
-                            PlaceDetailScreen(it, id, onBack = { nav.popBackStack() }, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory, today = rememberMinuteNow(clock).toLocalDate().toString())
-                        }
+                        snap?.let { PlaceDetailFor(vm, it, id, onBack = { nav.popBackStack() }) }
                     }
                 }
             }
@@ -376,6 +449,23 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                            wide -> {
+                                var selected by rememberSaveable { mutableStateOf<String?>(null) } // "TYPE/id"
+                                val sel = selected?.split('/', limit = 2)?.takeIf { it.size == 2 }
+                                TwoPane(
+                                    list = {
+                                        LogisticsScreen(
+                                            s,
+                                            onOpen = { e -> selected = "${e.type.name}/${e.id}" },
+                                            today = rememberMinuteNow(clock).toLocalDate().toString(),
+                                        )
+                                    },
+                                    detail = {
+                                        if (sel == null) EmptyHint("Fahrt oder Unterkunft in der Liste antippen", Modifier.padding(24.dp))
+                                        else LogisticsDetailFor(vm, s, logisticsTypeOf(sel[0]), sel[1], onBack = null, afterDelete = { selected = null })
+                                    },
+                                )
+                            }
                             else -> LogisticsScreen(
                                 s,
                                 onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
@@ -392,16 +482,7 @@ fun AppNavigation(
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
                             // An unknown type segment gets the same "nicht gefunden" page (with back) as a missing id.
-                            LogisticsDetailScreen(
-                                s, type, id,
-                                onBack = { nav.popBackStack() },
-                                attachments = attachmentActions,
-                                onOpenLink = onOpenLink,
-                                today = rememberMinuteNow(clock).toLocalDate().toString(),
-                                onEdit = { t, i -> nav.navigate(logisticsEditRoute(t, i)) },
-                                onMerge = vm::mergeMoves,
-                                onDelete = { t, i -> vm.deleteMove(t, i); nav.popBackStack() },
-                            )
+                            LogisticsDetailFor(vm, s, type, id, onBack = { nav.popBackStack() }, afterDelete = { nav.popBackStack() })
                         }
                     }
                 }
@@ -497,6 +578,7 @@ fun AppNavigation(
                     }
                 }
             }
+        }
         }
     }
 }

@@ -21,6 +21,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.fillMaxHeight
+import de.wanderlogplus.app.ui.design.isWideLayout
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -97,81 +100,107 @@ fun PlaceSearchScreen(
                 Icon(Icons.Filled.Search, contentDescription = "Suchen")
             }
         }
-        Box(Modifier.fillMaxWidth().weight(0.55f)) {
-            if (LocalMapsEnabled.current) {
-                SearchMapView(
-                    start = start,
-                    results = model.results,
-                    selected = model.selected,
-                    fitRequest = model.fitRequest,
-                    onVisible = { model.visible = it },
-                    onSelect = { model.selected = it },
-                    onLongPress = { lat, lng -> scope.launch { model.pick(lat, lng) } },
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                Text(
-                    "Karte nicht verfügbar",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center),
-                )
-            }
-            if (model.canSearchArea) {
-                ExtendedFloatingActionButton(
-                    onClick = { scope.launch { model.searchArea() } },
-                    icon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                    text = { Text("In diesem Bereich suchen") },
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).testTag("search-area"),
-                )
-            }
-        }
-        statusText(model.status, model.results.size)?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("search-status"),
-            )
-        }
-        LazyColumn(Modifier.fillMaxWidth().weight(0.45f)) {
-            itemsIndexed(model.results) { i, r ->
-                val isSelected = model.selected == r
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { model.selected = r }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                        .testTag("search-hit-$i"),
-                ) {
-                    Text(
-                        r.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        val wide = isWideLayout()
+        val map: @Composable (Modifier) -> Unit = { m ->
+            Box(m) {
+                if (LocalMapsEnabled.current) {
+                    SearchMapView(
+                        start = start,
+                        results = model.results,
+                        selected = model.selected,
+                        fitRequest = model.fitRequest,
+                        onVisible = { model.visible = it },
+                        onSelect = { model.selected = it },
+                        onLongPress = { lat, lng -> scope.launch { model.pick(lat, lng) } },
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    val sub = listOfNotNull(categoryLabel(r.category).takeIf { r.osmKey != null }, r.detail.ifBlank { null }).joinToString(" · ")
-                    if (sub.isNotEmpty()) {
-                        Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+                } else {
+                    Text(
+                        "Karte nicht verfügbar",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
                 }
-                HorizontalDivider()
+                if (model.canSearchArea) {
+                    ExtendedFloatingActionButton(
+                        onClick = { scope.launch { model.searchArea() } },
+                        icon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                        text = { Text("In diesem Bereich suchen") },
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).testTag("search-area"),
+                    )
+                }
             }
         }
-        model.selected?.let { sel ->
-            Surface(
-                Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                shadowElevation = 6.dp,
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(sel.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (sel.detail.isNotBlank()) {
-                        Text(sel.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val status: @Composable () -> Unit = {
+            statusText(model.status, model.results.size)?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("search-status"),
+                )
+            }
+        }
+        val hits: @Composable (Modifier) -> Unit = { m ->
+            LazyColumn(m) {
+                itemsIndexed(model.results) { i, r ->
+                    val isSelected = model.selected == r
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { model.selected = r }
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .testTag("search-hit-$i"),
+                    ) {
+                        Text(
+                            r.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                        val sub = listOfNotNull(categoryLabel(r.category).takeIf { r.osmKey != null }, r.detail.ifBlank { null }).joinToString(" · ")
+                        if (sub.isNotEmpty()) {
+                            Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                    Button(onClick = { onAdd(sel) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-add")) { Text("Zum Tag hinzufügen") }
+                    HorizontalDivider()
                 }
             }
+        }
+        val chosen: @Composable () -> Unit = {
+            model.selected?.let { sel ->
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    shadowElevation = 6.dp,
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(sel.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (sel.detail.isNotBlank()) {
+                            Text(sel.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Button(onClick = { onAdd(sel) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-add")) { Text("Zum Tag hinzufügen") }
+                    }
+                }
+            }
+        }
+        if (wide) {
+            // Unfolded: map on the left, hits and the chosen place on the right.
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                map(Modifier.weight(0.6f).fillMaxHeight())
+                VerticalDivider()
+                Column(Modifier.weight(0.4f).fillMaxHeight()) {
+                    status()
+                    hits(Modifier.fillMaxWidth().weight(1f))
+                    chosen()
+                }
+            }
+        } else {
+            map(Modifier.fillMaxWidth().weight(0.55f))
+            status()
+            hits(Modifier.fillMaxWidth().weight(0.45f))
+            chosen()
         }
     }
 }

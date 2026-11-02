@@ -35,10 +35,11 @@ fun routeSegments(snapshot: TripSnapshot, stops: List<RouteStop>): List<RouteSeg
         RouteSegment(a, b, mode)
     }
 
-/** Sum of the computed segments: time, distance, and how many segments have no computed route. */
-data class RouteTotals(val seconds: Long, val meters: Long, val missing: Int)
+/** Sum of the computed segments: time, distance, segments answered without a route, and segments still loading. */
+data class RouteTotals(val seconds: Long, val meters: Long, val missing: Int, val loading: Int = 0)
 
 fun routeTotals(segments: List<RouteSegment>): RouteTotals {
     val routes = segments.mapNotNull { it.result as? LegResult.Route }
-    return RouteTotals(routes.sumOf { it.durationSeconds }, routes.sumOf { it.distanceMeters }, segments.size - routes.size)
+    val loading = segments.count { it.result == null }
+    return RouteTotals(routes.sumOf { it.durationSeconds }, routes.sumOf { it.distanceMeters }, segments.size - routes.size - loading, loading)
 }

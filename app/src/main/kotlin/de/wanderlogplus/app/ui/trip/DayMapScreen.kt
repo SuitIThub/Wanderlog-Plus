@@ -16,6 +16,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import de.wanderlogplus.app.ui.design.isWideLayout
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,6 +63,7 @@ fun dayMapRoute(date: String) = "trip/day/$date/map"
 /** "Gesamt 2 Std 10 Min · 8,4 km" plus a note on segments without a computed route; null without segments. */
 fun totalsText(t: RouteTotals, segments: Int): String? {
     if (segments == 0) return null
+    if (t.loading == segments) return "Wege werden berechnet …"
     val sum = if (t.seconds > 0) "Gesamt " + durationLabel(t.seconds) + " · " + distanceLabel(t.meters) else "Gesamt –"
     val missing = when (t.missing) {
         0 -> ""
@@ -92,6 +101,7 @@ fun DayMapScreen(
         }
     }
     var selected by rememberSaveable(date) { mutableStateOf<String?>(null) }
+    var listOpen by rememberSaveable(date) { mutableStateOf(true) }
     val totals = remember(segments) { routeTotals(segments) }
 
     Column(modifier.fillMaxSize().testTag("day-map-screen")) {
@@ -106,62 +116,109 @@ fun DayMapScreen(
             EmptyHint("Im Programm ist noch kein Ort mit Kartenposition.", Modifier.padding(16.dp))
             return@Column
         }
-        Box(Modifier.fillMaxWidth().weight(0.6f)) {
-            if (LocalMapsEnabled.current) {
-                DayRouteMapView(stops, segments, selected, onSelect = { selected = it }, modifier = Modifier.fillMaxSize())
-            } else {
-                Text("Karte nicht verfügbar", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Center))
+        val wide = isWideLayout()
+        val map: @Composable (Modifier) -> Unit = { m ->
+            Box(m) {
+                if (LocalMapsEnabled.current) {
+                    DayRouteMapView(stops, segments, selected, onSelect = { selected = it }, modifier = Modifier.fillMaxSize())
+                } else {
+                    Text("Karte nicht verfügbar", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.Center))
+                }
+                ListToggle(listOpen, wide, onToggle = { listOpen = !listOpen }, modifier = Modifier.align(if (wide) Alignment.TopEnd else Alignment.BottomEnd).padding(12.dp))
             }
         }
-        totalsText(totals, segments.size)?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("day-map-totals"),
-            )
-        }
-        LazyColumn(Modifier.fillMaxWidth().weight(0.4f)) {
-            itemsIndexed(stops) { i, stop ->
-                if (i > 0) {
-                    val seg = segments.getOrNull(i - 1)
-                    if (seg != null) {
-                        Row(
-                            Modifier.padding(start = 30.dp, top = 2.dp, bottom = 2.dp).testTag("day-map-leg-${stop.number}"),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Icon(modeIcon(seg.mode), contentDescription = modeLabel(seg.mode), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            Text(legSummary(seg.result, seg.mode), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                val isSel = stop.itemId == selected
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { selected = stop.itemId }
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .testTag("day-map-stop-${stop.number}"),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = if (isSel) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(stop.number.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
+        val list: @Composable (Modifier) -> Unit = { m ->
+            Column(m.testTag("day-map-list")) {
+                totalsText(totals, segments.size)?.let {
                     Text(
-                        stop.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        it,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("day-map-totals"),
                     )
                 }
+                RouteStopList(stops, segments, selected, onSelect = { selected = it }, modifier = Modifier.fillMaxWidth().weight(1f))
+            }
+        }
+        if (wide) {
+            // Unfolded: map two thirds, list the right third (or the map alone when the list is folded away).
+            Row(Modifier.fillMaxWidth().weight(1f)) {
+                map(Modifier.weight(2f).fillMaxHeight())
+                if (listOpen) {
+                    VerticalDivider()
+                    list(Modifier.weight(1f).fillMaxHeight())
+                }
+            }
+        } else {
+            map(Modifier.fillMaxWidth().weight(if (listOpen) 0.6f else 1f))
+            if (listOpen) list(Modifier.fillMaxWidth().weight(0.4f))
+        }
+    }
+}
+
+/** Folds the stop list away for a bigger map, or brings it back. Tag `day-map-toggle-list`. */
+@Composable
+private fun ListToggle(open: Boolean, wide: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    FilledTonalIconButton(onClick = onToggle, modifier = modifier.testTag("day-map-toggle-list")) {
+        val icon = when {
+            open && wide -> Icons.AutoMirrored.Filled.KeyboardArrowRight
+            open -> Icons.Filled.KeyboardArrowDown
+            wide -> Icons.AutoMirrored.Filled.KeyboardArrowLeft
+            else -> Icons.Filled.KeyboardArrowUp
+        }
+        Icon(icon, contentDescription = if (open) "Liste ausblenden" else "Liste einblenden")
+    }
+}
+
+/** Stops with the ways between them; tags `day-map-stop-<n>`, `day-map-leg-<n>` (way to stop n). */
+@Composable
+private fun RouteStopList(
+    stops: List<RouteStop>,
+    segments: List<RouteSegment>,
+    selected: String?,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier) {
+        itemsIndexed(stops) { i, stop ->
+            if (i > 0) {
+                val seg = segments.getOrNull(i - 1)
+                if (seg != null) {
+                    Row(
+                        Modifier.padding(start = 30.dp, top = 2.dp, bottom = 2.dp).testTag("day-map-leg-${stop.number}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(modeIcon(seg.mode), contentDescription = modeLabel(seg.mode), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Text(legSummary(seg.result, seg.mode), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            val isSel = stop.itemId == selected
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { onSelect(stop.itemId) }
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("day-map-stop-${stop.number}"),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (isSel) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(stop.number.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+                Text(
+                    stop.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
