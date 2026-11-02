@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.Alignment
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.maps.LatLngD
@@ -60,15 +63,29 @@ internal fun DayProgramTab(
     onOpenLink: ((ExternalLink) -> Unit)? = null,
     /** Opens "Hinzufügen" for a position between items; null hides the ＋ elements. */
     onInsert: ((ItemPosition) -> Unit)? = null,
+    /** Opens the full map of the day's route; null hides the button. */
+    onOpenMap: (() -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
-        if (onShowLegs != null && items.count { it.kind == DayItemKind.PLACE } >= 2) {
+        val places = items.count { it.kind == DayItemKind.PLACE }
+        val legsSwitch = onShowLegs != null && places >= 2
+        val mapButton = onOpenMap != null && places >= 1
+        if (legsSwitch || mapButton) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Wege zwischen den Zielen", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                Switch(checked = showLegs, onCheckedChange = onShowLegs, modifier = Modifier.testTag("legs-toggle"))
+                if (mapButton) {
+                    FilledTonalButton(onClick = { onOpenMap?.invoke() }, modifier = Modifier.testTag("day-map")) {
+                        Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text("Karte")
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                if (legsSwitch) {
+                    Text("Wege", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
+                    Switch(checked = showLegs, onCheckedChange = onShowLegs, modifier = Modifier.testTag("legs-toggle"))
+                }
             }
         }
         DayTimeline(
