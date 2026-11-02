@@ -73,6 +73,8 @@ class TripViewModel(
 
     fun addNoteAt(date: String, text: String, position: ItemPosition) = write { e, s -> e.addNoteToDay(s, date, text, position) }
 
+    fun addStayAt(date: String, stayId: String, position: ItemPosition) = write { e, s -> e.addStayToDay(s, date, stayId, position) }
+
     /** A place found by name or on the map becomes a planned place of the day's region and a program item at [position]. */
     fun addSearchedPlace(date: String, position: ItemPosition, place: GeoPlace) = write { e, s ->
         e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position)

@@ -180,3 +180,46 @@ private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDoesNotExist
     // Without a map there is no visible area, so the general search answers directly ("Treffer in der Umgebung").
     try { assertIsDisplayed() } catch (_: AssertionError) { return }
 }
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w400dp-h2400dp")
+class StayInProgramUiTest {
+    @get:Rule val rule = createComposeRule()
+
+    @Test fun todaysStayIsOfferedFirst() {
+        val choices = stayChoices(Fixtures.trip(), "2027-04-04")
+        // Check-out of the mountain inn and check-in at the coast are both "today".
+        assertEquals(listOf("st-berg", "st-kueste"), choices.map { it.first.id })
+        assertTrue(choices.first().second.endsWith("(heute)"))
+        val later = stayChoices(Fixtures.trip(), "2027-04-02")
+        assertEquals("st-berg", later.first().first.id)
+        assertTrue(later[1].second.contains("ab "))
+    }
+
+    @Test fun stayIsInsertedAtThePlus() {
+        var added: Triple<String, String, ItemPosition>? = null
+        rule.setContent {
+            WanderlogPlusTheme {
+                DayDetailScreen(
+                    Fixtures.trip(), "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {},
+                    onAddStayAt = { d, id, pos -> added = Triple(d, id, pos) },
+                )
+            }
+        }
+        rule.onNodeWithTag("insert-after:i-3").performScrollTo().performClick()
+        rule.onNodeWithTag("add-stay-open").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("add-stay-st-berg").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(Triple("2027-04-02", "st-berg", ItemPosition.After("i-3")), added)
+    }
+
+    @Test fun hotelInProgramIsLabelledAsStay() {
+        val base = Fixtures.trip()
+        val snap = base.copy(dayItems = base.dayItems + de.wanderlogplus.shared.model.DayItem("i-h", "d-2", "z", de.wanderlogplus.shared.model.DayItemKind.PLACE, "p-hotel-berg"))
+        rule.setContent {
+            WanderlogPlusTheme {
+                DayDetailScreen(snap, "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {})
+            }
+        }
+        rule.onNodeWithText("Unterkunft", substring = true).assertExists()
+    }
+}

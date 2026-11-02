@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.client.ItemPosition
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Hotel
 import de.wanderlogplus.shared.sync.TravelMode
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -99,6 +100,8 @@ fun DayDetailScreen(
     onSearchPlace: ((date: String, position: ItemPosition) -> Unit)? = null,
     /** Opens the full map of the day's route; null hides "Karte". */
     onOpenMap: ((date: String) -> Unit)? = null,
+    /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
+    onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -116,6 +119,7 @@ fun DayDetailScreen(
     var editingDay by rememberSaveable(date) { mutableStateOf(false) }
     var adding by rememberSaveable(date) { mutableStateOf(false) }
     var addingNote by rememberSaveable(date) { mutableStateOf(false) }
+    var addingStay by rememberSaveable(date) { mutableStateOf(false) }
     // Where "Hinzufügen" puts new items (encoded ItemPosition); a suggestion picked after "Ort aus Vorschlägen" goes there too.
     var insertAt by rememberSaveable(date) { mutableStateOf(ItemPosition.End.encode()) }
     var suggestionAt by rememberSaveable(date) { mutableStateOf<String?>(null) }
@@ -241,8 +245,22 @@ fun DayDetailScreen(
     }
 
     if (adding) {
-        EditSheet(if (addingNote) "Notiz hinzufügen" else "Hinzufügen", onDismiss = { adding = false; addingNote = false }) {
-            if (addingNote) {
+        EditSheet(
+            when {
+                addingNote -> "Notiz hinzufügen"
+                addingStay -> "Unterkunft hinzufügen"
+                else -> "Hinzufügen"
+            },
+            onDismiss = { adding = false; addingNote = false; addingStay = false },
+        ) {
+            if (addingStay && onAddStayAt != null) {
+                stayChoices(snapshot, date).forEach { (stay, label) ->
+                    AddOption(Icons.Filled.Hotel, label, "add-stay-${stay.id}") {
+                        onAddStayAt(date, stay.id, ItemPosition.decode(insertAt))
+                        adding = false; addingStay = false
+                    }
+                }
+            } else if (addingNote) {
                 AddNoteForm(
                     onAdd = { text ->
                         val pos = ItemPosition.decode(insertAt)
@@ -263,6 +281,9 @@ fun DayDetailScreen(
                         search(date, ItemPosition.decode(insertAt))
                     }
                 }
+                if (onAddStayAt != null && snapshot.stays.any { it.placeId.isNotBlank() }) {
+                    AddOption(Icons.Filled.Hotel, "Unterkunft", "add-stay-open") { addingStay = true }
+                }
                 AddOption(Icons.AutoMirrored.Filled.Notes, "Notiz", "add-note-open") { addingNote = true }
             }
         }
@@ -281,6 +302,21 @@ private fun AddOption(icon: ImageVector, label: String, tag: String, onClick: ()
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             Text(label, style = MaterialTheme.typography.titleMedium)
         }
+    }
+}
+
+/**
+ * Stays to offer for [date] with a label: the ones the night before and after the date first ("heute"), then all
+ * others by check-in. Stays without a place are left out.
+ */
+internal fun stayChoices(snapshot: TripSnapshot, date: String): List<Pair<de.wanderlogplus.shared.model.Stay, String>> {
+    fun name(s: de.wanderlogplus.shared.model.Stay) = snapshot.places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft"
+    val usable = snapshot.stays.filter { it.placeId.isNotBlank() }
+    val current = usable.filter { it.checkIn.isNotBlank() && it.checkOut.isNotBlank() && date >= it.checkIn && date <= it.checkOut }
+        .sortedBy { it.checkIn }
+    val others = (usable - current.toSet()).sortedBy { it.checkIn }
+    return current.map { it to "${name(it)} (heute)" } + others.map { s ->
+        s to name(s) + (s.checkIn.takeIf { it.isNotBlank() }?.let { " · ab " + dayLabel(it) } ?: "")
     }
 }
 
