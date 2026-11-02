@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
     private fun placesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }, config = { container.settings.assessConfig.first() }) as T
+            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }, config = { container.settings.assessConfig.first() }, syncNow = container.syncScheduler::requestNow) as T
     }
 
     private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {

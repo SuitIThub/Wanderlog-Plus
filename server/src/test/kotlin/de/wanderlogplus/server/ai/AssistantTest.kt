@@ -104,8 +104,13 @@ class AssistantTest {
         override fun extract(video: Path, dir: Path) = Media(listOf(byteArrayOf(1, 2), byteArrayOf(3)), byteArrayOf(9))
     }
 
-    private fun jobs(model: ChatModel? = FakeModel(), media: ReelMedia = FakeMedia()) =
-        AiJobs(store, model?.let { Assistant(it, FakeGeocoder()) }, media, tmp.resolve("work"), executor = Executors.newSingleThreadExecutor())
+    private fun jobs(model: ChatModel? = FakeModel(), media: ReelMedia = FakeMedia(), sync: de.wanderlogplus.server.SyncService? = null) =
+        AiJobs(
+            store, model?.let { Assistant(it, FakeGeocoder()) }, media, tmp.resolve("work"), executor = Executors.newSingleThreadExecutor(),
+            writeResults = sync?.let { s -> { edits -> s.writeAsServer(de.wanderlogplus.server.ASSISTANT_AUTHOR, edits) } },
+        )
+
+    private fun field(type: EntityType, id: String, name: String) = store.get(type, id)?.fields?.get(name)?.value
 
     @Test fun reelPipelineFindsLocatesResearchesAndChecksRoute() {
         seedTrip()
@@ -325,5 +330,94 @@ class AssistantTest {
         assertEquals("FAILED", job.items.single().state)
         assertTrue(job.steps.any { it.text == "1 Orte nicht gefunden (gelöscht?)" && it.level == "WARN" })
         assertTrue(job.steps.any { it.text.contains("Recherche fehlgeschlagen") })
+    }
+
+    @Test fun researchResultsAreWrittenIntoTheTripByTheServer() {
+        seedTrip()
+        // A second place without description: it gets the researched one, Kiyomizu keeps nothing (it has none either).
+        seed(EntityType.PLACE, "p-leer", EntityCodec.fields(Place("p-leer", name = "Leerer Ort", lat = 34.99, lng = 135.78, description = "Eigene Beschreibung")))
+        seed(EntityType.SAVED_PLACE, "s-leer", EntityCodec.fields(SavedPlace("s-leer", "p-leer", "r-kyoto")))
+        val sync = de.wanderlogplus.server.SyncService(store)
+        val seqBefore = store.maxSeq()
+        val j = jobs(FakeModel(), sync = sync)
+        val id = j.startResearch(listOf("s-tempel", "s-leer")).id
+        j.drain()
+        val job = j.get(id)!!
+        assertTrue(job.appliedOnServer)
+        assertEquals(2, job.dossiers.size)
+        assertEquals("\"MUST\"", field(EntityType.SAVED_PLACE, "s-tempel", "worth").toString())
+        assertEquals("\"Ikonisch, früh hingehen.\"", field(EntityType.SAVED_PLACE, "s-tempel", "worthReason").toString())
+        assertTrue(field(EntityType.SAVED_PLACE, "s-tempel", "dossier").toString().contains("Hinter dem Gipfel"))
+        // Description only where there was none.
+        assertEquals("\"Shinto-Schrein mit tausenden Torii.\"", field(EntityType.PLACE, "p-tempel", "description").toString())
+        assertEquals("\"Eigene Beschreibung\"", field(EntityType.PLACE, "p-leer", "description").toString())
+        // The writes are ordinary sync changes: devices pull them.
+        assertTrue(store.maxSeq() > seqBefore)
+        assertTrue(job.steps.any { it.text == "2 Orte mit den Ergebnissen aktualisiert" })
+    }
+
+    @Test fun olderResultsNeverOverwriteNewerResearch() {
+        seedTrip()
+        val sync = de.wanderlogplus.server.SyncService(store)
+        val j = jobs(FakeModel(), sync = sync)
+        j.drain()
+        // A finished job from an older version: not applied yet, result older than what the place has now.
+        val newer = de.wanderlogplus.shared.model.PlaceDossier(verdict = "neu", researchedAt = 5_000)
+        sync.writeAsServer("t", listOf(de.wanderlogplus.server.ServerEdit(EntityType.SAVED_PLACE, "s-tempel", mapOf("dossier" to kotlinx.serialization.json.Json.encodeToJsonElement(de.wanderlogplus.shared.model.PlaceDossier.serializer(), newer)))))
+        val old = de.wanderlogplus.shared.sync.AiJobInfo(
+            "old", "research", 1, "DONE",
+            dossiers = listOf(
+                de.wanderlogplus.shared.sync.DossierResult("s-tempel", Worth.SKIP, "", de.wanderlogplus.shared.model.PlaceDossier(verdict = "alt", researchedAt = 1_000)),
+                de.wanderlogplus.shared.sync.DossierResult("s-done", Worth.WORTH, "", de.wanderlogplus.shared.model.PlaceDossier(verdict = "nachgetragen", researchedAt = 1_000)),
+            ),
+        )
+        store.putAiJob(old.id, old.kind, old.createdAt, kotlinx.serialization.json.Json.encodeToString(de.wanderlogplus.shared.sync.AiJobInfo.serializer(), old))
+        j.resumeInterrupted()
+        assertTrue(field(EntityType.SAVED_PLACE, "s-tempel", "dossier").toString().contains("\"neu\""))
+        assertTrue(field(EntityType.SAVED_PLACE, "s-done", "dossier").toString().contains("nachgetragen"))
+        val after = j.get("old")!!
+        assertTrue(after.appliedOnServer)
+        assertEquals("Nachgetragen: Ergebnisse von 1 Ort in die Orte geschrieben", after.steps.last().text)
+    }
+
+    @Test fun interruptedResearchContinuesWithTheRest() {
+        seedTrip()
+        val sync = de.wanderlogplus.server.SyncService(store)
+        val interrupted = de.wanderlogplus.shared.sync.AiJobInfo(
+            "r1", "research", 1, "RESEARCHING", total = 2, progress = 1,
+            savedPlaceIds = listOf("s-done", "s-tempel"),
+            config = de.wanderlogplus.shared.sync.AssessConfig(listOf("crowds")),
+            dossiers = listOf(de.wanderlogplus.shared.sync.DossierResult("s-done", Worth.WORTH, "", de.wanderlogplus.shared.model.PlaceDossier(verdict = "schon da", researchedAt = 1))),
+            items = listOf(de.wanderlogplus.shared.sync.JobItem("s-done", "Kiyomizu-dera", "DONE")),
+        )
+        store.putAiJob(interrupted.id, interrupted.kind, interrupted.createdAt, kotlinx.serialization.json.Json.encodeToString(de.wanderlogplus.shared.sync.AiJobInfo.serializer(), interrupted))
+        val model = FakeModel()
+        val j = jobs(model, sync = sync)
+        j.resumeInterrupted()
+        j.drain()
+        val job = j.get("r1")!!
+        assertEquals("DONE", job.status)
+        assertEquals(listOf("s-done", "s-tempel"), job.dossiers.map { it.savedPlaceId })
+        assertEquals(2, job.progress)
+        assertEquals(1, model.calls.size) // only the missing place was researched
+        assertTrue(model.calls.single().first.contains("crowds (Andrang)")) // with the stored criteria
+        assertTrue(job.steps.any { it.text == "Server neu gestartet, Recherche geht mit den restlichen 1 Orten weiter" })
+        assertEquals(setOf("s-done", "s-tempel"), job.items.map { it.key }.toSet())
+    }
+
+    @Test fun assessmentIsWrittenByTheServerAndKeepsResearch() {
+        seedTrip()
+        val sync = de.wanderlogplus.server.SyncService(store)
+        val research = de.wanderlogplus.shared.model.PlaceDossier(insiderTips = listOf("Geheimtipp bleibt"), researchedAt = 7)
+        sync.writeAsServer("t", listOf(de.wanderlogplus.server.ServerEdit(EntityType.SAVED_PLACE, "s-tempel", mapOf("dossier" to kotlinx.serialization.json.Json.encodeToJsonElement(de.wanderlogplus.shared.model.PlaceDossier.serializer(), research)))))
+        val j = jobs(FakeModel(), sync = sync)
+        val id = j.startAssessment(emptyList()).id
+        j.drain()
+        val job = j.get(id)!!
+        assertTrue(job.appliedOnServer)
+        assertEquals("\"WORTH\"", field(EntityType.SAVED_PLACE, "s-tempel", "worth").toString())
+        val dossier = field(EntityType.SAVED_PLACE, "s-tempel", "dossier").toString()
+        assertTrue(dossier.contains("Geheimtipp bleibt") && dossier.contains("crowds") && dossier.contains("Schön, aber voll."))
+        assertTrue(job.steps.any { it.text == "1 Ort mit der Einschätzung aktualisiert" })
     }
 }

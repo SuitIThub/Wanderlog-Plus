@@ -107,6 +107,41 @@ class ResearchTest {
         assertNull(vm.researchStatus.value)
     }
 
+    @Test fun serverAppliedResearchOnlySyncsAndSurvivesNetworkGaps() {
+        val store = InMemoryEntityStore()
+        val editor = LocalEditor(store, InMemoryOutbox(), HlcClock("dev-a", now = { 1000L }))
+        val snap = Fixtures.trip()
+        val edit: EditFn = { block -> block(editor, snap) }
+        val jsonHeaders = headersOf(HttpHeaders.ContentType, "application/json")
+        var polls = 0
+        val api = SyncApi(
+            HttpClient(MockEngine { req ->
+                if (req.url.encodedPath.endsWith("/research")) {
+                    respond("""{"id":"r1","kind":"research","createdAt":0,"status":"QUEUED","total":2,"appliedOnServer":true}""", HttpStatusCode.OK, jsonHeaders)
+                } else {
+                    polls++
+                    when (polls) {
+                        1 -> throw java.io.IOException("offline") // a short gap must not end the research
+                        2 -> respond("""{"id":"r1","kind":"research","createdAt":0,"status":"RESEARCHING","total":2,"progress":1,"appliedOnServer":true,
+                               "dossiers":[{"savedPlaceId":"s-nudel","dossier":{"verdict":"x","researchedAt":5}}]}""", HttpStatusCode.OK, jsonHeaders)
+                        else -> respond("""{"id":"r1","kind":"research","createdAt":0,"status":"DONE","total":2,"progress":2,"appliedOnServer":true,
+                               "dossiers":[{"savedPlaceId":"s-nudel","dossier":{"verdict":"x","researchedAt":5}},{"savedPlaceId":"s-tempel","dossier":{"verdict":"y","researchedAt":5}}]}""", HttpStatusCode.OK, jsonHeaders)
+                    }
+                }
+            }),
+            "https://s", "tok",
+        )
+        var syncs = 0
+        val vm = PlacesViewModel({ MutableStateFlow(snap) }, edit, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined), api = { api }, pollMillis = 1, syncNow = { syncs++ })
+        vm.research(listOf("s-nudel", "s-tempel"))
+        val deadline = System.currentTimeMillis() + 5_000
+        while (vm.researching.value.isNotEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertEquals("2 Orte recherchiert", vm.researchStatus.value)
+        assertTrue(store.all().isEmpty()) // the server wrote the results, the app did not
+        assertTrue(syncs >= 2) // once while running (first place done), once at the end
+        assertEquals("r1", vm.researchJob.value)
+    }
+
     @Test fun assessmentTabShowsVerdictAndCriteria() {
         val snap = Fixtures.trip().let { s ->
             s.copy(savedPlaces = s.savedPlaces.map { if (it.id == "s-tempel") it.copy(worth = Worth.MUST, worthReason = "alt", dossier = dossier) else it })

@@ -85,6 +85,11 @@ data class AiJobInfo(
     val items: List<JobItem> = emptyList(),
     /** Epoch millis when the job ended (done or failed); 0 while running. */
     val finishedAt: Long = 0,
+    /** Research: the server writes each result into the place itself (the app only syncs). */
+    val appliedOnServer: Boolean = false,
+    /** Research: the places asked for and the criteria, so an interrupted job can continue. */
+    val savedPlaceIds: List<String> = emptyList(),
+    val config: AssessConfig? = null,
 )
 
 /** One line of a job's log; [level] is INFO, OK, WARN or ERROR. */

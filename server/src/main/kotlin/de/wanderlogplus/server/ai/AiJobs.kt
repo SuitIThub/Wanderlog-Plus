@@ -2,7 +2,15 @@ package de.wanderlogplus.server.ai
 
 import de.wanderlogplus.server.SqliteStore
 import de.wanderlogplus.shared.sync.AiJobInfo
+import de.wanderlogplus.server.ServerEdit
+import de.wanderlogplus.shared.model.PlaceDossier
 import de.wanderlogplus.shared.sync.AssessConfig
+import de.wanderlogplus.shared.sync.Assessment
+import de.wanderlogplus.shared.sync.DossierResult
+import de.wanderlogplus.shared.sync.EntityType
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import de.wanderlogplus.shared.sync.JobItem
 import de.wanderlogplus.shared.sync.JobStep
 import kotlinx.serialization.json.Json
@@ -34,6 +42,8 @@ class AiJobs(
     private val now: () -> Instant = Instant::now,
     // Two at a time: a long research of a whole region must not keep a shared reel waiting.
     private val executor: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "ai-jobs").apply { isDaemon = true } },
+    /** Writes research results into the trip as the server (see SyncService.writeAsServer); null: the app applies them. */
+    private val writeResults: ((List<ServerEdit>) -> Int)? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -60,14 +70,19 @@ class AiJobs(
     }
 
     fun startAssessment(ids: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo {
-        val job = save(AiJobInfo(UUID.randomUUID().toString(), "assess", now().toEpochMilli(), "QUEUED", steps = listOf(queuedStep())))
+        val job = save(AiJobInfo(UUID.randomUUID().toString(), "assess", now().toEpochMilli(), "QUEUED", steps = listOf(queuedStep()), appliedOnServer = writeResults != null))
         executor.execute { runAssessment(job, ids, config) }
         return job
     }
 
     /** Web research of saved places (insider tips, hidden spots, criteria, verdict); [ids] must not be empty. */
     fun startResearch(ids: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo {
-        val job = save(AiJobInfo(UUID.randomUUID().toString(), "research", now().toEpochMilli(), "QUEUED", total = ids.size, steps = listOf(queuedStep())))
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "research", now().toEpochMilli(), "QUEUED", total = ids.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, savedPlaceIds = ids, config = config,
+            ),
+        )
         executor.execute { runResearch(job, ids, config) }
         return job
     }
@@ -76,13 +91,27 @@ class AiJobs(
 
     /**
      * Jobs a restart interrupted (still queued or running in the database): a reel from a link starts over, with the
-     * same id so the app's watcher still finds it; an uploaded video is gone and an assessment's input may have
-     * changed, so those are marked failed ("interrupted"). Call once at startup.
+     * same id so the app's watcher still finds it; a research continues with the places that have no result yet; an
+     * uploaded video is gone and an assessment's input may have changed, so those are marked failed ("interrupted").
+     * Finished research whose results were never written into the trip (older versions left that to the app) is
+     * written now. Call once at startup.
      */
     fun resumeInterrupted() {
-        list(null, 100).filter { !(it.status == "DONE" || it.status == "FAILED") }.forEach { job ->
+        val recent = list(null, 100)
+        recent.filter { !(it.status == "DONE" || it.status == "FAILED") }.forEach { job ->
             val url = job.source?.takeIf { it.startsWith("https://") }
-            if (job.kind == "reel" && url != null && assistant != null) {
+            if (job.kind == "research" && job.savedPlaceIds.isNotEmpty() && assistant != null) {
+                val done = job.dossiers.map { it.savedPlaceId }.toSet()
+                val rest = job.savedPlaceIds.filterNot { it in done }
+                val restarted = save(
+                    job.copy(
+                        status = "QUEUED",
+                        appliedOnServer = writeResults != null,
+                        steps = (job.steps + JobStep(now().toEpochMilli(), "Server neu gestartet, Recherche geht mit den restlichen ${rest.size} Orten weiter", JobProgress.WARN)).takeLast(MAX_STEPS),
+                    ),
+                )
+                executor.execute { runResearch(restarted, rest, job.config ?: AssessConfig()) }
+            } else if (job.kind == "reel" && url != null && assistant != null) {
                 val restarted = save(
                     job.copy(
                         status = "QUEUED", summary = null, candidates = emptyList(), items = emptyList(), progress = 0,
@@ -94,6 +123,52 @@ class AiJobs(
                 Tracker(job).fail("interrupted")
             }
         }
+        if (writeResults != null) {
+            recent.filter { it.kind == "research" && it.status == "DONE" && !it.appliedOnServer && it.dossiers.isNotEmpty() }.forEach { job ->
+                val n = job.dossiers.count { writeDossier(it) }
+                val line = JobStep(now().toEpochMilli(), "Nachgetragen: Ergebnisse von $n " + (if (n == 1) "Ort" else "Orten") + " in die Orte geschrieben", JobProgress.OK)
+                save(job.copy(appliedOnServer = true, steps = (job.steps + line).takeLast(MAX_STEPS)))
+            }
+        }
+    }
+
+    /** Writes judgements into the trip: worth, verdict and the criteria (earlier research in the dossier is kept). */
+    private fun writeAssessments(batch: List<Assessment>): Int {
+        val write = writeResults ?: return 0
+        val edits = batch.mapNotNull { r ->
+            val saved = store.get(EntityType.SAVED_PLACE, r.savedPlaceId)?.takeIf { !it.isDeleted } ?: return@mapNotNull null
+            val fields = mutableMapOf<String, JsonElement>("worth" to JsonPrimitive(r.worth.name), "worthReason" to JsonPrimitive(r.reason))
+            if (r.criteria.isNotEmpty()) {
+                val old = saved.fields["dossier"]?.value?.let { v ->
+                    try { json.decodeFromJsonElement(PlaceDossier.serializer(), v) } catch (e: Exception) { null }
+                } ?: PlaceDossier()
+                fields["dossier"] = json.encodeToJsonElement(PlaceDossier.serializer(), old.copy(criteria = r.criteria, verdict = r.reason))
+            }
+            ServerEdit(EntityType.SAVED_PLACE, r.savedPlaceId, fields)
+        }
+        return if (edits.isEmpty()) 0 else write(edits)
+    }
+
+    /**
+     * Writes one research result into the trip: dossier, worth, verdict and (only where empty) the place description.
+     * A newer or the same research already stored is kept. Returns whether anything was written.
+     */
+    private fun writeDossier(r: DossierResult): Boolean {
+        val write = writeResults ?: return false
+        val saved = store.get(EntityType.SAVED_PLACE, r.savedPlaceId)?.takeIf { !it.isDeleted } ?: return false
+        val storedAt = saved.fields["dossier"]?.value?.let { v ->
+            try { json.decodeFromJsonElement(PlaceDossier.serializer(), v).researchedAt } catch (e: Exception) { null }
+        } ?: 0L
+        if (storedAt >= r.dossier.researchedAt) return false
+        val fields = mutableMapOf<String, JsonElement>("dossier" to json.encodeToJsonElement(PlaceDossier.serializer(), r.dossier))
+        r.worth?.let { fields["worth"] = JsonPrimitive(it.name) }
+        if (r.dossier.verdict.isNotBlank()) fields["worthReason"] = JsonPrimitive(r.dossier.verdict)
+        val edits = mutableListOf(ServerEdit(EntityType.SAVED_PLACE, r.savedPlaceId, fields))
+        val placeId = (saved.fields["placeId"]?.value as? JsonPrimitive)?.contentOrNull
+        if (placeId != null && r.description.isNotBlank()) {
+            edits += ServerEdit(EntityType.PLACE, placeId, mapOf("description" to JsonPrimitive(r.description)), onlyIfEmpty = setOf("description"))
+        }
+        return write(edits) > 0
     }
 
     private fun save(job: AiJobInfo): AiJobInfo {
@@ -117,7 +192,8 @@ class AiJobs(
         }
 
         override fun items(items: List<JobItem>) {
-            update { it.copy(items = items) }
+            // A resumed research keeps the places it already finished.
+            update { j -> j.copy(items = j.items.filter { old -> items.none { it.key == old.key } } + items) }
         }
 
         override fun item(key: String, state: String?, detail: String?) {
@@ -209,7 +285,9 @@ class AiJobs(
         try {
             t.status("ASSESSING")
             t.step("Einschätzung nach ${config.criteria.size} Kriterien, ohne Websuche")
-            val results = a.assess(store, ids, config, t)
+            var written = 0
+            val results = a.assess(store, ids, config, t) { batch -> written += writeAssessments(batch) }
+            if (writeResults != null) t.step("$written " + (if (written == 1) "Ort" else "Orte") + " mit der Einschätzung aktualisiert", JobProgress.OK)
             t.done { it.copy(assessments = results) }
         } catch (e: AiFailed) {
             t.fail(e.code)
@@ -229,8 +307,17 @@ class AiJobs(
                     (if (config.extraPrompt.isNotBlank()) " mit eigenen Anweisungen" else "") +
                     ", bis zu ${minOf(ids.size, RESEARCH_PARALLELISM)} gleichzeitig",
             )
-            val results = a.researchSaved(store, ids, config, { now().toEpochMilli() }, t) { n -> t.update { it.copy(progress = n) } }
-            t.done { it.copy(dossiers = results, progress = ids.size) }
+            val before = start.total - ids.size // finished before a restart
+            val written = java.util.concurrent.atomic.AtomicInteger()
+            a.researchSaved(
+                store, ids, config, { now().toEpochMilli() }, t,
+                onResult = { r ->
+                    t.update { j -> j.copy(dossiers = j.dossiers.filterNot { it.savedPlaceId == r.savedPlaceId } + r) }
+                    if (writeDossier(r)) written.incrementAndGet()
+                },
+            ) { n -> t.update { it.copy(progress = before + n) } }
+            if (writeResults != null) t.step("${written.get()} " + (if (written.get() == 1) "Ort" else "Orte") + " mit den Ergebnissen aktualisiert", JobProgress.OK)
+            t.done { it.copy(progress = it.total) }
         } catch (e: AiFailed) {
             t.fail(e.code)
         } catch (e: Exception) {
