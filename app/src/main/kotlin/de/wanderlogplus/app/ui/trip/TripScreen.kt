@@ -73,7 +73,8 @@ private data class DayCard(
 
 /** Days of the trip as cards; [today] ("yyyy-MM-dd", trip zone) is highlighted and scrolled into view. */
 @Composable
-fun TripScreen(snapshot: TripSnapshot, onOpenDay: (String) -> Unit, modifier: Modifier = Modifier, today: String? = null) {
+/** [selected] (two-pane layout) marks the day shown beside the list. */
+fun TripScreen(snapshot: TripSnapshot, onOpenDay: (String) -> Unit, modifier: Modifier = Modifier, today: String? = null, selected: String? = null) {
     val cards = remember(snapshot) {
         val regionsById = snapshot.regions.associateBy { it.id }
         snapshot.queries()?.days().orEmpty().map { d ->
@@ -99,12 +100,12 @@ fun TripScreen(snapshot: TripSnapshot, onOpenDay: (String) -> Unit, modifier: Mo
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        items(cards, key = { it.view.date }) { c -> DayCardRow(c, isToday = c.view.date == today, onOpenDay) }
+        items(cards, key = { it.view.date }) { c -> DayCardRow(c, isToday = c.view.date == today, onOpenDay, isSelected = c.view.date == selected) }
     }
 }
 
 @Composable
-private fun DayCardRow(c: DayCard, isToday: Boolean, onOpenDay: (String) -> Unit) {
+private fun DayCardRow(c: DayCard, isToday: Boolean, onOpenDay: (String) -> Unit, isSelected: Boolean = false) {
     val scheme = MaterialTheme.colorScheme
     val container = if (isToday) scheme.primaryContainer else scheme.surfaceContainerLow
     val onContainer = if (isToday) scheme.onPrimaryContainer else scheme.onSurface
@@ -115,6 +116,7 @@ private fun DayCardRow(c: DayCard, isToday: Boolean, onOpenDay: (String) -> Unit
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = container, contentColor = onContainer),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isToday) 3.dp else 1.dp),
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, scheme.primary) else null,
     ) {
         Row(Modifier.height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(6.dp).fillMaxHeight().background(accent))
@@ -156,4 +158,10 @@ private fun DayCardRow(c: DayCard, isToday: Boolean, onOpenDay: (String) -> Unit
             )
         }
     }
+}
+
+/** The day a two-pane trip view opens with: [today] during the trip, else the first day; null without days. */
+fun defaultDayFor(snapshot: TripSnapshot, today: String?): String? {
+    val days = snapshot.queries()?.days().orEmpty().map { it.date }
+    return days.firstOrNull { it == today } ?: days.firstOrNull()
 }

@@ -119,7 +119,8 @@ internal fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
 fun PlaceDetailScreen(
     snapshot: TripSnapshot,
     savedPlaceId: String,
-    onBack: () -> Unit,
+    /** Null hides the back button (detail pane beside its list). */
+    onBack: (() -> Unit)?,
     onSaveNote: (savedPlaceId: String, note: String) -> Unit,
     onSetStatus: (savedPlaceId: String, status: PlaceStatus) -> Unit,
     modifier: Modifier = Modifier,

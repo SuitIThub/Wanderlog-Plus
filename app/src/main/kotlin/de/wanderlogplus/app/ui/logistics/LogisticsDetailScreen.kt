@@ -74,7 +74,8 @@ fun LogisticsDetailScreen(
     snapshot: TripSnapshot,
     type: EntityType?,
     id: String,
-    onBack: () -> Unit,
+    /** Null hides the back button (detail pane beside its list). */
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
     attachments: AttachmentActions? = null,
     /** Null hides the stay navigation buttons. */
