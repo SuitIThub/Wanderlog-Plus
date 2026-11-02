@@ -2,6 +2,7 @@ package de.wanderlogplus.server.ai
 
 import de.wanderlogplus.shared.model.Criteria
 import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.model.PoiKinds
 import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -133,7 +134,7 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                     if (q.evidence.isNotBlank()) append("Bekannt: ").append(q.evidence).append(". ")
                     append("Schreibe alle Texte auf Deutsch, sachlich wie ein guter Reiseführer. ")
                     append("Suche neben Bewertungen und praktischen Hinweisen gezielt Geheimtipps von Einheimischen und Kennern, ")
-                    append("versteckte Ecken oder kleine Orte in der Nähe und Dinge, die man vorher wissen sollte.\n")
+                    append("versteckte Ecken oder kleine Orte in der Nähe, zugehörige Punkte mit Lage (weitere Eingänge, Aussichtspunkte, nächster Bahnhof) und Dinge, die man vorher wissen sollte.\n")
                     append(criteriaPrompt(config))
                     if (sources.isNotEmpty()) {
                         append("\nBereits gefundene Quellen:\n")
@@ -177,9 +178,29 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                             list("goodToKnow", "Gut zu wissen (Etikette, Zahlung, Regeln, Besonderheiten), höchstens 4, Deutsch")
                             list("tips", "praktische Tipps, höchstens 4, Deutsch")
                             list("hints", "Warnungen/Hinweise (Öffnungszeiten, Reservierung, Andrang, Preise), höchstens 4, Deutsch")
+                            putJsonObject("nearbyPoints") {
+                                put("type", "array")
+                                put(
+                                    "description",
+                                    "höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen: weitere Eingänge/Tore, Aussichtspunkte, " +
+                                        "die versteckten Ecken, nächster Bahnhof. lat/lng nur wenn sicher bekannt, sonst 0",
+                                )
+                                putJsonObject("items") {
+                                    put("type", "object")
+                                    putJsonObject("properties") {
+                                        putJsonObject("name") { put("type", "string") }
+                                        putJsonObject("kind") { put("type", "string"); putJsonArray("enum") { PoiKinds.LABELS.keys.forEach { add(JsonPrimitive(it)) } } }
+                                        putJsonObject("note") { put("type", "string"); put("description", "kurz, Deutsch") }
+                                        putJsonObject("lat") { put("type", "number") }
+                                        putJsonObject("lng") { put("type", "number") }
+                                    }
+                                    putJsonArray("required") { listOf("name", "kind", "note", "lat", "lng").forEach { add(JsonPrimitive(it)) } }
+                                    put("additionalProperties", false)
+                                }
+                            }
                         }
                         putJsonArray("required") {
-                            listOf("description", "category", "criteria", "worth", "verdict", "insiderTips", "hiddenSpots", "goodToKnow", "tips", "hints").forEach { add(JsonPrimitive(it)) }
+                            listOf("description", "category", "criteria", "worth", "verdict", "insiderTips", "hiddenSpots", "goodToKnow", "tips", "hints", "nearbyPoints").forEach { add(JsonPrimitive(it)) }
                         }
                         put("additionalProperties", false)
                     }

@@ -5,6 +5,8 @@ import de.wanderlogplus.shared.model.CriterionScore
 import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.model.PlacePoi
+import de.wanderlogplus.shared.model.PoiKinds
 import de.wanderlogplus.shared.model.Region
 import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.sync.AssessConfig
@@ -112,7 +114,7 @@ class Assistant(
         } catch (e: AiFailed) {
             null // a place without research is still worth showing
         }
-        val d = r?.dossier
+        val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder)) }
         return ReelCandidate(
             name = p.name,
             city = p.city,
@@ -151,7 +153,10 @@ class Assistant(
             } catch (e: AiFailed) {
                 null
             }
-            r?.let { DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now())) }
+            r?.let {
+                val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder)
+                DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
+            }
         }.filterNotNull()
     }
 
@@ -247,7 +252,9 @@ internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was d
 "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER",
 "criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
 "insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
-"goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"]}"""
+"goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"],
+"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
+nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0."""
 
 internal fun researchPrompt(q: ResearchQuery) = buildString {
     append("Ort: ").append(q.name)
@@ -274,6 +281,42 @@ internal fun parseResearch(o: JsonObject, config: AssessConfig, extraSources: Li
             tips = strings("tips"),
             hints = strings("hints"),
             sources = extraSources.distinct().take(ParallelResearcher.MAX_SOURCES),
+            pois = parsePois(o["nearbyPoints"] as? JsonArray),
         ),
     )
+}
+
+/** Raw related spots from a research answer (coordinates unchecked; 0 = unknown). */
+internal fun parsePois(arr: JsonArray?): List<PlacePoi> = arr.orEmpty().mapNotNull { e ->
+    val p = e as? JsonObject ?: return@mapNotNull null
+    val name = p.str("name")?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+    fun num(k: String) = (p[k] as? JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
+    PlacePoi(name.take(120), PoiKinds.normalize(p.str("kind")), num("lat"), num("lng"), p.str("note").orEmpty().take(300))
+}.distinctBy { it.name.lowercase() }.take(MAX_POIS)
+
+/** At most this many related spots per place. */
+internal const val MAX_POIS = 6
+
+/** Related spots farther than this from the place are dropped (wrong coordinates or a namesake elsewhere). */
+internal const val MAX_POI_KM = 3.0
+
+/**
+ * Keeps only spots with believable coordinates near ([lat], [lng]): the model's own when within [MAX_POI_KM],
+ * else the geocoder's hit for the spot's name (with place and [city]) when within range; the rest is dropped.
+ * Without an anchor nothing is kept.
+ */
+internal fun locatePois(pois: List<PlacePoi>, lat: Double?, lng: Double?, placeName: String, city: String?, geocoder: Geocoder): List<PlacePoi> {
+    if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) return emptyList()
+    fun near(a: Double, b: Double) = !(a == 0.0 && b == 0.0) && distanceKm(lat, lng, a, b) <= MAX_POI_KM
+    return pois.mapNotNull { p ->
+        if (near(p.lat, p.lng)) return@mapNotNull p
+        val hit = listOf(
+            listOfNotNull(p.name, placeName.ifBlank { null }, city).joinToString(" "),
+            listOfNotNull(p.name, city).joinToString(" "),
+        ).distinct().firstNotNullOfOrNull { q ->
+            val h = try { geocoder.find(q) } catch (e: Exception) { null }
+            h?.takeIf { near(it.lat, it.lng) }
+        }
+        hit?.let { p.copy(lat = it.lat, lng = it.lng) }
+    }
 }

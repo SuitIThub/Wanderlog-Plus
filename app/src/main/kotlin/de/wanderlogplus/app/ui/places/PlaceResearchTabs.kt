@@ -152,6 +152,9 @@ internal fun PlaceResearchTab(saved: SavedPlace, accent: Color, action: Research
             "Gut zu wissen" to d?.goodToKnow.orEmpty(),
             "Tipps" to d?.tips.orEmpty(),
             "Hinweise" to d?.hints.orEmpty(),
+            "Punkte vor Ort" to d?.pois.orEmpty().map { p ->
+                poiSymbol(p.kind) + " " + p.name + " (" + de.wanderlogplus.shared.model.PoiKinds.label(p.kind) + ")" + p.note.takeIf { it.isNotBlank() }?.let { " – $it" }.orEmpty()
+            },
         ).filter { it.second.isNotEmpty() }
         val sources = d?.sources.orEmpty()
         if (sections.isEmpty() && sources.isEmpty()) {
