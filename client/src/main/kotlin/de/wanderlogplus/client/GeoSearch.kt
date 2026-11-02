@@ -50,6 +50,22 @@ data class BBox(val west: Double, val south: Double, val east: Double, val north
     fun contains(lat: Double, lng: Double) = lat in south..north && lng in west..east
 
     internal fun param(): String = listOf(west, south, east, north).joinToString(",") { String.format(Locale.ROOT, "%.6f", it) }
+
+    /**
+     * This area as Photon accepts it: latitudes clamped to ±90; null when it is useless as a filter (wider than the
+     * world, crossing the date line, empty or not a number). A zoomed-out map reports longitudes beyond ±180.
+     */
+    fun normalized(): BBox? {
+        val values = listOf(west, south, east, north)
+        if (values.any { it.isNaN() || it.isInfinite() }) return null
+        if (east - west >= 360.0 || east <= west || north <= south) return null
+        var w = west
+        var e = east
+        while (w < -180.0) { w += 360.0; e += 360.0 }
+        while (w > 180.0) { w -= 360.0; e -= 360.0 }
+        if (e > 180.0) return null // crosses the date line: Photon cannot express that
+        return BBox(w, south.coerceIn(-90.0, 90.0), e, north.coerceIn(-90.0, 90.0))
+    }
 }
 
 /**
@@ -74,8 +90,11 @@ class GeoSearch(http: HttpClient, private val baseUrl: String = "https://photon.
             parameter("q", q)
             parameter("limit", limit)
             parameter("lang", "de")
-            near?.let { (lat, lng) -> parameter("lat", lat); parameter("lon", lng) }
-            bbox?.let { parameter("bbox", it.param()) }
+            near?.let { (lat, lng) ->
+                parameter("lat", lat.coerceIn(-90.0, 90.0))
+                parameter("lon", ((lng + 540.0) % 360.0) - 180.0)
+            }
+            bbox?.normalized()?.let { parameter("bbox", it.param()) }
         }
     }
 
@@ -87,7 +106,25 @@ class GeoSearch(http: HttpClient, private val baseUrl: String = "https://photon.
         parameter("limit", 1)
     }.firstOrNull()
 
+    /** Photon refuses bursts (503/429) and has short hiccups: such answers are retried after these pauses. */
+    var retryDelaysMillis: List<Long> = listOf(800, 2_000)
+
     private suspend fun get(path: String, params: HttpRequestBuilder.() -> Unit): List<GeoPlace> {
+        var attempt = 0
+        while (true) {
+            val result = try {
+                getOnce(path, params)
+            } catch (e: ApiException) {
+                val retry = e.kind == ApiErrorKind.NETWORK || e.status == 429 || (e.status ?: 0) >= 500 || e.status == null
+                if (!retry || attempt >= retryDelaysMillis.size) throw e
+                kotlinx.coroutines.delay(retryDelaysMillis[attempt++])
+                continue
+            }
+            return result
+        }
+    }
+
+    private suspend fun getOnce(path: String, params: HttpRequestBuilder.() -> Unit): List<GeoPlace> {
         val response = try {
             client.get("${baseUrl.trimEnd('/')}/$path") {
                 params()

@@ -657,7 +657,7 @@ fun AppNavigation(
                                 val start = remember(snap) {
                                     snap?.let { regionCentres(it) }?.values?.takeIf { it.isNotEmpty() }?.let { cs ->
                                         de.wanderlogplus.app.maps.LatLngD(cs.map { it.lat }.average(), cs.map { it.lng }.average())
-                                    }
+                                    } ?: de.wanderlogplus.app.maps.LatLngD(36.2, 138.25) // never a world map: its area is no search filter
                                 }
                                 val model = rememberPlaceSearchModel(
                                     search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
