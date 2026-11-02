@@ -115,6 +115,56 @@ class LocalEditor(
     }
 
     /**
+     * Adds a place found by search, a reel or similar (not from Wanderlog) to the collection of [regionId] (null: no
+     * region): a new Place with optional [description] and a SavedPlace with status "Idee", [note], [tags] and any
+     * further SavedPlace fields in [savedExtra]. One transaction; returns the SavedPlace id.
+     */
+    fun addPlaceToCollection(
+        name: String,
+        lat: Double,
+        lng: Double,
+        address: String?,
+        category: PlaceCategory,
+        regionId: String?,
+        description: String? = null,
+        note: String = "",
+        tags: List<String> = emptyList(),
+        savedExtra: Map<String, JsonElement> = emptyMap(),
+    ): String {
+        require(name.isNotBlank()) { "A place needs a name" }
+        val placeId = Ids.newId()
+        val savedId = Ids.newId()
+        tx.run {
+            writeNew(
+                EntityType.PLACE,
+                placeId,
+                buildMap {
+                    put("name", JsonPrimitive(name.trim()))
+                    put("lat", JsonPrimitive(lat))
+                    put("lng", JsonPrimitive(lng))
+                    address?.takeIf { it.isNotBlank() }?.let { put("address", JsonPrimitive(it)) }
+                    description?.takeIf { it.isNotBlank() }?.let { put("description", JsonPrimitive(it)) }
+                },
+            )
+            writeNew(
+                EntityType.SAVED_PLACE,
+                savedId,
+                buildMap {
+                    put("placeId", JsonPrimitive(placeId))
+                    regionId?.let { put("regionId", JsonPrimitive(it)) }
+                    put("category", JsonPrimitive(category.name))
+                    put("status", JsonPrimitive(PlaceStatus.IDEA.name))
+                    if (note.isNotBlank()) put("note", JsonPrimitive(note))
+                    if (tags.isNotEmpty()) put("tags", kotlinx.serialization.json.JsonArray(tags.map { JsonPrimitive(it) }))
+                    putAll(savedExtra)
+                },
+            )
+        }
+        onChange()
+        return savedId
+    }
+
+    /**
      * Adds a place found by search (not from Wanderlog) to the day at [position]: a new Place, a SavedPlace in the day's
      * region with status "geplant" (so it also shows under Orte) and the program item, in one transaction.
      */

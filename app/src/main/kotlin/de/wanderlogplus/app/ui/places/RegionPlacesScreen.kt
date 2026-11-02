@@ -29,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -74,6 +75,8 @@ fun RegionPlacesScreen(
     onBack: () -> Unit,
     onOpenPlace: (savedPlaceId: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the place search for this region; null hides it. */
+    onSearch: (() -> Unit)? = null,
 ) {
     val region = remember(snapshot, regionKey) { snapshot.regions.firstOrNull { it.id == regionKey } }
     val title = if (regionKey == NO_REGION) "Ohne Region" else region?.name.orEmpty()
@@ -111,6 +114,14 @@ fun RegionPlacesScreen(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            onSearch?.let { search ->
+                androidx.compose.material3.AssistChip(
+                    onClick = search,
+                    label = { Text("Ort suchen") },
+                    leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
+                    modifier = Modifier.testTag("region-search"),
+                )
+            }
             (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
                 FilterChip(
                     selected = category == c,

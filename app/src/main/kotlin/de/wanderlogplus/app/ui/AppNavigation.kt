@@ -52,6 +52,12 @@ import de.wanderlogplus.app.ui.setup.SetupScreen
 import de.wanderlogplus.app.ui.setup.SetupViewModel
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.app.ui.places.PLACE_ROUTE
+import de.wanderlogplus.app.ui.places.PLACES_SEARCH_ROUTE
+import de.wanderlogplus.app.ui.places.ALL_REGIONS
+import de.wanderlogplus.app.ui.places.NO_REGION
+import de.wanderlogplus.app.ui.places.nearestRegion
+import de.wanderlogplus.app.ui.places.placesSearchRoute
+import de.wanderlogplus.app.ui.places.regionCentres
 import de.wanderlogplus.app.ui.places.PlaceDetailScreen
 import de.wanderlogplus.app.ui.places.PlacesScreen
 import de.wanderlogplus.app.ui.places.PlacesViewModel
@@ -131,7 +137,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     val nestedRoutes: Set<String>
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
-            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
+            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
             else -> emptySet()
@@ -404,7 +410,47 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> PlacesScreen(s, onOpenRegion = { nav.navigate(regionRoute(it)) })
+                            else -> PlacesScreen(
+                                s,
+                                onOpenRegion = { nav.navigate(regionRoute(it)) },
+                                onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
+                            )
+                        }
+                    }
+                }
+                composable(PLACES_SEARCH_ROUTE) { entry ->
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val key = entry.arguments?.getString("regionKey").orEmpty()
+                    val geo = geoSearch
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        if (s != null && geo != null) {
+                            val start = remember(key) {
+                                val centres = regionCentres(s)
+                                centres[key] ?: centres.values.takeIf { it.isNotEmpty() }?.let { c ->
+                                    de.wanderlogplus.app.maps.LatLngD(c.map { it.lat }.average(), c.map { it.lng }.average())
+                                }
+                            }
+                            val model = rememberPlaceSearchModel(
+                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                lookup = { lat, lng -> geo.reverse(lat, lng) },
+                                home = start,
+                            )
+                            PlaceSearchScreen(
+                                model = model,
+                                start = start,
+                                addLabel = "Zu den Orten hinzufügen",
+                                onAdd = { place ->
+                                    val region = when (key) {
+                                        ALL_REGIONS, NO_REGION -> nearestRegion(s, place.lat, place.lng)
+                                        else -> key
+                                    }
+                                    vm.addFoundPlace(place, region)
+                                    nav.popBackStack()
+                                },
+                                onBack = { nav.popBackStack() },
+                            )
                         }
                     }
                 }
@@ -417,7 +463,7 @@ fun AppNavigation(
                             if (wide) {
                                 var selectedPlace by rememberSaveable(key) { mutableStateOf<String?>(null) }
                                 TwoPane(
-                                    list = { RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> selectedPlace = id }) },
+                                    list = { RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> selectedPlace = id }, onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } }) },
                                     detail = {
                                         val id = selectedPlace
                                         if (id == null) EmptyHint("Ort in der Liste antippen", Modifier.padding(24.dp))
@@ -425,7 +471,7 @@ fun AppNavigation(
                                     },
                                 )
                             } else {
-                                RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
+                                RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) }, onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } })
                             }
                         }
                     }

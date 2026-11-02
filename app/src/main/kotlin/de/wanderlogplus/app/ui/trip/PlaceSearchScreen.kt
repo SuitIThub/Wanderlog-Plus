@@ -80,6 +80,7 @@ fun PlaceSearchScreen(
     onAdd: (GeoPlace) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    addLabel: String = "Zum Tag hinzufügen",
 ) {
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
@@ -180,7 +181,7 @@ fun PlaceSearchScreen(
                         if (sel.detail.isNotBlank()) {
                             Text(sel.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        Button(onClick = { onAdd(sel) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-add")) { Text("Zum Tag hinzufügen") }
+                        Button(onClick = { onAdd(sel) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-add")) { Text(addLabel) }
                     }
                 }
             }

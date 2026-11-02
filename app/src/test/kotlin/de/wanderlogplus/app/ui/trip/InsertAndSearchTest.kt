@@ -223,3 +223,33 @@ class StayInProgramUiTest {
         rule.onNodeWithText("Unterkunft", substring = true).assertExists()
     }
 }
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w400dp-h2400dp")
+class PlacesSearchEntryTest {
+    @get:Rule val rule = createComposeRule()
+
+    @Test fun nearestRegionWithin50Km() {
+        val s = Fixtures.trip()
+        val tempel = s.places["p-tempel"]!!
+        assertEquals("r-berg", de.wanderlogplus.app.ui.places.nearestRegion(s, tempel.lat + 0.01, tempel.lng))
+        assertEquals(null, de.wanderlogplus.app.ui.places.nearestRegion(s, 43.06, 141.35)) // Sapporo: far from every region
+    }
+
+    @Test fun overviewAndRegionOfferSearch() {
+        var overview = 0
+        var region = 0
+        rule.setContent {
+            WanderlogPlusTheme {
+                androidx.compose.foundation.layout.Column {
+                    de.wanderlogplus.app.ui.places.PlacesScreen(Fixtures.trip(), onOpenRegion = {}, onSearch = { overview++ }, modifier = androidx.compose.ui.Modifier.weight(1f))
+                    de.wanderlogplus.app.ui.places.RegionPlacesScreen(Fixtures.trip(), "r-berg", onBack = {}, onOpenPlace = {}, onSearch = { region++ }, modifier = androidx.compose.ui.Modifier.weight(1f))
+                }
+            }
+        }
+        rule.onNodeWithTag("places-search").performClick()
+        rule.onNodeWithTag("region-search").performClick()
+        assertEquals(1, overview)
+        assertEquals(1, region)
+    }
+}
