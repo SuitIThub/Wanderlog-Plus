@@ -75,6 +75,9 @@ import de.wanderlogplus.app.ui.today.TodayScreen
 import de.wanderlogplus.app.ui.today.rememberMinuteNow
 import de.wanderlogplus.app.ui.trip.DAY_ROUTE
 import de.wanderlogplus.app.ui.trip.DAY_SEARCH_ROUTE
+import de.wanderlogplus.app.ui.trip.DAY_MAP_ROUTE
+import de.wanderlogplus.app.ui.trip.DayMapScreen
+import de.wanderlogplus.app.ui.trip.dayMapRoute
 import de.wanderlogplus.app.ui.trip.PlaceSearchScreen
 import de.wanderlogplus.app.ui.trip.daySearchRoute
 import de.wanderlogplus.app.ui.trip.rememberPlaceSearchModel
@@ -114,7 +117,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     /** Routes nested below this tab's root (the tab stays highlighted there). */
     val nestedRoutes: Set<String>
         get() = when (this) {
-            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE)
+            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
@@ -288,8 +291,17 @@ fun AppNavigation(
                                 onAddSuggestionAt = vm::addSuggestionAt,
                                 onAddNoteAt = vm::addNoteAt,
                                 onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
+                                onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
                             )
                         }
+                    }
+                }
+                composable(DAY_MAP_ROUTE) { entry ->
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val date = entry.arguments?.getString("date").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s -> DayMapScreen(s, date, onBack = { nav.popBackStack() }) }
                     }
                 }
                 composable(DAY_SEARCH_ROUTE) { entry ->

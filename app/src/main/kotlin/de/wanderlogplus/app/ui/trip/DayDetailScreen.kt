@@ -97,6 +97,8 @@ fun DayDetailScreen(
     onAddNoteAt: (date: String, text: String, position: ItemPosition) -> Unit = { d, t, _ -> onAddNote(d, t) },
     /** Opens the place search (text + map) for a position; null hides "Ort suchen". */
     onSearchPlace: ((date: String, position: ItemPosition) -> Unit)? = null,
+    /** Opens the full map of the day's route; null hides "Karte". */
+    onOpenMap: ((date: String) -> Unit)? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -175,6 +177,7 @@ fun DayDetailScreen(
                     onLegMode = onLegMode,
                     onOpenLink = onOpenLink,
                     onInsert = { pos -> insertAt = pos.encode(); addingNote = false; adding = true },
+                    onOpenMap = onOpenMap?.let { open -> { open(date) } },
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,
