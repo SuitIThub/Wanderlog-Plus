@@ -15,7 +15,7 @@ typealias AreaSearch = suspend (query: String, near: Pair<Double, Double>?, bbox
 /** The place at a point (reverse geocoding); null when nothing is known there. */
 typealias PointLookup = suspend (lat: Double, lng: Double) -> GeoPlace?
 
-enum class SearchStatus { IDLE, LOADING, FOUND, FOUND_ELSEWHERE, NOTHING, FAILED }
+enum class SearchStatus { IDLE, LOADING, FOUND, FOUND_ELSEWHERE, NOTHING, FAILED, UNAVAILABLE }
 
 /**
  * State of "Ort suchen": a text search that prefers the visible map area and falls back to a general search when the
@@ -40,6 +40,10 @@ class PlaceSearchModel(
     /** The area the map shows right now. */
     var visible by mutableStateOf<BBox?>(null)
 
+    /** HTTP status of the last failed search, for the message (null: no answer at all). */
+    var failedStatus by mutableStateOf<Int?>(null)
+        private set
+
     /** The area the current [results] were searched in (null: general search). */
     private var searchedArea by mutableStateOf<BBox?>(null)
     private var searchedQuery by mutableStateOf("")
@@ -57,9 +61,20 @@ class PlaceSearchModel(
     suspend fun submit() {
         val q = query.trim()
         if (q.isEmpty()) return
-        val area = visible
+        val area = visible?.normalized()
         run(q) {
-            val inside = if (area != null) search(q, area.center(), area) else emptyList()
+            // The area search is only a preference: if it fails, the general search below still runs.
+            val inside = if (area != null) {
+                try {
+                    search(q, area.center(), area)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else {
+                emptyList()
+            }
             if (inside.isNotEmpty()) {
                 searchedArea = area
                 inside to SearchStatus.FOUND
@@ -78,7 +93,7 @@ class PlaceSearchModel(
 
     /** The last query again, restricted to the area the map shows now. */
     suspend fun searchArea() {
-        val area = visible ?: return
+        val area = visible?.normalized() ?: return
         val q = query.trim().ifEmpty { return }
         run(q) {
             searchedArea = area
@@ -112,7 +127,10 @@ class PlaceSearchModel(
             throw e
         } catch (e: Exception) {
             results = emptyList()
-            status = SearchStatus.FAILED
+            val api = e as? de.wanderlogplus.client.ApiException
+            // Offline is FAILED; the service answering with an error (overloaded, refused) is UNAVAILABLE.
+            status = if (api != null && api.kind == de.wanderlogplus.client.ApiErrorKind.SERVER) SearchStatus.UNAVAILABLE else SearchStatus.FAILED
+            failedStatus = api?.status
         }
     }
 
@@ -132,4 +150,5 @@ fun statusText(s: SearchStatus, count: Int): String? = when (s) {
     SearchStatus.FOUND_ELSEWHERE -> "Im Ausschnitt nichts gefunden – $count Treffer in der Umgebung"
     SearchStatus.NOTHING -> "Nichts gefunden"
     SearchStatus.FAILED -> "Suche fehlgeschlagen – bist du online?"
+    SearchStatus.UNAVAILABLE -> "Die Ortssuche (OpenStreetMap/Photon) antwortet gerade nicht. Gleich noch einmal versuchen, oder lange auf die Karte drücken, um den Punkt selbst zu setzen."
 }

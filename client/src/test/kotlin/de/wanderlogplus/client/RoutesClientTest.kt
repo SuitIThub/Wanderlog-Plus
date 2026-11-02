@@ -109,8 +109,37 @@ class GeoSearchTest {
     }
 
     @Test fun serverErrorThrows() = runTest {
-        val search = GeoSearch(HttpClient(MockEngine { respond("", HttpStatusCode.BadGateway) }))
+        var calls = 0
+        val search = GeoSearch(HttpClient(MockEngine { calls++; respond("", HttpStatusCode.BadGateway) })).apply { retryDelaysMillis = listOf(1, 1) }
         assertEquals(ApiErrorKind.SERVER, assertFailsWith<ApiException> { search.search("x") }.kind)
+        assertEquals(3, calls) // first try + two retries
+    }
+
+    @Test fun refusedSearchIsRetried() = runTest {
+        var calls = 0
+        val search = GeoSearch(HttpClient(MockEngine {
+            calls++
+            if (calls == 1) respond("busy", HttpStatusCode.ServiceUnavailable) else respond(photon, HttpStatusCode.OK, jsonHeaders)
+        })).apply { retryDelaysMillis = listOf(1, 1) }
+        assertEquals(2, search.search("Nagoya").size)
+        assertEquals(2, calls)
+    }
+
+    @Test fun badRequestIsNotRetried() = runTest {
+        var calls = 0
+        val search = GeoSearch(HttpClient(MockEngine { calls++; respond("{}", HttpStatusCode.BadRequest, jsonHeaders) })).apply { retryDelaysMillis = listOf(1, 1) }
+        assertFailsWith<ApiException> { search.search("x") }
+        assertEquals(1, calls)
+    }
+
+    @Test fun worldSizedOrWrappedAreasAreNotSentAsFilter() = runTest {
+        val seen = mutableListOf<String?>()
+        val search = GeoSearch(HttpClient(MockEngine { r -> seen += r.url.parameters["bbox"]; respond(photon, HttpStatusCode.OK, jsonHeaders) }))
+        search.search("x", near = 35.0 to 500.0, bbox = BBox(-450.0, -85.0, 450.0, 85.0)) // zoomed-out map
+        search.search("x", bbox = BBox(-220.5, 35.0, -219.5, 36.0)) // one world to the west
+        search.search("x", bbox = BBox(179.0, 35.0, 181.0, 36.0)) // across the date line
+        assertEquals(listOf(null, "139.500000,35.000000,140.500000,36.000000", null), seen)
+        assertEquals(BBox(10.0, -90.0, 20.0, 90.0), BBox(10.0, -95.0, 20.0, 95.0).normalized())
     }
 }
 

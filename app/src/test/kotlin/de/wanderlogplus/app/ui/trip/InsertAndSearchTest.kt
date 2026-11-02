@@ -74,6 +74,40 @@ class InsertAndSearchTest {
         assertTrue(m.canSearchArea) // the visible area was not where the hits came from
     }
 
+    @Test fun failingAreaSearchStillSearchesEverywhere() = runBlocking {
+        val calls = mutableListOf<BBox?>()
+        val m = PlaceSearchModel({ _, _, bbox -> calls += bbox; if (bbox != null) throw IllegalStateException("400") else listOf(farAway) }, { _, _ -> null }, null)
+        m.visible = kyoto
+        m.query = "Ramen"
+        m.submit()
+        assertEquals(listOf(farAway), m.results)
+        assertEquals(SearchStatus.FOUND_ELSEWHERE, m.status)
+        assertEquals(listOf(kyoto, null), calls)
+    }
+
+    @Test fun refusingServiceIsNamed() = runBlocking {
+        val m = PlaceSearchModel({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.SERVER, status = 503) }, { _, _ -> null }, null)
+        m.query = "Ramen"
+        m.submit()
+        assertEquals(SearchStatus.UNAVAILABLE, m.status)
+        assertEquals(503, m.failedStatus)
+        assertTrue(statusText(SearchStatus.UNAVAILABLE, 0)!!.contains("lange auf die Karte"))
+        val offline = PlaceSearchModel({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.NETWORK) }, { _, _ -> null }, null)
+        offline.query = "Ramen"
+        offline.submit()
+        assertEquals(SearchStatus.FAILED, offline.status)
+    }
+
+    @Test fun worldMapAreaIsNoFilter() = runBlocking {
+        val calls = mutableListOf<BBox?>()
+        val m = PlaceSearchModel({ _, _, bbox -> calls += bbox; listOf(farAway) }, { _, _ -> null }, null)
+        m.visible = BBox(-450.0, -85.0, 450.0, 85.0)
+        m.query = "Ramen"
+        m.submit()
+        assertEquals(listOf<BBox?>(null), calls)
+        assertEquals(SearchStatus.FOUND, m.status)
+    }
+
     @Test fun movedMapOffersAreaSearch() = runBlocking {
         val fake = FakeSearch(listOf(inside, farAway))
         val m = PlaceSearchModel(fake::search, { _, _ -> null }, null)
