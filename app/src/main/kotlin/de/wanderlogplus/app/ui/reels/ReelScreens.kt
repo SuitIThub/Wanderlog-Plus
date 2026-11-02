@@ -120,6 +120,8 @@ fun ReelJobScreen(
     onOpenPlaces: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the detailed "Ablauf" of this analysis; null hides the button. */
+    onShowProgress: (() -> Unit)? = null,
 ) {
     val candidates = job?.candidates.orEmpty()
     val picked = remember(job?.id, candidates.size) {
@@ -131,7 +133,10 @@ fun ReelJobScreen(
     Column(modifier.fillMaxSize().testTag("reel-job")) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
-            Text("Reel-Auswertung", style = MaterialTheme.typography.titleLarge)
+            Text("Reel-Auswertung", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            onShowProgress?.let { show ->
+                androidx.compose.material3.TextButton(onClick = show, modifier = Modifier.testTag("reel-progress")) { Text("Ablauf") }
+            }
         }
         when {
             job == null -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
@@ -139,7 +144,11 @@ fun ReelJobScreen(
             !isFinished(job) -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(statusLabel(job.status), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("reel-status"))
                 LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text("Das dauert meist unter einer Minute. Du kannst die Seite verlassen; die Auswertung läuft auf dem Server weiter.", style = MaterialTheme.typography.bodySmall)
+                job.steps.lastOrNull()?.let { Text(it.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("reel-last-step")) }
+                Text("Das dauert meist ein bis drei Minuten. Du kannst die Seite verlassen; die Auswertung läuft auf dem Server weiter.", style = MaterialTheme.typography.bodySmall)
+                onShowProgress?.let { show ->
+                    androidx.compose.material3.OutlinedButton(onClick = show, modifier = Modifier.fillMaxWidth().testTag("reel-progress-live")) { Text("Ablauf live ansehen") }
+                }
             }
             candidates.isEmpty() -> EmptyHint("Im Reel wurde kein konkreter Ort erkannt.", Modifier.padding(16.dp))
             else -> {

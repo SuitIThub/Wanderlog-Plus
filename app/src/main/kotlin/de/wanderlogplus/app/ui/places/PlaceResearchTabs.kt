@@ -45,7 +45,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** "Recherchieren (KI)" for one place: [running] while its job is on the server. */
-data class ResearchAction(val running: Boolean, val onResearch: () -> Unit)
+data class ResearchAction(val running: Boolean, val onResearch: () -> Unit, val onShowProgress: (() -> Unit)? = null)
 
 /** "Ø 3,8" over the scored criteria; null without scores. */
 fun averageScore(criteria: List<CriterionScore>): String? {
@@ -221,5 +221,10 @@ private fun ResearchButton(action: ResearchAction, again: Boolean) {
         OutlinedButton(onClick = action.onResearch, enabled = !action.running, modifier = mod) { content() }
     } else {
         Button(onClick = action.onResearch, enabled = !action.running, modifier = mod) { content() }
+    }
+    action.onShowProgress?.let { show ->
+        androidx.compose.material3.TextButton(onClick = show, modifier = Modifier.fillMaxWidth().testTag("place-research-progress")) {
+            Text(if (action.running) "Ablauf live ansehen" else "Ablauf der letzten Recherche")
+        }
     }
 }

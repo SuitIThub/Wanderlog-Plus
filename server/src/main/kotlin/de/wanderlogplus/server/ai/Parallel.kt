@@ -27,9 +27,9 @@ data class WebSource(val url: String, val title: String?, val excerpts: List<Str
 /** What research found about one place (German): description, category, worth and the dossier (criteria, verdict, tips, sources). */
 data class ResearchOutcome(val description: String, val category: String?, val worth: String?, val dossier: PlaceDossier)
 
-/** Web research for a place, judged by [config]'s criteria; null when nothing usable came back. Blocking. */
-fun interface PlaceResearcher {
-    fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome?
+/** Web research for a place, judged by [config]'s criteria; null when nothing usable came back. Blocking. [say] gets progress lines. */
+interface PlaceResearcher {
+    fun research(query: ResearchQuery, config: AssessConfig, say: (String) -> Unit = {}): ResearchOutcome?
 }
 
 /** What is known about a place before research. */
@@ -65,13 +65,21 @@ class HttpParallelTransport(private val apiKey: String, private val base: String
 class ParallelResearcher(private val transport: ParallelTransport, private val processor: String = "base") : PlaceResearcher {
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome? {
+    override fun research(query: ResearchQuery, config: AssessConfig, say: (String) -> Unit): ResearchOutcome? {
+        say("Websuche (Parallel Search) …")
         val sources = try {
-            search(query)
+            search(query).also { found ->
+                say(
+                    if (found.isEmpty()) "Websuche: keine Quellen"
+                    else "Websuche: ${found.size} Quellen (" + found.joinToString(", ") { hostOf(it.url) } + ")",
+                )
+            }
         } catch (e: AiFailed) {
+            say("Websuche fehlgeschlagen (${e.code}), Recherche ohne Vorab-Quellen")
             emptyList() // the task can still research on its own
         }
-        val (content, citations) = runTask(query, sources, config) ?: return null
+        val (content, citations) = runTask(query, sources, config, say) ?: run { say("Recherche ohne Ergebnis"); return null }
+        say("Ergebnis erhalten (${citations.size} Belege)")
         return parseResearch(content, config, citations + sources.map { it.url })
     }
 
@@ -86,13 +94,16 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
     }
 
     /** Task API: create a run, then wait for its result (the result call blocks; a timeout just asks again). */
-    private fun runTask(q: ResearchQuery, sources: List<WebSource>, config: AssessConfig): Pair<JsonObject, List<String>>? {
+    private fun runTask(q: ResearchQuery, sources: List<WebSource>, config: AssessConfig, say: (String) -> Unit = {}): Pair<JsonObject, List<String>>? {
+        say("Recherche-Auftrag wird gestartet (Parallel Task, $processor) …")
         val (status, created) = transport.send("POST", "/v1/tasks/runs", taskBody(q, sources, processor, config), Duration.ofSeconds(30))
         if (status == 401 || status == 403) throw AiFailed("research_key_rejected")
         if (status == 402) throw AiFailed("research_no_credit")
         if (status !in 200..299) throw AiFailed("research_failed")
         val runId = (json.parseToJsonElement(created).jsonObject["run_id"] as? JsonPrimitive)?.content ?: throw AiFailed("research_failed")
-        repeat(RESULT_ATTEMPTS) {
+        say("Recherche läuft, warte auf Ergebnis …")
+        repeat(RESULT_ATTEMPTS) { attempt ->
+            if (attempt > 0) say("Recherche läuft noch, warte weiter (${attempt + 1}/$RESULT_ATTEMPTS) …")
             val (s, body) = transport.send("GET", "/v1/tasks/runs/$runId/result?timeout=$RESULT_WAIT_SECONDS", null, Duration.ofSeconds(RESULT_WAIT_SECONDS + 30))
             when (s) {
                 in 200..299 -> return parseResult(body)
@@ -105,6 +116,9 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
 
     companion object {
         const val MAX_SOURCES = 5
+
+        /** "de.wikipedia.org" for log lines. */
+        fun hostOf(url: String): String = runCatching { java.net.URI(url).host?.removePrefix("www.") }.getOrNull() ?: url
         const val RESULT_WAIT_SECONDS = 240L
         const val RESULT_ATTEMPTS = 3
 

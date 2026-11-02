@@ -15,6 +15,7 @@ import de.wanderlogplus.shared.sync.DossierResult
 import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
+import de.wanderlogplus.shared.sync.JobItem
 import de.wanderlogplus.shared.sync.ReelCandidate
 import de.wanderlogplus.shared.sync.Worth
 import kotlinx.serialization.json.JsonArray
@@ -102,19 +103,26 @@ class Assistant(
     }
 
     /** Coordinates, distance to the trip and the full research for one place found in a reel. */
-    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig()): ReelCandidate {
+    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}): ReelCandidate {
+        say("Lage wird gesucht (Photon) …")
         val hit = listOfNotNull(
             listOfNotNull(p.name, p.city).joinToString(" "),
             p.localName,
             p.name,
         ).distinct().firstNotNullOfOrNull { geocoder.find(it) }
         val near = hit?.let { context.nearest(it.lat, it.lng) }
+        say(
+            if (hit == null) "Lage nicht gefunden"
+            else "Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty(),
+        )
         val r = try {
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence), config)
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence), config, say)
         } catch (e: AiFailed) {
+            say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
         }
         val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder)) }
+        if (r != null) say(poiLine(r.dossier.pois.size, d?.pois?.size ?: 0))
         return ReelCandidate(
             name = p.name,
             city = p.city,
@@ -137,40 +145,86 @@ class Assistant(
     }
 
     /** Researches several reel places at once (at most [RESEARCH_PARALLELISM] at a time), keeping their order. */
-    fun researchAll(found: List<FoundPlace>, context: TripContext, config: AssessConfig, onDone: (Int) -> Unit = {}): List<ReelCandidate> =
-        inParallel(found, onDone) { research(it, context, config) }
+    fun researchAll(
+        found: List<FoundPlace>,
+        context: TripContext,
+        config: AssessConfig,
+        progress: JobProgress = JobProgress.NONE,
+        onDone: (Int) -> Unit = {},
+    ): List<ReelCandidate> {
+        val keyed = found.mapIndexed { i, p -> "place-$i" to p }
+        progress.items(keyed.map { (k, p) -> JobItem(k, listOfNotNull(p.name, p.city).joinToString(", ")) })
+        return inParallel(keyed, onDone) { (key, p) ->
+            progress.item(key, state = "RUNNING")
+            val c = research(p, context, config, progress.sayFor(key, p.name))
+            if (c.dossier == null) {
+                progress.item(key, state = "FAILED", detail = "ohne Recherche, nur Lage")
+                progress.step("${p.name}: ohne Recherche übernommen", JobProgress.WARN)
+            } else {
+                progress.item(key, state = "DONE", detail = worthText(c.worth))
+                progress.step("${p.name}: fertig, ${worthText(c.worth)}", JobProgress.OK)
+            }
+            c
+        }
+    }
 
     /** Web research for saved places of the trip: full dossier, worth and (for places without one) a description. */
-    fun researchSaved(store: EntityStore, ids: List<String>, config: AssessConfig, now: () -> Long, onDone: (Int) -> Unit = {}): List<DossierResult> {
+    fun researchSaved(
+        store: EntityStore,
+        ids: List<String>,
+        config: AssessConfig,
+        now: () -> Long,
+        progress: JobProgress = JobProgress.NONE,
+        onDone: (Int) -> Unit = {},
+    ): List<DossierResult> {
         val data = TripData.from(store)
         val wanted = data.saved.filter { it.id in ids }
+        if (wanted.size < ids.size) progress.step("${ids.size - wanted.size} Orte nicht gefunden (gelöscht?)", JobProgress.WARN)
+        val nameOf = wanted.associate { it.id to (data.places[it.placeId]?.name ?: "?") }
+        progress.items(wanted.map { s -> JobItem(s.id, nameOf.getValue(s.id) + (s.regionId?.let { data.regions[it]?.name }?.let { ", $it" }.orEmpty())) })
         return inParallel(wanted, onDone) { s ->
             val p = data.places[s.placeId]
+            val name = nameOf.getValue(s.id)
+            val say = progress.sayFor(s.id, name)
+            progress.item(s.id, state = "RUNNING")
             val region = s.regionId?.let { data.regions[it]?.name }
             val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty())
             val r = try {
-                researcher.research(query, config)
+                researcher.research(query, config, say)
             } catch (e: AiFailed) {
+                say("Recherche fehlgeschlagen (${e.code})")
                 null
             }
-            r?.let {
+            val result = r?.let {
                 val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder)
+                say(poiLine(it.dossier.pois.size, pois.size))
                 DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
             }
+            if (result == null) {
+                progress.item(s.id, state = "FAILED", detail = "kein Ergebnis")
+                progress.step("$name: kein Ergebnis", JobProgress.WARN)
+            } else {
+                progress.item(s.id, state = "DONE", detail = worthText(result.worth))
+                progress.step("$name: fertig, ${worthText(result.worth)}", JobProgress.OK)
+            }
+            result
         }.filterNotNull()
     }
 
     /** Judges the given saved places by the chosen criteria (all without judgement when [ids] is empty), in batches; no web search. */
-    fun assess(store: EntityStore, ids: List<String>, config: AssessConfig = AssessConfig()): List<Assessment> {
+    fun assess(store: EntityStore, ids: List<String>, config: AssessConfig = AssessConfig(), progress: JobProgress = JobProgress.NONE): List<Assessment> {
         val data = TripData.from(store)
         val wanted = if (ids.isEmpty()) data.saved.filter { it.worth == null } else data.saved.filter { it.id in ids }
+        val batches = (wanted.size + ASSESS_BATCH - 1) / ASSESS_BATCH
+        progress.step(if (wanted.isEmpty()) "Keine Orte ohne Einschätzung" else "${wanted.size} Orte, $batches Durchgänge zu höchstens $ASSESS_BATCH")
         val system = """
             Du bewertest Orte einer Japanreise danach, wie lohnenswert ein Besuch ist, für Reisende mit begrenzter Zeit.
             ${criteriaPrompt(config)}
             Antworte nur mit JSON: {"results": [{"id": "die gegebene id", "criteria": [{"key": "…", "score": 1-5, "note": "kurz, Deutsch"}],
             "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze auf Deutsch"}]}
         """.trimIndent()
-        return wanted.chunked(ASSESS_BATCH).flatMap { batch ->
+        return wanted.chunked(ASSESS_BATCH).withIndex().flatMap { (bi, batch) ->
+            progress.step("Durchgang ${bi + 1}/$batches: ${batch.size} Orte werden eingeschätzt …")
             val lines = batch.joinToString("\n") { s ->
                 val p = data.places[s.placeId]
                 listOfNotNull(
@@ -236,7 +290,8 @@ internal class TripData(val places: Map<String, Place>, val regions: Map<String,
 
 /** Research with the chat model's web search plugin (OpenRouter), used when no Parallel key is configured. */
 class OpenRouterResearcher(private val model: ChatModel) : PlaceResearcher {
-    override fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome? {
+    override fun research(query: ResearchQuery, config: AssessConfig, say: (String) -> Unit): ResearchOutcome? {
+        say("Recherche mit Websuche (OpenRouter) …")
         val system = """
             Du recherchierst für eine Reise-App im Web zu einem Ort und schreibst sachlich auf Deutsch, wie ein guter Reiseführer.
             Suche Bewertungen, praktische Hinweise, Geheimtipps von Einheimischen und Kennern, versteckte Ecken in der Nähe und Dinge, die man vorher wissen sollte.
@@ -319,4 +374,10 @@ internal fun locatePois(pois: List<PlacePoi>, lat: Double?, lng: Double?, placeN
         }
         hit?.let { p.copy(lat = it.lat, lng = it.lng) }
     }
+}
+
+/** Log line about related spots: how many came back and how many have a checked position. */
+internal fun poiLine(found: Int, kept: Int): String = when {
+    found == 0 -> "Keine Punkte vor Ort gefunden"
+    else -> "Punkte vor Ort: $kept von $found mit gesicherter Lage"
 }

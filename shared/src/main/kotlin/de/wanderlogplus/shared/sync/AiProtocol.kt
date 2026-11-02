@@ -66,7 +66,7 @@ data class Assessment(val savedPlaceId: String, val worth: Worth, val reason: St
 @Serializable
 data class AiJobInfo(
     val id: String,
-    /** "reel" or "assess". */
+    /** "reel", "assess" or "research". */
     val kind: String,
     val createdAt: Long,
     val status: String,
@@ -79,4 +79,25 @@ data class AiJobInfo(
     /** Places done / to do while a research job runs. */
     val progress: Int = 0,
     val total: Int = 0,
+    /** What the job did so far, oldest first (at most the last 300 lines). */
+    val steps: List<JobStep> = emptyList(),
+    /** The places the job works through, with their state. */
+    val items: List<JobItem> = emptyList(),
+    /** Epoch millis when the job ended (done or failed); 0 while running. */
+    val finishedAt: Long = 0,
+)
+
+/** One line of a job's log; [level] is INFO, OK, WARN or ERROR. */
+@Serializable
+data class JobStep(val at: Long, val text: String, val level: String = "INFO")
+
+/** One place a job works on; [state] is WAITING, RUNNING, DONE or FAILED, [detail] what happens with it right now. */
+@Serializable
+data class JobItem(
+    val key: String,
+    val name: String,
+    val state: String = "WAITING",
+    val detail: String = "",
+    val startedAt: Long = 0,
+    val finishedAt: Long = 0,
 )

@@ -285,4 +285,45 @@ class AssistantTest {
         val r = client.post("/api/ai/research") { authed(); contentType(ContentType.Application.Json); setBody("""{"savedPlaceIds":[]}""") }
         assertEquals(HttpStatusCode.BadRequest, r.status)
     }
+
+    @Test fun reelJobKeepsAReadableLogAndPerPlaceStates() {
+        seedTrip()
+        val j = jobs(FakeModel())
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/reel/abc/")).id
+        j.drain()
+        val job = j.get(id)!!
+        val texts = job.steps.map { it.text }
+        assertTrue(texts.first().startsWith("Reel-Link erhalten"))
+        assertTrue(texts.any { it.startsWith("2 Bilder und Tonspur") })
+        assertTrue(texts.any { it.startsWith("2 Orte erkannt: Fushimi") })
+        assertTrue(texts.any { it.startsWith("Fushimi Inari Taisha: Lage: ") })
+        assertTrue(texts.any { it.contains("Fushimi Inari Taisha: fertig, Muss man sehen") })
+        assertEquals("Fertig", texts.last())
+        assertEquals(2, job.items.size)
+        assertTrue(job.items.all { it.state == "DONE" && it.startedAt > 0 && it.finishedAt >= it.startedAt })
+        assertTrue(job.finishedAt > 0)
+        // Log lines are ours: no booking data.
+        assertTrue(texts.none { it.contains("SECRET") })
+    }
+
+    @Test fun failedJobsEndTheLogWithTheReason() {
+        val j = jobs(media = FakeMedia(fail = true))
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/reel/x/")).id
+        j.drain()
+        val last = j.get(id)!!.steps.last()
+        assertEquals("ERROR", last.level)
+        assertEquals("Abgebrochen: Reel ließ sich nicht laden", last.text)
+    }
+
+    @Test fun researchMarksPlacesThatGotNoResult() {
+        seedTrip()
+        val j = jobs(FakeModel(failResearch = true))
+        val id = j.startResearch(listOf("s-tempel", "gone")).id
+        j.drain()
+        val job = j.get(id)!!
+        assertEquals("DONE", job.status)
+        assertEquals("FAILED", job.items.single().state)
+        assertTrue(job.steps.any { it.text == "1 Orte nicht gefunden (gelöscht?)" && it.level == "WARN" })
+        assertTrue(job.steps.any { it.text.contains("Recherche fehlgeschlagen") })
+    }
 }

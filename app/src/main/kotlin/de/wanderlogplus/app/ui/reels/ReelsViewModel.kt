@@ -61,9 +61,10 @@ class ReelsViewModel(
 
     fun isImported(id: String) = imported.contains(id)
 
-    fun refreshList() {
+    /** Loads the recent jobs of [kind] (null: all kinds) into [jobs]. */
+    fun refreshList(kind: String? = "reel") {
         viewModelScope.launch {
-            call { a -> _jobs.value = a.aiJobs("reel") }
+            call { a -> _jobs.value = a.aiJobs(kind, limit = 50) }
         }
     }
 
