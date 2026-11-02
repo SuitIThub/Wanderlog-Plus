@@ -53,6 +53,10 @@ data class ReelCandidate(
     val sources: List<String> = emptyList(),
     /** Criteria scores, verdict, insider tips, hidden spots, good-to-know (the full research). */
     val dossier: PlaceDossier? = null,
+    /** Why [lat]/[lng] are missing: "not_found" (no match) or "unavailable" (the geocoder did not answer). */
+    val positionIssue: String? = null,
+    /** Set in the app when the user picked the position in the place search. */
+    val positionSetByHand: Boolean = false,
 )
 
 /** The judgement for one saved place. */

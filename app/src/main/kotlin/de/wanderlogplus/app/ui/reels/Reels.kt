@@ -14,6 +14,27 @@ const val REEL_ROUTE = "mehr/reels/{jobId}"
 
 fun reelRoute(jobId: String) = "mehr/reels/${android.net.Uri.encode(jobId)}"
 
+/** Place search to set the position of candidate [index] of a reel analysis by hand. */
+const val REEL_POSITION_ROUTE = "mehr/reels/{jobId}/position/{index}"
+fun reelPositionRoute(jobId: String, index: Int) = "mehr/reels/${android.net.Uri.encode(jobId)}/position/$index"
+
+/** A candidate with a position the user picked in the place search (not on any route check). */
+fun withPosition(c: ReelCandidate, place: de.wanderlogplus.client.GeoPlace): ReelCandidate = c.copy(
+    lat = place.lat,
+    lng = place.lng,
+    address = place.detail.ifBlank { null } ?: c.address,
+    distanceKm = null,
+    nearestAnchor = null,
+    positionIssue = null,
+    positionSetByHand = true,
+)
+
+/** Why a candidate has no position, for the line under it. */
+fun missingPositionText(c: ReelCandidate): String = when (c.positionIssue) {
+    "unavailable" -> "Ohne Kartenposition: Der Ortsdienst hat nicht geantwortet."
+    else -> "Ohne Kartenposition: Der Ort wurde auf der Karte nicht gefunden."
+}
+
 /** Tag on places taken over from a reel. */
 const val REEL_TAG = "📱 Reel"
 
@@ -52,6 +73,7 @@ fun errorText(code: String?): String = when (code) {
 
 /** "auf der Route · 3,2 km von Hotel Gion" / "abseits · 370 km von …" / "ohne Kartenposition". */
 fun routeLabel(c: ReelCandidate): String {
+    if (c.positionSetByHand) return "Position selbst gesetzt"
     val d = c.distanceKm ?: return "ohne Kartenposition"
     val km = if (d < 10) String.format(java.util.Locale.GERMAN, "%.1f km", d) else "${d.toInt()} km"
     val anchor = c.nearestAnchor?.let { " von $it" }.orEmpty()

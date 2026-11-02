@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -122,6 +123,8 @@ fun ReelJobScreen(
     modifier: Modifier = Modifier,
     /** Opens the detailed "Ablauf" of this analysis; null hides the button. */
     onShowProgress: (() -> Unit)? = null,
+    /** Opens the place search to set candidate [index]'s position by hand; null hides "Position suchen". */
+    onFindPosition: ((index: Int) -> Unit)? = null,
 ) {
     val candidates = job?.candidates.orEmpty()
     val picked = remember(job?.id, candidates.size) {
@@ -130,7 +133,14 @@ fun ReelJobScreen(
     val regions = remember(job?.id, candidates.size, snapshot) {
         mutableStateMapOf<Int, String?>().apply { if (snapshot != null) candidates.forEachIndexed { i, c -> put(i, defaultRegion(snapshot, c)) } }
     }
-    Column(modifier.fillMaxSize().testTag("reel-job")) {
+    val placedByHand = candidates.mapIndexedNotNull { i, c -> i.takeIf { c.positionSetByHand } }
+    LaunchedEffect(placedByHand) {
+        placedByHand.forEach { i ->
+            if (regions[i] == null && snapshot != null) regions[i] = defaultRegion(snapshot, candidates[i])
+            if (picked[i] != true) picked[i] = true
+        }
+    }
+        Column(modifier.fillMaxSize().testTag("reel-job")) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
             Text("Reel-Auswertung", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -188,7 +198,14 @@ fun ReelJobScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
-                                if (!importable(c)) Text("Ohne Kartenposition – kann nicht übernommen werden.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                if (!importable(c)) {
+                                    Text(missingPositionText(c), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("reel-no-position-$i"))
+                                    if (onFindPosition != null && !imported) {
+                                        androidx.compose.material3.OutlinedButton(onClick = { onFindPosition(i) }, modifier = Modifier.testTag("reel-find-position-$i")) {
+                                            Text("Position suchen")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

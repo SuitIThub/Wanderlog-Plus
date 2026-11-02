@@ -57,42 +57,81 @@ fun distanceKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
 }
 
 /** A geocoded place. */
-data class GeoHit(val lat: Double, val lng: Double, val address: String?)
+data class GeoHit(val lat: Double, val lng: Double, val address: String?, val country: String? = null)
 
-/** Finds coordinates for a place name; null when nothing matches. Blocking. */
+/** The geocoder did not answer (overloaded, rate-limited, offline) even after retries: unknown, not "not found". */
+class GeocoderUnavailable : RuntimeException()
+
+/** Finds coordinates for a place name; null when nothing matches; [GeocoderUnavailable] when it cannot tell. Blocking. */
 fun interface Geocoder {
     fun find(query: String): GeoHit?
 }
 
-/** Photon (OpenStreetMap) geocoding, biased towards Japan's centre. */
-class PhotonGeocoder(private val baseUrl: String = "https://photon.komoot.io") : Geocoder {
+/**
+ * Photon (OpenStreetMap) geocoding, biased towards Japan's centre. The public service refuses bursts (503/429), so
+ * all requests of the process go out one after another, at least [minIntervalMillis] apart, and refused ones are
+ * retried after [backoffMillis].
+ */
+class PhotonGeocoder(
+    private val baseUrl: String = "https://photon.komoot.io",
+    private val minIntervalMillis: Long = 400,
+    private val backoffMillis: List<Long> = listOf(1_000, 2_000, 4_000),
+    private val sleep: (Long) -> Unit = { Thread.sleep(it) },
+) : Geocoder {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
     private val json = Json { ignoreUnknownKeys = true }
 
     override fun find(query: String): GeoHit? {
         val q = URLEncoder.encode(query.trim(), Charsets.UTF_8)
         if (q.isEmpty()) return null
-        val request = HttpRequest.newBuilder(URI.create("${baseUrl.trimEnd('/')}/api/?q=$q&limit=1&lat=36.2&lon=138.25"))
-            .timeout(Duration.ofSeconds(15))
-            .header("User-Agent", "WanderlogPlus-Server")
-            .GET().build()
-        val body = try {
-            http.send(request, HttpResponse.BodyHandlers.ofString()).takeIf { it.statusCode() in 200..299 }?.body()
+        val uri = URI.create("${baseUrl.trimEnd('/')}/api/?q=$q&limit=1&lat=36.2&lon=138.25")
+        for (attempt in 0..backoffMillis.size) {
+            if (attempt > 0) sleep(backoffMillis[attempt - 1])
+            val (status, body) = send(uri) ?: continue // network trouble: try again
+            if (status == 429 || status >= 500) continue
+            if (status !in 200..299) return null
+            return parse(body ?: continue) ?: if (isFeatureList(body)) null else continue // a non-JSON page means overload
+        }
+        throw GeocoderUnavailable()
+    }
+
+    private fun send(uri: URI): Pair<Int, String?>? = synchronized(LOCK) {
+        val wait = lastRequestAt + minIntervalMillis - System.currentTimeMillis()
+        if (wait > 0) sleep(wait)
+        lastRequestAt = System.currentTimeMillis()
+        val request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(15)).header("User-Agent", "WanderlogPlus-Server").GET().build()
+        try {
+            http.send(request, HttpResponse.BodyHandlers.ofString()).let { it.statusCode() to it.body() }
         } catch (e: IOException) {
             null
-        } ?: return null
-        return try {
-            val f = json.parseToJsonElement(body).jsonObject["features"]?.jsonArray?.firstOrNull()?.jsonObject ?: return null
-            val c = f["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
-            val props = f["properties"]?.jsonObject
-            fun p(k: String) = (props?.get(k) as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+        }
+    }
+
+    private fun isFeatureList(body: String) = try {
+        json.parseToJsonElement(body).jsonObject.containsKey("features")
+    } catch (e: Exception) {
+        false
+    }
+
+    private fun parse(body: String): GeoHit? = try {
+        val f = json.parseToJsonElement(body).jsonObject["features"]?.jsonArray?.firstOrNull()?.jsonObject
+        f?.let {
+            val c = it["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+            val props = it["properties"]?.jsonObject
+            fun p(k: String) = (props?.get(k) as? JsonPrimitive)?.content?.takeIf { v -> v.isNotBlank() }
             GeoHit(
                 lat = (c[1] as JsonPrimitive).content.toDouble(),
                 lng = (c[0] as JsonPrimitive).content.toDouble(),
                 address = listOfNotNull(p("street"), p("city"), p("country")).joinToString(", ").ifBlank { null },
+                country = p("countrycode") ?: p("country"),
             )
-        } catch (e: Exception) {
-            null
         }
+    } catch (e: Exception) {
+        null
+    }
+
+    private companion object {
+        val LOCK = Any()
+        var lastRequestAt = 0L
     }
 }
