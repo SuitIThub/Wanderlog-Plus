@@ -65,6 +65,11 @@ class PlacesViewModel(
     fun setRegion(savedPlaceId: String, regionId: String?) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("regionId" to (regionId?.let { JsonPrimitive(it) } ?: JsonNull))) }
 
+    /** A place found by search goes into [regionId]'s collection as an idea (null: no region). */
+    fun addFoundPlace(place: de.wanderlogplus.client.GeoPlace, regionId: String?) = write { e, _ ->
+        e.addPlaceToCollection(place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, regionId)
+    }
+
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 }

@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -52,6 +53,36 @@ const val NO_REGION = "none"
 fun savedPlacesIn(snapshot: TripSnapshot, regionKey: String): List<SavedPlace> {
     val known = snapshot.regions.map { it.id }.toSet()
     return snapshot.savedPlaces.filter { if (regionKey == NO_REGION) it.regionId !in known else it.regionId == regionKey }
+}
+
+const val PLACES_SEARCH_ROUTE = "orte/search/{regionKey}"
+
+/** [regionKey] a region id, [NO_REGION], or [ALL_REGIONS] for the overview. */
+fun placesSearchRoute(regionKey: String) = "orte/search/${android.net.Uri.encode(regionKey)}"
+
+/** Region key of the places search opened from the overview: the region is picked from the found place's position. */
+const val ALL_REGIONS = "all"
+
+/** Centre of each region's saved places with coordinates. */
+fun regionCentres(snapshot: TripSnapshot): Map<String, de.wanderlogplus.app.maps.LatLngD> =
+    snapshot.savedPlaces.filter { it.regionId != null }.groupBy { it.regionId!! }.mapNotNull { (rid, saved) ->
+        val pts = saved.mapNotNull { snapshot.places[it.placeId] }.filter { !(it.lat == 0.0 && it.lng == 0.0) }
+        if (pts.isEmpty()) null else rid to de.wanderlogplus.app.maps.LatLngD(pts.map { it.lat }.average(), pts.map { it.lng }.average())
+    }.toMap()
+
+/** Great-circle distance in km. */
+fun distanceKm(a: de.wanderlogplus.app.maps.LatLngD, b: de.wanderlogplus.app.maps.LatLngD): Double {
+    val r = 6371.0
+    val dLat = Math.toRadians(b.lat - a.lat)
+    val dLng = Math.toRadians(b.lng - a.lng)
+    val h = Math.sin(dLat / 2).let { it * it } + Math.cos(Math.toRadians(a.lat)) * Math.cos(Math.toRadians(b.lat)) * Math.sin(dLng / 2).let { it * it }
+    return 2 * r * Math.asin(Math.sqrt(h))
+}
+
+/** The region whose places' centre is closest to the point, if within [maxKm] (spec: 50 km); else null. */
+fun nearestRegion(snapshot: TripSnapshot, lat: Double, lng: Double, maxKm: Double = 50.0): String? {
+    val p = de.wanderlogplus.app.maps.LatLngD(lat, lng)
+    return regionCentres(snapshot).minByOrNull { distanceKm(it.value, p) }?.takeIf { distanceKm(it.value, p) <= maxKm }?.key
 }
 
 /** "1 Ort" / "n Orte". */
@@ -86,7 +117,13 @@ private val NO_REGION_ACCENT = Color(0xFF8D7F76)
 
 /** Orte: regions as a 2-column grid of photo tiles (best-rated place, else region-colored gradient) with counts. */
 @Composable
-fun PlacesScreen(snapshot: TripSnapshot, onOpenRegion: (regionKey: String) -> Unit, modifier: Modifier = Modifier) {
+fun PlacesScreen(
+    snapshot: TripSnapshot,
+    onOpenRegion: (regionKey: String) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Opens the place search (name or map); null hides it. */
+    onSearch: (() -> Unit)? = null,
+) {
     val tiles = remember(snapshot) {
         regionTileOrder(snapshot).map { r ->
             RegionTile(r.id, r.name, savedPlacesIn(snapshot, r.id).size, isDayTrip(snapshot, r), regionColor(r.color), regionHeroImage(snapshot, r.id))
@@ -103,7 +140,17 @@ fun PlacesScreen(snapshot: TripSnapshot, onOpenRegion: (regionKey: String) -> Un
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item(key = "label", span = { GridItemSpan(maxLineSpan) }) { SectionLabel("Regionen") }
+        item(key = "label", span = { GridItemSpan(maxLineSpan) }) {
+            androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { SectionLabel("Regionen") }
+                onSearch?.let { search ->
+                    androidx.compose.material3.FilledTonalButton(onClick = search, modifier = Modifier.padding(top = 8.dp).testTag("places-search")) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text("Ort suchen")
+                    }
+                }
+            }
+        }
         items(tiles, key = { it.key }) { RegionTileCard(it, onOpenRegion) }
     }
 }

@@ -146,3 +146,18 @@ class StayInProgramTest {
         assertEquals(DayItemKind.PLACE, items.first().kind)
     }
 }
+
+class CollectionTest {
+    @Test fun foundPlaceBecomesIdeaInRegion() {
+        val f = EditorFixture()
+        val savedId = f.editor.addPlaceToCollection("Kinkaku-ji", 35.0394, 135.7292, "Kyoto", PlaceCategory.SIGHT, "r1", description = "Goldener Pavillon.", note = "Früh hin.", tags = listOf("📱 Reel"))
+        val s = f.snapshot()
+        val saved = s.savedPlaces.single { it.id == savedId }
+        assertEquals("r1", saved.regionId)
+        assertEquals(PlaceStatus.IDEA, saved.status)
+        assertEquals(listOf("📱 Reel"), saved.tags)
+        assertEquals("Früh hin.", saved.note)
+        assertEquals("Goldener Pavillon.", s.places[saved.placeId]!!.description)
+        assertEquals(1, f.changes)
+    }
+}
