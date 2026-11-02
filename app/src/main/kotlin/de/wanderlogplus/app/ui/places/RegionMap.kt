@@ -34,8 +34,11 @@ sealed interface CameraFit {
 const val SINGLE_MARKER_ZOOM = 14.0
 
 /** Camera for [markers]: nothing, the single-marker zoom on one distinct coordinate, else their bounds. */
-fun cameraFitFor(markers: List<MapMarker>): CameraFit {
-    val coords = markers.map { it.lat to it.lng }.distinct()
+fun cameraFitFor(markers: List<MapMarker>): CameraFit = cameraFitForCoords(markers.map { it.lat to it.lng })
+
+/** Camera for plain (lat, lng) pairs; see [cameraFitFor]. */
+fun cameraFitForCoords(points: List<Pair<Double, Double>>): CameraFit {
+    val coords = points.distinct()
     return when (coords.size) {
         0 -> CameraFit.None
         1 -> CameraFit.Center(coords[0].first, coords[0].second, SINGLE_MARKER_ZOOM)

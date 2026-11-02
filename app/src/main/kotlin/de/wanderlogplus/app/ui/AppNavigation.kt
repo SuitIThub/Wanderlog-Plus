@@ -143,7 +143,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     val nestedRoutes: Set<String>
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
-            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE)
+            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE)
             else -> emptySet()
@@ -297,6 +297,7 @@ fun AppNavigation(
                 onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching) { vm.research(listOf(id)) } else null,
+                onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
             )
         }
 
@@ -519,6 +520,14 @@ fun AppNavigation(
                                 RegionFor(vm, it, key, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
                             }
                         }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE) { entry ->
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val id = entry.arguments?.getString("savedPlaceId").orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { de.wanderlogplus.app.ui.places.PlaceMapScreen(it, id, onBack = { nav.popBackStack() }) }
                     }
                 }
                 composable(PLACE_ROUTE) { entry ->

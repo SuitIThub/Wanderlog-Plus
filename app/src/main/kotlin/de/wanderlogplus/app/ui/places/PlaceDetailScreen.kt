@@ -139,6 +139,8 @@ fun PlaceDetailScreen(
     today: String? = null,
     /** "Recherchieren (KI)" in the Einschätzung/Recherche tabs; null hides the button. */
     research: ResearchAction? = null,
+    /** Opens the full-size map of the place; null hides the embedded map. */
+    onOpenMap: (() -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -224,6 +226,11 @@ fun PlaceDetailScreen(
                     links.forEach { l -> ActionCircle(linkIcon(l.kind), l.label, { onOpenLink(l) }, "link-${l.kind}") }
                 }
             }
+        }
+
+        if (onOpenMap != null) {
+            val points = remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
+            PlaceMapCard(points, accent, onOpenMap, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
         }
 
         PrimaryScrollableTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp), edgePadding = 8.dp) {
