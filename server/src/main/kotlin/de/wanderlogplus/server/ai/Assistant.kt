@@ -105,7 +105,9 @@ class Assistant(
         val wanted = if (ids.isEmpty()) saved.filter { it.worth == null } else saved.filter { it.id in ids }
         val system = """
             Du bewertest Orte einer Japanreise danach, wie lohnenswert ein Besuch ist, für Reisende mit begrenzter Zeit.
-            Berücksichtige Bekanntheit, Bewertungen, Einzigartigkeit und Aufwand.
+            Berücksichtige Bekanntheit, Bewertungen, Einzigartigkeit und den Aufwand vor Ort.
+            Jede genannte Region gehört zur Reiseroute und wird ohnehin besucht: werte nie die Anreise in die Region ab,
+            nur einen Abstecher innerhalb der Region.
             $WORTH_SCALE
             Antworte nur mit JSON: {"results": [{"id": "die gegebene id", "worth": "MUST|WORTH|OPTIONAL|SKIP", "reason": "1 kurzer Satz auf Deutsch"}]}
         """.trimIndent()
