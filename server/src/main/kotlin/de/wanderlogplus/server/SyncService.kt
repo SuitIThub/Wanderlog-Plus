@@ -20,6 +20,17 @@ const val MAX_PUSH_COUNTER = 999_000
 const val IMPORTER_NODE = "importer"
 const val SERVER_NODE = "server"
 
+/** Author of the changes the assistant writes (research results). */
+const val ASSISTANT_AUTHOR = "KI-Recherche"
+
+/** Fields the server writes into one entity on its own (assistant results); [onlyIfEmpty] fields keep a non-blank stored value. */
+data class ServerEdit(
+    val type: EntityType,
+    val id: String,
+    val fields: Map<String, JsonElement>,
+    val onlyIfEmpty: Set<String> = emptySet(),
+)
+
 /** A push batch was refused as a whole; [message] is fixed text and never contains request data. */
 class PushRejected(val code: String, message: String) : RuntimeException(message)
 
@@ -44,6 +55,30 @@ class SyncService(
         if (since < 0 || limit !in 1..1000) throw BadInput()
         if (since > store.maxSeq()) throw CursorAhead()
         return store.pull(since, limit)
+    }
+
+    /**
+     * Writes [edits] as the server (node "server", attributed to [author]) with HLCs newer than the stored fields, so
+     * they win and reach every device on its next pull. Missing or deleted entities are skipped. Returns how many
+     * entities got at least one field.
+     */
+    fun writeAsServer(author: String, edits: List<ServerEdit>): Int = withWriteLock {
+        store.transaction(author) {
+            var written = 0
+            for (e in edits) {
+                val record = store.get(e.type, e.id) ?: continue
+                if (record.isDeleted) continue
+                val changes = e.fields.mapNotNull { (field, value) ->
+                    val stored = record.fields[field]?.value
+                    val storedText = (stored as? JsonPrimitive)?.takeIf { it.isString }?.content
+                    if (field in e.onlyIfEmpty && stored != null && stored !is kotlinx.serialization.json.JsonNull && !storedText.isNullOrBlank()) return@mapNotNull null
+                    catchUp(e.type, e.id, field)
+                    FieldChange(e.type, e.id, field, value, clock.tick().encode())
+                }
+                if (changes.isNotEmpty() && store.applyChanges(changes).isNotEmpty()) written++
+            }
+            written
+        }
     }
 
     fun push(author: String, changes: List<FieldChange>): PushResponse {

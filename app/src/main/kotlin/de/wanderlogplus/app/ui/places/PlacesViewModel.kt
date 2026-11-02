@@ -33,6 +33,8 @@ class PlacesViewModel(
     private val pollMillis: Long = 2_500,
     /** The criteria chosen in "KI-Kriterien" (read at the start of every job). */
     private val config: suspend () -> AssessConfig = { AssessConfig() },
+    /** Starts a sync now (results the server wrote into the trip). */
+    private val syncNow: () -> Unit = {},
 ) : ViewModel() {
     val canAssess: Boolean get() = api != null
 
@@ -58,6 +60,14 @@ class PlacesViewModel(
                 }
                 if (job.status == "FAILED") {
                     de.wanderlogplus.app.ui.reels.errorText(job.error)
+                } else if (job.appliedOnServer) {
+                    // The server wrote the judgements into the trip; a sync brings them here.
+                    syncNow()
+                    when (val n = job.assessments.size) {
+                        0 -> "Alle Orte sind schon eingeschätzt"
+                        1 -> "1 Ort eingeschätzt"
+                        else -> "$n Orte eingeschätzt"
+                    }
                 } else {
                     var applied = 0
                     edit { e, s ->
@@ -120,15 +130,29 @@ class PlacesViewModel(
                 val a = provider() ?: throw IllegalStateException("no server")
                 var job = a.startResearch(todo, config())
                 _researchJob.value = job.id
+                var seen = 0
+                var offlineSince = 0L
                 while (job.status != "DONE" && job.status != "FAILED") {
                     kotlinx.coroutines.delay(pollMillis)
-                    job = a.aiJob(job.id)
+                    job = try {
+                        a.aiJob(job.id).also { offlineSince = 0L }
+                    } catch (e: de.wanderlogplus.client.ApiException) {
+                        // A long research must survive short network gaps (tunnel, app in the background).
+                        if (e.kind != de.wanderlogplus.client.ApiErrorKind.NETWORK) throw e
+                        if (offlineSince == 0L) offlineSince = System.currentTimeMillis()
+                        if (System.currentTimeMillis() - offlineSince > MAX_OFFLINE_MILLIS) throw e
+                        continue
+                    }
                     if (job.status != "DONE" && job.status != "FAILED") _researchStatus.value = researchProgress(job.progress, todo.size)
+                    // The server writes each finished place into the trip: fetch them while the rest still runs.
+                    if (job.appliedOnServer && job.dossiers.size > seen) { seen = job.dossiers.size; syncNow() }
                 }
                 if (job.status == "FAILED") {
+                    if (job.appliedOnServer && job.dossiers.isNotEmpty()) syncNow()
                     de.wanderlogplus.app.ui.reels.errorText(job.error)
                 } else {
-                    when (val n = applyDossiers(job.dossiers)) {
+                    val applied = if (job.appliedOnServer) job.dossiers.size.also { syncNow() } else applyDossiers(job.dossiers)
+                    when (val n = applied) {
                         0 -> "Recherche ohne Ergebnis"
                         1 -> "1 Ort recherchiert"
                         else -> "$n Orte recherchiert"
@@ -221,6 +245,9 @@ class PlacesViewModel(
 
 /** At most this many places per research job (server limit). */
 const val MAX_RESEARCH = 300
+
+/** Polling a research gives up after this long without any connection to the server. */
+const val MAX_OFFLINE_MILLIS = 30 * 60_000L
 
 internal val DOSSIER_JSON = Json { encodeDefaults = false }
 

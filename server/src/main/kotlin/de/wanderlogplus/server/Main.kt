@@ -37,6 +37,7 @@ fun main() {
             },
             ToolReelMedia(cookies = config.instagramCookies),
             config.dataDir.resolve("ai-work"),
+            writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         ),
     )
     services.ai.resumeInterrupted()

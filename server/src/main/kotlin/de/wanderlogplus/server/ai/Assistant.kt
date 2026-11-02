@@ -175,6 +175,8 @@ class Assistant(
         config: AssessConfig,
         now: () -> Long,
         progress: JobProgress = JobProgress.NONE,
+        /** Called on the research thread as soon as one place has its result. */
+        onResult: (DossierResult) -> Unit = {},
         onDone: (Int) -> Unit = {},
     ): List<DossierResult> {
         val data = TripData.from(store)
@@ -200,6 +202,7 @@ class Assistant(
                 say(poiLine(it.dossier.pois.size, pois.size))
                 DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
             }
+            result?.let(onResult)
             if (result == null) {
                 progress.item(s.id, state = "FAILED", detail = "kein Ergebnis")
                 progress.step("$name: kein Ergebnis", JobProgress.WARN)
@@ -212,7 +215,14 @@ class Assistant(
     }
 
     /** Judges the given saved places by the chosen criteria (all without judgement when [ids] is empty), in batches; no web search. */
-    fun assess(store: EntityStore, ids: List<String>, config: AssessConfig = AssessConfig(), progress: JobProgress = JobProgress.NONE): List<Assessment> {
+    fun assess(
+        store: EntityStore,
+        ids: List<String>,
+        config: AssessConfig = AssessConfig(),
+        progress: JobProgress = JobProgress.NONE,
+        /** Called after every batch with its judgements. */
+        onBatch: (List<Assessment>) -> Unit = {},
+    ): List<Assessment> {
         val data = TripData.from(store)
         val wanted = if (ids.isEmpty()) data.saved.filter { it.worth == null } else data.saved.filter { it.id in ids }
         val batches = (wanted.size + ASSESS_BATCH - 1) / ASSESS_BATCH
@@ -243,7 +253,7 @@ class Assistant(
                 val id = r.str("id")?.takeIf { it in known } ?: return@mapNotNull null
                 val worth = parseWorth(r.str("worth")) ?: return@mapNotNull null
                 Assessment(id, worth, r.str("verdict") ?: r.str("reason").orEmpty(), parseCriteria(r["criteria"] as? JsonArray, config))
-            }
+            }.also(onBatch)
         }
     }
 
