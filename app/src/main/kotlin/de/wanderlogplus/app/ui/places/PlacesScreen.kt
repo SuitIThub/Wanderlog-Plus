@@ -127,6 +127,8 @@ fun PlacesScreen(
     onAssess: (() -> Unit)? = null,
     /** Progress/outcome of the judgement, shown below the buttons. */
     assessing: String? = null,
+    /** Opens the reel analyses (results also reachable when the notification is gone); null hides it. */
+    onReels: (() -> Unit)? = null,
 ) {
     val tiles = remember(snapshot) {
         regionTileOrder(snapshot).map { r ->
@@ -147,6 +149,9 @@ fun PlacesScreen(
         item(key = "label", span = { GridItemSpan(maxLineSpan) }) {
             androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { SectionLabel("Regionen") }
+                onReels?.let { reels ->
+                    androidx.compose.material3.TextButton(onClick = reels, modifier = Modifier.padding(top = 8.dp).testTag("places-reels")) { Text("Reels") }
+                }
                 onAssess?.let { assess ->
                     androidx.compose.material3.TextButton(onClick = assess, modifier = Modifier.padding(top = 8.dp).testTag("places-assess")) { Text("Einschätzen (KI)") }
                 }

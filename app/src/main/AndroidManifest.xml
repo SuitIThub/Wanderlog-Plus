@@ -40,7 +40,7 @@
             android:name=".ui.share.ShareActivity"
             android:exported="true"
             android:label="Wanderlog Plus"
-            android:theme="@style/Theme.WanderlogPlus">
+            android:theme="@style/Theme.WanderlogPlus.Share">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

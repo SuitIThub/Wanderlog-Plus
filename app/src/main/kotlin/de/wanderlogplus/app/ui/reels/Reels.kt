@@ -69,6 +69,11 @@ fun reelNote(c: ReelCandidate, source: String?): String = buildString {
         c.hints.forEach { append("- ").append(it).append('\n') }
         append('\n')
     }
+    if (c.sources.isNotEmpty()) {
+        append("**Quellen**\n")
+        c.sources.take(5).forEach { append("- ").append(it).append('\n') }
+        append('\n')
+    }
     source?.takeIf { it.startsWith("http") }?.let { append("Aus dem Reel: ").append(it) }
 }.trim()
 

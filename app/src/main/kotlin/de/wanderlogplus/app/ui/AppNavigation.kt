@@ -434,6 +434,7 @@ fun AppNavigation(
                                     onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
                                     onAssess = if (vm.canAssess) vm::assessAll else null,
                                     assessing = assessing,
+                                    onReels = reelsViewModelFactory?.let { { nav.navigate(REELS_ROUTE) } },
                                 )
                             }
                         }

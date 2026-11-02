@@ -91,7 +91,7 @@ fun ReelsScreen(
                         Text(j.summary ?: (j.source ?: "Reel"), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val state = when {
                             isImported(j.id) -> "übernommen"
-                            j.status == "DONE" -> "${j.candidates.size} Orte gefunden"
+                            j.status == "DONE" -> "${j.candidates.size} Orte gefunden · neu"
                             else -> statusLabel(j.status)
                         }
                         Text(

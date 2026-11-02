@@ -14,6 +14,11 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_TRIP_KEY` | – | Optional; Reise-Schlüssel für `POST /api/import/wanderlog`. |
 | `WLP_IMPORT_FILE` | – | Optional; Pfad zu einer Wanderlog-JSON-Datei statt Abruf (hat Vorrang vor `WLP_TRIP_KEY`). |
 | `WLP_GOOGLE_ROUTES_KEY` | – | Optional; API-Key der Google Routes API für die Wegzeiten zwischen den Zielen eines Tages. Ohne Key zeigt die App „Wegzeiten brauchen einen Routen-Key“. |
+| `WLP_OPENROUTER_KEY` | – | Optional; OpenRouter-Key für die KI: Reels auswerten (Bilder, Ton, Beschreibung) und Orte einschätzen. Ohne Key antworten diese Funktionen mit `ai_not_configured`. |
+| `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter; muss Bilder und Ton verstehen. |
+| `WLP_PARALLEL_KEY` | – | Optional; Parallel-Key für die Web-Recherche zu Orten aus Reels (Search + Task API). Ohne Key recherchiert das OpenRouter-Modell selbst. |
+| `WLP_PARALLEL_PROCESSOR` | `base` | Parallel-Task-Prozessor (`lite`, `base`, `core`, …): gründlicher = langsamer und teurer. |
+| `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei für yt-dlp, falls Instagram Reels nur angemeldet zeigt. Die Datei enthält eine Anmeldung, also wie ein Passwort behandeln. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
 
 Ohne `WLP_TRIP_KEY` und `WLP_IMPORT_FILE` antwortet der Import mit `400 import_not_configured`.
@@ -61,6 +66,7 @@ Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` un
 - `POST /api/sync/push`, `GET /api/sync/pull?since=&limit=`
 - `POST /api/files` (multipart `file`), `GET /api/files/{sha256}`
 - `POST /api/routes` (`{fromLat, fromLng, toLat, toLng, mode}` mit `mode` = WALK/BICYCLE/DRIVE/TRANSIT) → `{durationSeconds, distanceMeters, polyline}`; 404 `no_route`, 503 `routes_not_configured`
+- `POST /api/ai/reels` (`{url}`), `POST /api/ai/reels/upload` (multipart `file`, optional `caption`), `POST /api/ai/assess` (`{savedPlaceIds}`), `GET /api/ai/jobs?kind=reel|assess`, `GET /api/ai/jobs/{id}`
 - `POST /api/import/wanderlog`, `GET /api/import/status`
 - `GET /api/export`
 
@@ -93,3 +99,16 @@ Einrichtung:
 1. In der Google Cloud Console ein Projekt anlegen und die **Routes API** aktivieren. Für das Freikontingent ist ein Zahlungsprofil nötig.
 2. Einen API-Key erstellen und auf die Routes API beschränken.
 3. `WLP_GOOGLE_ROUTES_KEY=<key>` in `.env` eintragen und den Container neu starten.
+
+## Reels auswerten (KI)
+
+Teilt man ein Instagram-Reel an die App, läuft die Auswertung als Job auf dem Server. Die App wartet im Hintergrund und meldet sich mit einer Benachrichtigung.
+
+1. **Laden:** yt-dlp lädt das Video samt Beschreibung (`WLP_INSTAGRAM_COOKIES` nur, wenn nötig). Scheitert das, teilt man stattdessen die gespeicherte Videodatei.
+2. **Erkennen:** ffmpeg zieht bis zu 12 Einzelbilder und den Ton heraus. Das OpenRouter-Modell findet darin und in der Beschreibung die erwähnten Orte.
+3. **Verorten:** Photon (OpenStreetMap) liefert Koordinaten. Liegt ein Ort höchstens 50 km von einer Unterkunft oder einem gespeicherten Ort entfernt, gilt er als „auf der Route“.
+4. **Recherchieren:** Mit `WLP_PARALLEL_KEY` holt die Parallel Search API Quellen, die Task API schreibt daraus Beschreibung, Tipps, Hinweise und die Einschätzung (alles auf Deutsch). Ohne Parallel-Key übernimmt das OpenRouter-Modell mit Websuche.
+
+An die KI-Dienste gehen nur Reel-Inhalte, Ortsnamen und Regionen, nie Buchungsdaten. Kosten grob: unter 1 Cent für das Erkennen (Gemini Flash) und gut 1 Cent pro Ort für die Parallel-Recherche (`base`).
+
+yt-dlp kommt beim Bau des Images in der aktuellen Version mit. Wenn Instagram-Downloads plötzlich scheitern, das Image neu bauen.
