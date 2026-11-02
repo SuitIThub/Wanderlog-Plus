@@ -1,17 +1,32 @@
 package de.wanderlogplus.shared.sync
 
+import de.wanderlogplus.shared.model.Criteria
+import de.wanderlogplus.shared.model.CriterionScore
+import de.wanderlogplus.shared.model.PlaceDossier
 import kotlinx.serialization.Serializable
 
 /** How worthwhile a place is, as judged by the assistant. */
 enum class Worth { MUST, WORTH, OPTIONAL, SKIP }
 
+/** The user's assessment settings: criteria keys (see `Criteria`) and an extra instruction for the model. */
+@Serializable
+data class AssessConfig(val criteria: List<String> = Criteria.DEFAULT, val extraPrompt: String = "")
+
 /** Body of `POST /api/ai/reels`: an Instagram reel (or other video) link. */
 @Serializable
-data class ReelRequest(val url: String)
+data class ReelRequest(val url: String, val config: AssessConfig = AssessConfig())
 
 /** Body of `POST /api/ai/assess`: the saved places to judge (empty = all without a judgement yet). */
 @Serializable
-data class AssessRequest(val savedPlaceIds: List<String> = emptyList())
+data class AssessRequest(val savedPlaceIds: List<String> = emptyList(), val config: AssessConfig = AssessConfig())
+
+/** Body of `POST /api/ai/research`: saved places to research on the web (at least one). */
+@Serializable
+data class ResearchRequest(val savedPlaceIds: List<String>, val config: AssessConfig = AssessConfig())
+
+/** The research result for one saved place. */
+@Serializable
+data class DossierResult(val savedPlaceId: String, val worth: Worth? = null, val description: String = "", val dossier: PlaceDossier = PlaceDossier())
 
 /** A place found in a reel, researched and described; [onRoute] when within reach of the trip. */
 @Serializable
@@ -36,14 +51,16 @@ data class ReelCandidate(
     val evidence: String = "",
     /** Web pages the description and tips rely on. */
     val sources: List<String> = emptyList(),
+    /** Criteria scores, verdict, insider tips, hidden spots, good-to-know (the full research). */
+    val dossier: PlaceDossier? = null,
 )
 
 /** The judgement for one saved place. */
 @Serializable
-data class Assessment(val savedPlaceId: String, val worth: Worth, val reason: String = "")
+data class Assessment(val savedPlaceId: String, val worth: Worth, val reason: String = "", val criteria: List<CriterionScore> = emptyList())
 
 /**
- * A long-running assistant job. [status]: QUEUED, DOWNLOADING, ANALYZING, RESEARCHING, ASSESSING, DONE, FAILED.
+ * A long-running assistant job ([kind] reel, assess or research). [status]: QUEUED, DOWNLOADING, ANALYZING, RESEARCHING, ASSESSING, DONE, FAILED.
  * [error] is a fixed code (e.g. download_failed, ai_not_configured, ai_failed), never model or user text.
  */
 @Serializable
@@ -58,4 +75,8 @@ data class AiJobInfo(
     val summary: String? = null,
     val candidates: List<ReelCandidate> = emptyList(),
     val assessments: List<Assessment> = emptyList(),
+    val dossiers: List<DossierResult> = emptyList(),
+    /** Places done / to do while a research job runs. */
+    val progress: Int = 0,
+    val total: Int = 0,
 )

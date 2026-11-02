@@ -2,6 +2,7 @@ package de.wanderlogplus.server.ai
 
 import de.wanderlogplus.server.SqliteStore
 import de.wanderlogplus.shared.sync.AiJobInfo
+import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.nio.file.Files
@@ -28,7 +29,8 @@ class AiJobs(
     private val media: ReelMedia,
     private val workDir: Path,
     private val now: () -> Instant = Instant::now,
-    private val executor: ExecutorService = Executors.newSingleThreadExecutor { r -> Thread(r, "ai-jobs").apply { isDaemon = true } },
+    // Two at a time: a long research of a whole region must not keep a shared reel waiting.
+    private val executor: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "ai-jobs").apply { isDaemon = true } },
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -39,7 +41,7 @@ class AiJobs(
 
     fun list(kind: String?, limit: Int): List<AiJobInfo> = store.aiJobs(kind, limit).map { json.decodeFromString(AiJobInfo.serializer(), it) }
 
-    fun startReel(input: ReelInput): AiJobInfo {
+    fun startReel(input: ReelInput, config: AssessConfig = AssessConfig()): AiJobInfo {
         val job = save(
             AiJobInfo(
                 id = UUID.randomUUID().toString(),
@@ -49,13 +51,20 @@ class AiJobs(
                 source = (input as? ReelInput.Link)?.url ?: "Video",
             ),
         )
-        executor.execute { runReel(job, input) }
+        executor.execute { runReel(job, input, config) }
         return job
     }
 
-    fun startAssessment(ids: List<String>): AiJobInfo {
+    fun startAssessment(ids: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo {
         val job = save(AiJobInfo(UUID.randomUUID().toString(), "assess", now().toEpochMilli(), "QUEUED"))
-        executor.execute { runAssessment(job, ids) }
+        executor.execute { runAssessment(job, ids, config) }
+        return job
+    }
+
+    /** Web research of saved places (insider tips, hidden spots, criteria, verdict); [ids] must not be empty. */
+    fun startResearch(ids: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo {
+        val job = save(AiJobInfo(UUID.randomUUID().toString(), "research", now().toEpochMilli(), "QUEUED", total = ids.size))
+        executor.execute { runResearch(job, ids, config) }
         return job
     }
 
@@ -84,7 +93,7 @@ class AiJobs(
     private fun fail(job: AiJobInfo, code: String) = save(job.copy(status = "FAILED", error = code))
 
     @OptIn(kotlin.io.path.ExperimentalPathApi::class)
-    private fun runReel(start: AiJobInfo, input: ReelInput) {
+    private fun runReel(start: AiJobInfo, input: ReelInput, config: AssessConfig = AssessConfig()) {
         var job = start
         val a = assistant ?: run { fail(job, "ai_not_configured"); return }
         val dir = Files.createTempDirectory(workDir.also { Files.createDirectories(it) }, "reel-")
@@ -98,9 +107,10 @@ class AiJobs(
             val extracted = media.extract(video, dir)
             val context = TripContext.from(store)
             val (summary, found) = a.findPlaces(caption, extracted, context)
-            job = save(job.copy(status = "RESEARCHING", summary = summary))
-            val candidates = found.map { a.research(it, context) }
-            save(job.copy(status = "DONE", candidates = candidates))
+            job = save(job.copy(status = "RESEARCHING", summary = summary, total = found.size))
+            val researching = job
+            val candidates = a.researchAll(found, context, config) { n -> save(researching.copy(progress = n)) }
+            save(job.copy(status = "DONE", candidates = candidates, progress = found.size))
         } catch (e: DownloadFailed) {
             fail(job, "download_failed")
         } catch (e: AiFailed) {
@@ -115,16 +125,32 @@ class AiJobs(
         }
     }
 
-    private fun runAssessment(start: AiJobInfo, ids: List<String>) {
+    private fun runAssessment(start: AiJobInfo, ids: List<String>, config: AssessConfig) {
         var job = start
         val a = assistant ?: run { fail(job, "ai_not_configured"); return }
         try {
             job = save(job.copy(status = "ASSESSING"))
-            save(job.copy(status = "DONE", assessments = a.assess(store, ids)))
+            save(job.copy(status = "DONE", assessments = a.assess(store, ids, config)))
         } catch (e: AiFailed) {
             fail(job, e.code)
         } catch (e: Exception) {
             log.error("Assessment job failed: {}", e.javaClass.simpleName)
+            fail(job, "internal")
+        }
+    }
+
+    private fun runResearch(start: AiJobInfo, ids: List<String>, config: AssessConfig) {
+        var job = start
+        val a = assistant ?: run { fail(job, "ai_not_configured"); return }
+        try {
+            job = save(job.copy(status = "RESEARCHING"))
+            val running = job
+            val results = a.researchSaved(store, ids, config, { now().toEpochMilli() }) { n -> save(running.copy(progress = n)) }
+            save(job.copy(status = "DONE", dossiers = results, progress = ids.size))
+        } catch (e: AiFailed) {
+            fail(job, e.code)
+        } catch (e: Exception) {
+            log.error("Research job failed: {}", e.javaClass.simpleName)
             fail(job, "internal")
         }
     }

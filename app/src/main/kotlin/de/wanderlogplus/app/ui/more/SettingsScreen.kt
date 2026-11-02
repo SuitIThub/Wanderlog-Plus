@@ -62,6 +62,8 @@ fun SettingsScreen(
     onRemindersEnabled: (Boolean) -> Unit = {},
     /** Null: read from the system (re-checked on resume). */
     notificationsAllowed: Boolean? = null,
+    /** Opens "KI-Kriterien"; null hides the section. */
+    onOpenAiSettings: (() -> Unit)? = null,
     /** "Kartenbilder neu laden": drops the cached route snapshots so they are rendered again. */
     onReloadMaps: () -> Unit = {},
 ) {
@@ -129,6 +131,20 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+            }
+        }
+
+        onOpenAiSettings?.let { open ->
+            SectionLabel("KI-Einschätzung")
+            SurfaceCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Kriterien und eigene Anweisungen für Einschätzung, Recherche und Reels.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(onClick = open, modifier = Modifier.testTag("settings-ai")) { Text("KI-Kriterien") }
                 }
             }
         }

@@ -104,6 +104,7 @@ fun importPicks(editor: LocalEditor, picks: List<ReelPick>, source: String?): Li
             savedExtra = buildMap {
                 c.worth?.let { put("worth", JsonPrimitive(it.name)) }
                 if (c.worthReason.isNotBlank()) put("worthReason", JsonPrimitive(c.worthReason))
+                c.dossier?.let { put("dossier", de.wanderlogplus.app.ui.places.DOSSIER_JSON.encodeToJsonElement(de.wanderlogplus.shared.model.PlaceDossier.serializer(), it)) }
             },
         )
     }

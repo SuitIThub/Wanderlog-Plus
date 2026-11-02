@@ -20,7 +20,8 @@ class ParallelTest {
     ]}"""
 
     private val resultAnswer = """{"run":{"run_id":"r1","status":"completed"},"output":{"type":"json",
-        "content":{"description":"Shinto-Schrein mit tausenden Torii.","tips":["Früh kommen"," "],"hints":["Treppen"],"worth":"MUST","worthReason":"Ikonisch.","category":"SIGHT"},
+        "content":{"description":"Shinto-Schrein mit tausenden Torii.","tips":["Früh kommen"," "],"hints":["Treppen"],"worth":"MUST","verdict":"Ikonisch.","category":"SIGHT",
+          "criteria":[{"key":"crowds","score":2,"note":"voll"}],"insiderTips":["Abends"],"hiddenSpots":[],"goodToKnow":["Bargeld"]},
         "basis":[{"field":"description","citations":[{"title":"Wiki","url":"https://de.wikipedia.org/wiki/Fushimi_Inari-taisha","excerpts":[]}],"confidence":"high"}]}}"""
 
     private class FakeTransport(val answers: MutableList<Pair<Int, String>>) : ParallelTransport {
@@ -33,12 +34,15 @@ class ParallelTest {
 
     @Test fun searchThenTaskWithWaitingResult() {
         val t = FakeTransport(mutableListOf(200 to searchAnswer, 202 to """{"run_id":"r1","status":"queued"}""", 408 to "{}", 200 to resultAnswer))
-        val r = ParallelResearcher(t).research(query)!!
+        val r = ParallelResearcher(t).research(query, de.wanderlogplus.shared.sync.AssessConfig())!!
         assertEquals("Shinto-Schrein mit tausenden Torii.", r.description)
-        assertEquals(listOf("Früh kommen"), r.tips) // blank tip dropped
+        assertEquals(listOf("Früh kommen"), r.dossier.tips) // blank tip dropped
         assertEquals("MUST", r.worth)
+        assertEquals("Ikonisch.", r.dossier.verdict)
+        assertEquals(listOf("Abends"), r.dossier.insiderTips)
+        assertEquals(listOf("crowds" to 2), r.dossier.criteria.map { it.key to it.score })
         // Task citations first, then the search pages.
-        assertEquals(listOf("https://de.wikipedia.org/wiki/Fushimi_Inari-taisha", "https://example.jp/fushimi", "https://example.org/tips"), r.sources)
+        assertEquals(listOf("https://de.wikipedia.org/wiki/Fushimi_Inari-taisha", "https://example.jp/fushimi", "https://example.org/tips"), r.dossier.sources)
         assertEquals(listOf("/v1/search", "/v1/tasks/runs", "/v1/tasks/runs/r1/result?timeout=240", "/v1/tasks/runs/r1/result?timeout=240"), t.calls.map { it.second })
         // The search excerpts are handed to the task.
         assertTrue(t.calls[1].third!!.contains("Go early to avoid crowds."))
@@ -46,23 +50,23 @@ class ParallelTest {
 
     @Test fun failedSearchStillRunsTheTask() {
         val t = FakeTransport(mutableListOf(500 to "", 202 to """{"run_id":"r1"}""", 200 to resultAnswer))
-        val r = ParallelResearcher(t).research(query)!!
-        assertEquals(listOf("https://de.wikipedia.org/wiki/Fushimi_Inari-taisha"), r.sources)
+        val r = ParallelResearcher(t).research(query, de.wanderlogplus.shared.sync.AssessConfig())!!
+        assertEquals(listOf("https://de.wikipedia.org/wiki/Fushimi_Inari-taisha"), r.dossier.sources)
     }
 
     @Test fun missingCreditIsReported() {
         val t = FakeTransport(mutableListOf(200 to searchAnswer, 402 to "{}"))
-        assertEquals("research_no_credit", assertFailsWith<AiFailed> { ParallelResearcher(t).research(query) }.code)
+        assertEquals("research_no_credit", assertFailsWith<AiFailed> { ParallelResearcher(t).research(query, de.wanderlogplus.shared.sync.AssessConfig()) }.code)
     }
 
     @Test fun neverFinishingTaskTimesOut() {
         val t = FakeTransport(mutableListOf(200 to searchAnswer, 202 to """{"run_id":"r1"}""", 408 to "", 408 to "", 408 to ""))
-        assertEquals("research_timeout", assertFailsWith<AiFailed> { ParallelResearcher(t).research(query) }.code)
+        assertEquals("research_timeout", assertFailsWith<AiFailed> { ParallelResearcher(t).research(query, de.wanderlogplus.shared.sync.AssessConfig()) }.code)
     }
 
     @Test fun textOutputAndEmptyOutput() {
-        val text = """{"output":{"type":"text","content":"Ergebnis: {\"description\":\"D\",\"tips\":[],\"hints\":[],\"worth\":\"SKIP\",\"worthReason\":\"R\",\"category\":\"OTHER\"}"}}"""
-        assertEquals("D", ParallelResearcher.parseResult(text)!!.first.description)
+        val text = """{"output":{"type":"text","content":"Ergebnis: {\"description\":\"D\",\"tips\":[],\"hints\":[],\"worth\":\"SKIP\",\"verdict\":\"R\",\"category\":\"OTHER\"}"}}"""
+        assertEquals("D", ParallelResearcher.parseResult(text)!!.first["description"]!!.jsonPrimitive.content)
         assertNull(ParallelResearcher.parseResult("""{"run":{}}"""))
     }
 
@@ -71,11 +75,16 @@ class ParallelTest {
         assertEquals("fast", search["mode"]!!.jsonPrimitive.content)
         assertEquals("jp", search["advanced_settings"]!!.jsonObject["location"]!!.jsonPrimitive.content)
         assertTrue(search["search_queries"]!!.jsonArray.size in 2..3)
-        val task = Json.parseToJsonElement(ParallelResearcher.taskBody(query, emptyList(), "base")).jsonObject
+        val task = Json.parseToJsonElement(ParallelResearcher.taskBody(query, emptyList(), "base", de.wanderlogplus.shared.sync.AssessConfig(listOf("crowds", "booking")))).jsonObject
         assertEquals("base", task["processor"]!!.jsonPrimitive.content)
         val schema = task["task_spec"]!!.jsonObject["output_schema"]!!.jsonObject
         assertEquals("json", schema["type"]!!.jsonPrimitive.content)
         assertTrue(task["input"]!!.jsonPrimitive.content.contains("Deutsch"))
+        assertTrue(task["input"]!!.jsonPrimitive.content.contains("Geheimtipps"))
+        val props = schema["json_schema"]!!.jsonObject["properties"]!!.jsonObject
+        assertTrue(listOf("insiderTips", "hiddenSpots", "goodToKnow", "verdict", "criteria").all { it in props })
+        val keys = props["criteria"]!!.jsonObject["items"]!!.jsonObject["properties"]!!.jsonObject["key"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("crowds", "booking"), keys)
     }
 
     @Test fun assistantUsesTheResearcherAndKeepsSources() {

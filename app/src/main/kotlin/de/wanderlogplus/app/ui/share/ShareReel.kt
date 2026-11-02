@@ -37,17 +37,22 @@ sealed interface ReelShareState {
  * Hands a shared reel to the server: a link directly, a video file uploaded first. Runs on [scope] (process-wide)
  * so rotating or leaving does not lose the start; the content:// stream is copied before the activity finishes.
  */
-class ReelShareViewModel(private val api: suspend () -> SyncApi?, private val scope: CoroutineScope, private val cacheDir: File) : ViewModel() {
+class ReelShareViewModel(
+    private val api: suspend () -> SyncApi?,
+    private val scope: CoroutineScope,
+    private val cacheDir: File,
+    private val config: suspend () -> de.wanderlogplus.shared.sync.AssessConfig = { de.wanderlogplus.shared.sync.AssessConfig() },
+) : ViewModel() {
     private val _state = MutableStateFlow<ReelShareState>(ReelShareState.Idle)
     val state: StateFlow<ReelShareState> = _state
 
-    fun startLink(url: String) = run { a -> a.startReel(url).id }
+    fun startLink(url: String) = run { a -> a.startReel(url, config()).id }
 
     fun startVideo(resolver: ContentResolver, uri: Uri, mime: String, caption: String?) = run { a ->
         val tmp = File.createTempFile("reel-", ".mp4", cacheDir)
         try {
             resolver.openInputStream(uri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } } ?: throw ApiException(ApiErrorKind.BAD_REQUEST)
-            a.uploadReel(tmp, mime, caption).id
+            a.uploadReel(tmp, mime, caption, config()).id
         } finally {
             tmp.delete()
         }

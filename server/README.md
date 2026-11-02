@@ -66,7 +66,7 @@ Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` un
 - `POST /api/sync/push`, `GET /api/sync/pull?since=&limit=`
 - `POST /api/files` (multipart `file`), `GET /api/files/{sha256}`
 - `POST /api/routes` (`{fromLat, fromLng, toLat, toLng, mode}` mit `mode` = WALK/BICYCLE/DRIVE/TRANSIT) → `{durationSeconds, distanceMeters, polyline}`; 404 `no_route`, 503 `routes_not_configured`
-- `POST /api/ai/reels` (`{url}`), `POST /api/ai/reels/upload` (multipart `file`, optional `caption`), `POST /api/ai/assess` (`{savedPlaceIds}`), `GET /api/ai/jobs?kind=reel|assess`, `GET /api/ai/jobs/{id}`
+- `POST /api/ai/reels` (`{url}`), `POST /api/ai/reels/upload` (multipart `file`, optional `caption`), `POST /api/ai/assess` (`{savedPlaceIds, config}`), `POST /api/ai/research` (`{savedPlaceIds, config}`, 1–300 Orte), `GET /api/ai/jobs?kind=reel|assess|research`, `GET /api/ai/jobs/{id}`
 - `POST /api/import/wanderlog`, `GET /api/import/status`
 - `GET /api/export`
 
@@ -108,6 +108,8 @@ Teilt man ein Instagram-Reel an die App, läuft die Auswertung als Job auf dem S
 2. **Erkennen:** ffmpeg zieht bis zu 12 Einzelbilder und den Ton heraus. Das OpenRouter-Modell findet darin und in der Beschreibung die erwähnten Orte.
 3. **Verorten:** Photon (OpenStreetMap) liefert Koordinaten. Liegt ein Ort höchstens 50 km von einer Unterkunft oder einem gespeicherten Ort entfernt, gilt er als „auf der Route“.
 4. **Recherchieren:** Mit `WLP_PARALLEL_KEY` holt die Parallel Search API Quellen, die Task API schreibt daraus Beschreibung, Tipps, Hinweise und die Einschätzung (alles auf Deutsch). Ohne Parallel-Key übernimmt das OpenRouter-Modell mit Websuche.
+
+Alle KI-Anfragen nehmen ein optionales `config` mit (`{criteria: ["crowds", …], extraPrompt}`; beim Upload als Formularfeld `config` mit JSON). Die Kriterien stehen in `shared/…/model/Research.kt`; jedes bekommt 1–5 Punkte, dazu ein Gesamtfazit (`verdict`). Die Recherche (`/api/ai/research`) liefert pro Ort ein Dossier mit Kriterien, Fazit, Geheimtipps, versteckten Ecken, Gut-zu-wissen, Tipps, Hinweisen und Quellen; der Job meldet `progress`/`total`.
 
 An die KI-Dienste gehen nur Reel-Inhalte, Ortsnamen und Regionen, nie Buchungsdaten. Kosten grob: unter 1 Cent für das Erkennen (Gemini Flash) und gut 1 Cent pro Ort für die Parallel-Recherche (`base`).
 

@@ -1,5 +1,8 @@
 package de.wanderlogplus.server.ai
 
+import de.wanderlogplus.shared.model.Criteria
+import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -20,20 +23,12 @@ import java.time.Duration
 /** A web source found by the search: page, title and the relevant excerpts. */
 data class WebSource(val url: String, val title: String?, val excerpts: List<String>)
 
-/** Researched facts about one place, in German. [sources] are the pages the answer relies on. */
-data class PlaceResearch(
-    val description: String,
-    val tips: List<String>,
-    val hints: List<String>,
-    val worth: String?,
-    val worthReason: String,
-    val category: String?,
-    val sources: List<String>,
-)
+/** What research found about one place (German): description, category, worth and the dossier (criteria, verdict, tips, sources). */
+data class ResearchOutcome(val description: String, val category: String?, val worth: String?, val dossier: PlaceDossier)
 
-/** Web research for a place; null when nothing usable came back. Blocking. */
+/** Web research for a place, judged by [config]'s criteria; null when nothing usable came back. Blocking. */
 fun interface PlaceResearcher {
-    fun research(query: ResearchQuery): PlaceResearch?
+    fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome?
 }
 
 /** What is known about a place before research. */
@@ -69,15 +64,14 @@ class HttpParallelTransport(private val apiKey: String, private val base: String
 class ParallelResearcher(private val transport: ParallelTransport, private val processor: String = "base") : PlaceResearcher {
     private val json = Json { ignoreUnknownKeys = true }
 
-    override fun research(query: ResearchQuery): PlaceResearch? {
+    override fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome? {
         val sources = try {
             search(query)
         } catch (e: AiFailed) {
             emptyList() // the task can still research on its own
         }
-        val output = runTask(query, sources) ?: return null
-        val taskSources = output.second
-        return output.first.copy(sources = (taskSources + sources.map { it.url }).distinct().take(MAX_SOURCES))
+        val (content, citations) = runTask(query, sources, config) ?: return null
+        return parseResearch(content, config, citations + sources.map { it.url })
     }
 
     /** Search API: a few pages with excerpts about the place (reviews, tips, opening hours). */
@@ -91,8 +85,8 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
     }
 
     /** Task API: create a run, then wait for its result (the result call blocks; a timeout just asks again). */
-    private fun runTask(q: ResearchQuery, sources: List<WebSource>): Pair<PlaceResearch, List<String>>? {
-        val (status, created) = transport.send("POST", "/v1/tasks/runs", taskBody(q, sources, processor), Duration.ofSeconds(30))
+    private fun runTask(q: ResearchQuery, sources: List<WebSource>, config: AssessConfig): Pair<JsonObject, List<String>>? {
+        val (status, created) = transport.send("POST", "/v1/tasks/runs", taskBody(q, sources, processor, config), Duration.ofSeconds(30))
         if (status == 401 || status == 403) throw AiFailed("research_key_rejected")
         if (status == 402) throw AiFailed("research_no_credit")
         if (status !in 200..299) throw AiFailed("research_failed")
@@ -130,16 +124,19 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
             }
         }.toString()
 
-        fun taskBody(q: ResearchQuery, sources: List<WebSource>, processor: String): String = buildJsonObject {
+        fun taskBody(q: ResearchQuery, sources: List<WebSource>, processor: String, config: AssessConfig = AssessConfig()): String = buildJsonObject {
+            val keys = config.criteria.mapNotNull { Criteria.byKey(it)?.key }.ifEmpty { Criteria.DEFAULT }
             put(
                 "input",
                 buildString {
                     append("Recherchiere für eine Reise-App den Ort ").append(placeLabel(q)).append(". ")
-                    if (q.evidence.isNotBlank()) append("Bekannt aus einem Reise-Reel: ").append(q.evidence).append(". ")
-                    append("Schreibe alle Texte auf Deutsch, sachlich wie ein Reiseführer. ")
-                    append("worth: MUST = muss man gesehen haben, WORTH = lohnt sich, OPTIONAL = wenn Zeit ist, SKIP = eher auslassen.")
+                    if (q.evidence.isNotBlank()) append("Bekannt: ").append(q.evidence).append(". ")
+                    append("Schreibe alle Texte auf Deutsch, sachlich wie ein guter Reiseführer. ")
+                    append("Suche neben Bewertungen und praktischen Hinweisen gezielt Geheimtipps von Einheimischen und Kennern, ")
+                    append("versteckte Ecken oder kleine Orte in der Nähe und Dinge, die man vorher wissen sollte.\n")
+                    append(criteriaPrompt(config))
                     if (sources.isNotEmpty()) {
-                        append("\n\nBereits gefundene Quellen:\n")
+                        append("\nBereits gefundene Quellen:\n")
                         sources.take(MAX_SOURCES).forEach { s ->
                             append("- ").append(s.title ?: s.url).append(" (").append(s.url).append("): ")
                             append(s.excerpts.joinToString(" ").take(800)).append('\n')
@@ -154,14 +151,36 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                     putJsonObject("json_schema") {
                         put("type", "object")
                         putJsonObject("properties") {
+                            fun list(name: String, description: String) = putJsonObject(name) {
+                                put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", description)
+                            }
                             putJsonObject("description") { put("type", "string"); put("description", "2-4 Sätze auf Deutsch: was der Ort ist und was ihn ausmacht") }
-                            putJsonObject("tips") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "höchstens 4 kurze Tipps auf Deutsch") }
-                            putJsonObject("hints") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "höchstens 4 Hinweise oder Warnungen auf Deutsch (Öffnungszeiten, Reservierung, Andrang, Preise)") }
-                            putJsonObject("worth") { put("type", "string"); putJsonArray("enum") { listOf("MUST", "WORTH", "OPTIONAL", "SKIP").forEach { add(JsonPrimitive(it)) } } }
-                            putJsonObject("worthReason") { put("type", "string"); put("description", "1 Satz Begründung auf Deutsch") }
                             putJsonObject("category") { put("type", "string"); putJsonArray("enum") { listOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER").forEach { add(JsonPrimitive(it)) } } }
+                            putJsonObject("criteria") {
+                                put("type", "array")
+                                put("description", "je ein Eintrag pro Kriterium, 1-5 Punkte, 5 = am besten für die Reisenden")
+                                putJsonObject("items") {
+                                    put("type", "object")
+                                    putJsonObject("properties") {
+                                        putJsonObject("key") { put("type", "string"); putJsonArray("enum") { keys.forEach { add(JsonPrimitive(it)) } } }
+                                        putJsonObject("score") { put("type", "integer") }
+                                        putJsonObject("note") { put("type", "string"); put("description", "kurze Begründung auf Deutsch") }
+                                    }
+                                    putJsonArray("required") { listOf("key", "score", "note").forEach { add(JsonPrimitive(it)) } }
+                                    put("additionalProperties", false)
+                                }
+                            }
+                            putJsonObject("worth") { put("type", "string"); putJsonArray("enum") { listOf("MUST", "WORTH", "OPTIONAL", "SKIP").forEach { add(JsonPrimitive(it)) } } }
+                            putJsonObject("verdict") { put("type", "string"); put("description", "Gesamtfazit aus den Kriterien, 1-2 Sätze auf Deutsch") }
+                            list("insiderTips", "Geheimtipps von Einheimischen/Kennern, höchstens 4, Deutsch")
+                            list("hiddenSpots", "versteckte Ecken oder kleine Orte in der Nähe, höchstens 4, Deutsch")
+                            list("goodToKnow", "Gut zu wissen (Etikette, Zahlung, Regeln, Besonderheiten), höchstens 4, Deutsch")
+                            list("tips", "praktische Tipps, höchstens 4, Deutsch")
+                            list("hints", "Warnungen/Hinweise (Öffnungszeiten, Reservierung, Andrang, Preise), höchstens 4, Deutsch")
                         }
-                        putJsonArray("required") { listOf("description", "tips", "hints", "worth", "worthReason", "category").forEach { add(JsonPrimitive(it)) } }
+                        putJsonArray("required") {
+                            listOf("description", "category", "criteria", "worth", "verdict", "insiderTips", "hiddenSpots", "goodToKnow", "tips", "hints").forEach { add(JsonPrimitive(it)) }
+                        }
                         put("additionalProperties", false)
                     }
                 }
@@ -182,8 +201,8 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
             }
         }
 
-        /** The task's JSON output and the citation URLs from its basis. */
-        fun parseResult(body: String): Pair<PlaceResearch, List<String>>? {
+        /** The task's JSON output object and the citation URLs from its basis; null without output. */
+        fun parseResult(body: String): Pair<JsonObject, List<String>>? {
             val root = try { JSON.parseToJsonElement(body).jsonObject } catch (e: Exception) { throw AiFailed("research_failed") }
             val output = root["output"] as? JsonObject ?: return null
             val content = when (val c = output["content"]) {
@@ -191,19 +210,10 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                 is JsonPrimitive -> try { OpenRouterModel.jsonObjectIn(c.content) } catch (e: AiFailed) { return null }
                 else -> return null
             }
-            fun strings(key: String) = (content[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
             val citations = (output["basis"] as? JsonArray).orEmpty().flatMap { b ->
                 ((b as? JsonObject)?.get("citations") as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.str("url") }
             }
-            return PlaceResearch(
-                description = content.str("description").orEmpty(),
-                tips = strings("tips").take(4),
-                hints = strings("hints").take(4),
-                worth = content.str("worth"),
-                worthReason = content.str("worthReason").orEmpty(),
-                category = content.str("category"),
-                sources = emptyList(),
-            ) to citations.distinct()
+            return content to citations.distinct()
         }
     }
 }

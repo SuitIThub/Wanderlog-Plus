@@ -72,10 +72,14 @@ class AssistantTest {
                       {"name":"Ichiran Shibuya","city":"Tokyo","country":"Japan","kind":"food","evidence":"Gesprochen"},
                       {"name":"Ichiran Shibuya","city":"Tokyo","kind":"food"}
                     ]}```"""
-                system.contains("Reiseführers") -> if (failResearch) throw AiFailed() else
-                    """{"description":"Shinto-Schrein mit tausenden Torii.","tips":["Früh morgens gehen","Bis zum Gipfel wandern"],"hints":["Sehr voll ab 10 Uhr"],"worth":"must","worthReason":"Ikonisch.","category":"SIGHT"}"""
+                system.contains("Du recherchierst") -> if (failResearch) throw AiFailed() else
+                    """{"description":"Shinto-Schrein mit tausenden Torii.","category":"SIGHT",
+                       "criteria":[{"key":"crowds","score":2,"note":"Sehr voll"},{"key":"unknown","score":5},{"key":"highlight","score":9,"note":"Ikone"}],
+                       "worth":"must","verdict":"Ikonisch, früh hingehen.",
+                       "insiderTips":["Hinter dem Gipfel ist es leer"],"hiddenSpots":["Kleiner Schrein am Weg"],"goodToKnow":["Eintritt frei"],
+                       "tips":["Früh morgens gehen","Bis zum Gipfel wandern"],"hints":["Sehr voll ab 10 Uhr"]}"""
                 system.contains("lohnenswert") ->
-                    """{"results":[{"id":"s-tempel","worth":"WORTH","reason":"Schön, aber voll."},{"id":"unknown","worth":"MUST"}]}"""
+                    """{"results":[{"id":"s-tempel","worth":"WORTH","verdict":"Schön, aber voll.","criteria":[{"key":"crowds","score":2,"note":"voll"}]},{"id":"unknown","worth":"MUST"}]}"""
                 else -> "{}"
             }
         }
@@ -118,6 +122,13 @@ class AssistantTest {
         assertEquals("Kiyomizu-dera", fushimi.nearestAnchor)
         assertEquals(Worth.MUST, fushimi.worth) // "must" accepted case-insensitively
         assertEquals(listOf("Früh morgens gehen", "Bis zum Gipfel wandern"), fushimi.tips)
+        assertEquals("Ikonisch, früh hingehen.", fushimi.worthReason)
+        val d = fushimi.dossier!!
+        assertEquals(listOf("Hinter dem Gipfel ist es leer"), d.insiderTips)
+        assertEquals(listOf("Kleiner Schrein am Weg"), d.hiddenSpots)
+        // Only chosen criteria, labels filled in, scores clamped to 1–5.
+        assertEquals(listOf("crowds" to 2, "highlight" to 5), d.criteria.map { it.key to it.score })
+        assertEquals("Andrang", d.criteria.first().label)
         val ichiran = job.candidates.first { it.name.startsWith("Ichiran") }
         assertFalse(ichiran.onRoute) // Tokyo is ~370 km from the Kyoto anchors
         assertTrue(ichiran.distanceKm!! > 300)
@@ -172,6 +183,8 @@ class AssistantTest {
         assertEquals("DONE", job.status)
         assertEquals(listOf("s-tempel"), job.assessments.map { it.savedPlaceId })
         assertEquals(Worth.WORTH, job.assessments.single().worth)
+        assertEquals("Schön, aber voll.", job.assessments.single().reason)
+        assertEquals(listOf("crowds"), job.assessments.single().criteria.map { it.key })
     }
 
     @Test fun answersInFencesAndListsParse() {
@@ -242,5 +255,34 @@ class AssistantTest {
         assertEquals("interrupted", j.get("video")!!.error)
         assertEquals("interrupted", j.get("assess")!!.error)
         assertEquals("DONE", j.get("done")!!.status)
+    }
+
+    @Test fun researchOfSavedPlacesUsesChosenCriteriaAndExtraPrompt() {
+        seedTrip()
+        val model = FakeModel()
+        val j = jobs(model)
+        val config = de.wanderlogplus.shared.sync.AssessConfig(listOf("crowds", "booking"), "Wir mögen keine Menschenmassen.")
+        val id = j.startResearch(listOf("s-tempel"), config).id
+        j.drain()
+        val job = j.get(id)!!
+        assertEquals("DONE", job.status)
+        assertEquals(1, job.progress)
+        val r = job.dossiers.single()
+        assertEquals("s-tempel", r.savedPlaceId)
+        assertEquals(Worth.MUST, r.worth)
+        assertEquals(listOf("crowds"), r.dossier.criteria.map { it.key }) // "highlight" not chosen
+        assertTrue(r.dossier.researchedAt > 0)
+        val system = model.calls.last().first
+        assertTrue(system.contains("booking (Buchbarkeit)"))
+        assertTrue(system.contains("Wir mögen keine Menschenmassen."))
+        assertFalse(system.contains("highlight ("))
+    }
+
+    @Test fun researchEndpointRejectsEmptyList() = testApplication {
+        val base = testServices(tmp)
+        val j = AiJobs(base.store, Assistant(FakeModel(), FakeGeocoder()), FakeMedia(), tmp.resolve("work3"), executor = Executors.newSingleThreadExecutor())
+        application { module(Services(base.config, base.store, base.sync, base.files, base.imports, base.routes, j)) }
+        val r = client.post("/api/ai/research") { authed(); contentType(ContentType.Application.Json); setBody("""{"savedPlaceIds":[]}""") }
+        assertEquals(HttpStatusCode.BadRequest, r.status)
     }
 }

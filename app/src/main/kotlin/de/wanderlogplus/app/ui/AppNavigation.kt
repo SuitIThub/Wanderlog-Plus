@@ -145,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE)
             else -> emptySet()
         }
 }
@@ -184,6 +184,9 @@ fun AppNavigation(
     onTripZone: (TripZone) -> Unit = {},
     remindersEnabled: Boolean = true,
     onRemindersEnabled: (Boolean) -> Unit = {},
+    /** Criteria and extra prompt for the assistant (Mehr → KI-Kriterien). */
+    assessConfig: de.wanderlogplus.shared.sync.AssessConfig = de.wanderlogplus.shared.sync.AssessConfig(),
+    onAssessConfig: (de.wanderlogplus.shared.sync.AssessConfig) -> Unit = {},
     /** Trip-zone "now" for the Heute tab; injectable for tests. */
     clock: () -> LocalDateTime = { LocalDateTime.now() },
     /** Attachments (add, open, delete, viewer); without both, no attachment UI is shown. */
@@ -287,7 +290,27 @@ fun AppNavigation(
         @Composable
         fun PlaceDetailFor(vm: PlacesViewModel, snap: TripSnapshot, id: String, onBack: (() -> Unit)?) {
             val failures by vm.failures.collectAsState()
-            PlaceDetailScreen(snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions, onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory, today = rememberMinuteNow(clock).toLocalDate().toString())
+            val researching by vm.researching.collectAsState()
+            ResearchSnack(vm, snackbar)
+            PlaceDetailScreen(
+                snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions,
+                onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
+                today = rememberMinuteNow(clock).toLocalDate().toString(),
+                research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching) { vm.research(listOf(id)) } else null,
+            )
+        }
+
+        @Composable
+        fun RegionFor(vm: PlacesViewModel, snap: TripSnapshot, key: String, onOpenPlace: (String) -> Unit) {
+            val researching by vm.researching.collectAsState()
+            val status by vm.researchStatus.collectAsState()
+            ResearchSnack(vm, snackbar)
+            RegionPlacesScreen(
+                snap, key, onBack = { nav.popBackStack() }, onOpenPlace = onOpenPlace,
+                onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } },
+                onResearch = if (vm.canAssess) vm::research else null,
+                researchStatus = status.takeIf { researching.isNotEmpty() },
+            )
         }
 
         @Composable
@@ -485,7 +508,7 @@ fun AppNavigation(
                             if (wide) {
                                 var selectedPlace by rememberSaveable(key) { mutableStateOf<String?>(null) }
                                 TwoPane(
-                                    list = { RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> selectedPlace = id }, onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } }) },
+                                    list = { RegionFor(vm, it, key, onOpenPlace = { id -> selectedPlace = id }) },
                                     detail = {
                                         val id = selectedPlace
                                         if (id == null) EmptyHint("Ort in der Liste antippen", Modifier.padding(24.dp))
@@ -493,7 +516,7 @@ fun AppNavigation(
                                     },
                                 )
                             } else {
-                                RegionPlacesScreen(it, key, onBack = { nav.popBackStack() }, onOpenPlace = { id -> nav.navigate(placeRoute(id)) }, onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } })
+                                RegionFor(vm, it, key, onOpenPlace = { id -> nav.navigate(placeRoute(id)) })
                             }
                         }
                     }
@@ -633,6 +656,11 @@ fun AppNavigation(
                         snap?.let { s -> ConflictsScreen(s, onKeepApp = vm::keepApp, onTakeWanderlog = vm::takeWanderlog) }
                     }
                 }
+                composable(de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE) {
+                    SyncedScreen(syncStatus, onRefresh) {
+                        de.wanderlogplus.app.ui.more.AiSettingsScreen(assessConfig, onAssessConfig)
+                    }
+                }
                 composable(SETTINGS_ROUTE) {
                     // SettingsScreen scrolls itself; a scrollable wrapper would nest two vertical scrolls (crash).
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
@@ -646,6 +674,7 @@ fun AppNavigation(
                             onTripZone = onTripZone,
                             remindersEnabled = remindersEnabled,
                             onRemindersEnabled = onRemindersEnabled,
+                            onOpenAiSettings = { nav.navigate(de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE) },
                             onReloadMaps = {
                                 uiScope.launch {
                                     onReloadMapImages()
@@ -685,6 +714,20 @@ fun AppNavigation(
                 }
             }
         }
+        }
+    }
+}
+
+/** Shows the outcome of a finished place research once ("3 Orte recherchiert"). */
+@Composable
+private fun ResearchSnack(vm: PlacesViewModel, snackbar: SnackbarHostState) {
+    val status by vm.researchStatus.collectAsState()
+    val running by vm.researching.collectAsState()
+    LaunchedEffect(status, running.isEmpty()) {
+        val s = status
+        if (s != null && running.isEmpty()) {
+            vm.consumeResearchStatus()
+            snackbar.showSnackbar(s)
         }
     }
 }

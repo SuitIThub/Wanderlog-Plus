@@ -33,6 +33,7 @@ class ReelsViewModel(
     private val imported: ImportedJobs,
     private val writeScope: CoroutineScope,
     private val pollMillis: Long = 2_500,
+    private val config: suspend () -> de.wanderlogplus.shared.sync.AssessConfig = { de.wanderlogplus.shared.sync.AssessConfig() },
 ) : ViewModel() {
     private val _snapshot = MutableStateFlow<TripSnapshot?>(null)
     val snapshot: StateFlow<TripSnapshot?> = _snapshot
@@ -69,7 +70,7 @@ class ReelsViewModel(
     /** Starts a reel from a link; [onStarted] gets the job id. */
     fun start(url: String, onStarted: (String) -> Unit) {
         viewModelScope.launch {
-            call { a -> a.startReel(url).let { _jobs.value = listOf(it) + _jobs.value; onStarted(it.id) } }
+            call { a -> a.startReel(url, config()).let { _jobs.value = listOf(it) + _jobs.value; onStarted(it.id) } }
         }
     }
 

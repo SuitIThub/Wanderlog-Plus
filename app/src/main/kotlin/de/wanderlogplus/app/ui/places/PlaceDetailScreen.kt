@@ -23,7 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,8 +75,10 @@ private const val TAG_WARN = "⚠️"
 private const val NO_REGION_LABEL = "Keine Region"
 
 private const val TAB_INFO = 0
-private const val TAB_NOTE = 1
-private const val TAB_FILES = 2
+private const val TAB_ASSESS = 1
+private const val TAB_RESEARCH = 2
+private const val TAB_NOTE = 3
+private const val TAB_FILES = 4
 
 /**
  * Switches the marker [emoji] in [tags]: removes every tag starting with it (e.g. "⭐ Muss man sehen"), or appends the
@@ -112,7 +114,7 @@ internal fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
 
 /**
  * Place detail: photo hero (✎ opens "Ort bearbeiten" for tags, region and category), rating/category/tags, status
- * chips, link action circles, then the tabs Info, Notiz and Anhänge. The whole page scrolls.
+ * chips, link action circles, then the tabs Info, Einschätzung, Recherche, Notiz and Anhänge. The whole page scrolls.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -135,6 +137,8 @@ fun PlaceDetailScreen(
     onSetCategory: (savedPlaceId: String, category: PlaceCategory) -> Unit = { _, _ -> },
     /** ISO date whose weekday is highlighted in the opening hours; null highlights none. */
     today: String? = null,
+    /** "Recherchieren (KI)" in the Einschätzung/Recherche tabs; null hides the button. */
+    research: ResearchAction? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -222,14 +226,18 @@ fun PlaceDetailScreen(
             }
         }
 
-        PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp)) {
+        PrimaryScrollableTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp), edgePadding = 8.dp) {
             ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
+            ScreenTab("Einschätzung", tab == TAB_ASSESS, "tab-assessment") { tab = TAB_ASSESS }
+            ScreenTab("Recherche", tab == TAB_RESEARCH, "tab-research") { tab = TAB_RESEARCH }
             ScreenTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
             ScreenTab(if (fileCount > 0) "Anhänge ($fileCount)" else "Anhänge", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
         }
 
         when (tab) {
             TAB_INFO -> PlaceInfoTab(place, accent, today, saved)
+            TAB_ASSESS -> PlaceAssessmentTab(saved, accent, research)
+            TAB_RESEARCH -> PlaceResearchTab(saved, accent, research)
             TAB_NOTE -> PlaceNoteTab(
                 note = pendingNote ?: saved.note,
                 accent = accent,
