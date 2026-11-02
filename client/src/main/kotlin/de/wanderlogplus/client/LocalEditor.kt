@@ -86,6 +86,35 @@ class LocalEditor(
     }
 
     /**
+     * Puts a stay's hotel into the day's program at [position] (e.g. as the day's start or the evening's destination).
+     * The same stay may appear several times a day; nothing else changes.
+     */
+    fun addStayToDay(snapshot: TripSnapshot, date: String, stayId: String, position: ItemPosition = ItemPosition.End): String {
+        val trip = requireNotNull(snapshot.trip) { "No trip" }
+        val stay = requireNotNull(snapshot.stays.firstOrNull { it.id == stayId }) { "Unknown stay" }
+        require(stay.placeId.isNotBlank()) { "Stay has no place" }
+        val existing = snapshot.queries()?.dayFor(date)
+        val siblings = existing?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+        val dayId = existing?.id ?: Ids.dayId(trip.id, date)
+        val itemId = Ids.newId()
+        tx.run {
+            if (existing == null) writeNew(EntityType.DAY, dayId, mapOf("date" to JsonPrimitive(date)))
+            writeNew(
+                EntityType.DAY_ITEM,
+                itemId,
+                mapOf(
+                    "dayId" to JsonPrimitive(dayId),
+                    "kind" to JsonPrimitive(DayItemKind.PLACE.name),
+                    "placeId" to JsonPrimitive(stay.placeId),
+                    "sortKey" to JsonPrimitive(insertKey(siblings, position)),
+                ),
+            )
+        }
+        onChange()
+        return itemId
+    }
+
+    /**
      * Adds a place found by search (not from Wanderlog) to the day at [position]: a new Place, a SavedPlace in the day's
      * region with status "geplant" (so it also shows under Orte) and the program item, in one transaction.
      */

@@ -129,3 +129,20 @@ class GeoSearchAreaTest {
         assertEquals(false, b.contains(35.7, 137.6))
     }
 }
+
+class StayInProgramTest {
+    @Test fun stayCanBeStartAndEndOfTheDay() {
+        val f = EditorFixture().also {
+            it.seedEntity(EntityType.TRIP, "t1", Trip("t1", "Reise", "2027-05-08", "2027-05-29"))
+            it.seedEntity(EntityType.STAY, "st", Stay("st", "p-hotel", "r1", "2027-05-09", "2027-05-12"))
+        }
+        f.editor.addNoteToDay(f.snapshot(), "2027-05-10", "Wandern")
+        val first = f.editor.addStayToDay(f.snapshot(), "2027-05-10", "st", ItemPosition.Start)
+        val last = f.editor.addStayToDay(f.snapshot(), "2027-05-10", "st")
+        val s = f.snapshot()
+        val items = s.dayItemsFor(s.days.single().id)
+        assertEquals(listOf(first, items[1].id, last), items.map { it.id })
+        assertEquals(listOf("p-hotel", null, "p-hotel"), items.map { it.placeId })
+        assertEquals(DayItemKind.PLACE, items.first().kind)
+    }
+}

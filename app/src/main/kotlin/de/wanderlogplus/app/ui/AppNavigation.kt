@@ -292,6 +292,7 @@ fun AppNavigation(
                                 onAddNoteAt = vm::addNoteAt,
                                 onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
                                 onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
+                                onAddStayAt = vm::addStayAt,
                             )
                         }
                     }

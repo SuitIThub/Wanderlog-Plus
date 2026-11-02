@@ -106,16 +106,17 @@ fun DayTimeline(
                         if (legs != null && prevPlace != null) legs(prevPlace, item)
                         val place = item.placeId?.let { snapshot.places[it] }
                         val saved = snapshot.savedPlaces.firstOrNull { it.placeId == item.placeId }
+                        val isStay = item.placeId != null && snapshot.stays.any { it.placeId == item.placeId }
                         val open = dow != null && time != null && place != null && isOpenAt(place.openingPeriods, dow, time) == true
                         PhotoCard(
                             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
                             subtitle = listOfNotNull(
                                 item.time?.takeIf { it.isNotBlank() },
-                                saved?.category?.let { categoryLabel(it) },
+                                if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
                                 place?.rating?.let { ratingLabel(it) },
                             ).joinToString(" · "),
                             imageUrl = place?.heroImageUrl(),
-                            placeholderSymbol = categorySymbol(saved?.category),
+                            placeholderSymbol = if (isStay) "🏨" else categorySymbol(saved?.category),
                             accent = accent,
                             style = PhotoCardStyle.Large,
                             badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
