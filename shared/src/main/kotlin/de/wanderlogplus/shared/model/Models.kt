@@ -71,6 +71,8 @@ data class SavedPlace(
     /** The assistant's judgement of how worthwhile a visit is; null = not judged yet. */
     val worth: Worth? = null,
     val worthReason: String = "",
+    /** Multi-criteria judgement and research results; null = never researched or judged by criteria. */
+    val dossier: PlaceDossier? = null,
 )
 
 @Serializable

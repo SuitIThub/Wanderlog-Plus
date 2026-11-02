@@ -1,5 +1,6 @@
 package de.wanderlogplus.app.ui.share
 
+import kotlinx.coroutines.flow.first
 import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
@@ -98,7 +99,7 @@ class ShareActivity : ComponentActivity() {
         val c = container
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T = ReelShareViewModel({ c.syncApi() }, c.scope, cacheDir) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = ReelShareViewModel({ c.syncApi() }, c.scope, cacheDir, { c.settings.assessConfig.first() }) as T
         }
     }
 

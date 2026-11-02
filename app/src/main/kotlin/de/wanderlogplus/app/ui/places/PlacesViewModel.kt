@@ -13,7 +13,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.sync.AssessConfig
+import de.wanderlogplus.shared.sync.DossierResult
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -26,6 +31,8 @@ class PlacesViewModel(
     /** API of the current server, for the assistant's judgements; null hides "Einschätzen". */
     private val api: (suspend () -> de.wanderlogplus.client.SyncApi?)? = null,
     private val pollMillis: Long = 2_500,
+    /** The criteria chosen in "KI-Kriterien" (read at the start of every job). */
+    private val config: suspend () -> AssessConfig = { AssessConfig() },
 ) : ViewModel() {
     val canAssess: Boolean get() = api != null
 
@@ -44,7 +51,7 @@ class PlacesViewModel(
         writeScope.launch {
             _assessing.value = try {
                 val a = provider() ?: throw IllegalStateException("no server")
-                var job = a.startAssessment()
+                var job = a.startAssessment(config = config())
                 while (job.status != "DONE" && job.status != "FAILED") {
                     kotlinx.coroutines.delay(pollMillis)
                     job = a.aiJob(job.id)
@@ -54,10 +61,17 @@ class PlacesViewModel(
                 } else {
                     var applied = 0
                     edit { e, s ->
-                        val known = s.savedPlaces.map { it.id }.toSet()
+                        val known = s.savedPlaces.associateBy { it.id }
                         // Places deleted meanwhile are skipped.
-                        job.assessments.filter { it.savedPlaceId in known }.forEach { r ->
-                            e.set(EntityType.SAVED_PLACE, r.savedPlaceId, mapOf("worth" to JsonPrimitive(r.worth.name), "worthReason" to JsonPrimitive(r.reason)))
+                        job.assessments.forEach { r ->
+                            val saved = known[r.savedPlaceId] ?: return@forEach
+                            val fields = mutableMapOf<String, JsonElement>("worth" to JsonPrimitive(r.worth.name), "worthReason" to JsonPrimitive(r.reason))
+                            if (r.criteria.isNotEmpty()) {
+                                // Keeps earlier research (tips, hidden spots); only the judgement is replaced.
+                                val d = (saved.dossier ?: PlaceDossier()).copy(criteria = r.criteria, verdict = r.reason)
+                                fields["dossier"] = DOSSIER_JSON.encodeToJsonElement(PlaceDossier.serializer(), d)
+                            }
+                            e.set(EntityType.SAVED_PLACE, r.savedPlaceId, fields)
                             applied++
                         }
                     }
@@ -75,6 +89,78 @@ class PlacesViewModel(
                 "Einschätzen fehlgeschlagen"
             }
         }
+    }
+
+    /** Saved places whose research job is running. */
+    private val _researching = MutableStateFlow<Set<String>>(emptySet())
+    val researching: StateFlow<Set<String>> = _researching
+
+    /** Progress or outcome of "Recherchieren (KI)" (fixed German text); null when idle. */
+    private val _researchStatus = MutableStateFlow<String?>(null)
+    val researchStatus: StateFlow<String?> = _researchStatus
+
+    fun consumeResearchStatus() { if (_researching.value.isEmpty()) _researchStatus.value = null }
+
+    /**
+     * Web research of [savedPlaceIds] (criteria, verdict, insider tips, hidden spots, good to know). Waits for the
+     * server job on the process-wide scope and writes the dossiers; places already being researched are skipped.
+     */
+    fun research(savedPlaceIds: List<String>) {
+        val provider = api ?: return
+        val todo = savedPlaceIds.distinct().filterNot { it in _researching.value }.take(MAX_RESEARCH)
+        if (todo.isEmpty()) return
+        _researching.value = _researching.value + todo
+        _researchStatus.value = researchProgress(0, todo.size)
+        writeScope.launch {
+            val outcome = try {
+                val a = provider() ?: throw IllegalStateException("no server")
+                var job = a.startResearch(todo, config())
+                while (job.status != "DONE" && job.status != "FAILED") {
+                    kotlinx.coroutines.delay(pollMillis)
+                    job = a.aiJob(job.id)
+                    if (job.status != "DONE" && job.status != "FAILED") _researchStatus.value = researchProgress(job.progress, todo.size)
+                }
+                if (job.status == "FAILED") {
+                    de.wanderlogplus.app.ui.reels.errorText(job.error)
+                } else {
+                    when (val n = applyDossiers(job.dossiers)) {
+                        0 -> "Recherche ohne Ergebnis"
+                        1 -> "1 Ort recherchiert"
+                        else -> "$n Orte recherchiert"
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: de.wanderlogplus.client.ApiException) {
+                if (e.kind == de.wanderlogplus.client.ApiErrorKind.NOT_CONFIGURED) de.wanderlogplus.app.ui.reels.errorText("ai_not_configured") else "Recherche fehlgeschlagen"
+            } catch (e: Exception) {
+                "Recherche fehlgeschlagen"
+            } finally {
+                _researching.value = _researching.value - todo.toSet()
+            }
+            _researchStatus.value = outcome
+        }
+    }
+
+    /** Writes worth, verdict and dossier; fills the place description only when it has none. Returns how many were applied. */
+    private suspend fun applyDossiers(results: List<DossierResult>): Int {
+        var applied = 0
+        edit { e, s ->
+            val known = s.savedPlaces.associateBy { it.id }
+            results.forEach { r ->
+                val saved = known[r.savedPlaceId] ?: return@forEach // deleted meanwhile
+                val fields = mutableMapOf<String, JsonElement>("dossier" to DOSSIER_JSON.encodeToJsonElement(PlaceDossier.serializer(), r.dossier))
+                r.worth?.let { fields["worth"] = JsonPrimitive(it.name) }
+                if (r.dossier.verdict.isNotBlank()) fields["worthReason"] = JsonPrimitive(r.dossier.verdict)
+                e.set(EntityType.SAVED_PLACE, saved.id, fields)
+                val place = s.places[saved.placeId]
+                if (place != null && place.description.isNullOrBlank() && r.description.isNotBlank()) {
+                    e.set(EntityType.PLACE, place.id, mapOf("description" to JsonPrimitive(r.description)))
+                }
+                applied++
+            }
+        }
+        return applied
     }
 
     fun consumeAssessing() { if (_assessing.value != "Orte werden eingeschätzt …") _assessing.value = null }
@@ -127,3 +213,12 @@ class PlacesViewModel(
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 }
+
+/** At most this many places per research job (server limit). */
+const val MAX_RESEARCH = 300
+
+internal val DOSSIER_JSON = Json { encodeDefaults = false }
+
+/** "Ort wird recherchiert …" or "Recherche: 3 von 12 Orten …". */
+fun researchProgress(done: Int, total: Int): String =
+    if (total <= 1) "Ort wird recherchiert …" else "Recherche: $done von $total Orten …"

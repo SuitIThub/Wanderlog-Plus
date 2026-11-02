@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import de.wanderlogplus.client.SyncStateStore
+import de.wanderlogplus.shared.model.Criteria
+import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.security.SecureRandom
@@ -47,6 +49,19 @@ class SettingsStore(context: Context) : SyncStateStore {
 
     suspend fun setRemindersEnabled(v: Boolean) {
         appContext.serverDataStore.edit { it[remindersKey] = v }
+    }
+
+    private val aiCriteriaKey = stringPreferencesKey("ai_criteria")
+    private val aiExtraKey = stringPreferencesKey("ai_extra_prompt")
+
+    /** Criteria and extra instructions for the assistant's judgements and research (per device). */
+    val assessConfig: Flow<AssessConfig> = appContext.serverDataStore.data.map { p -> assessConfigOf(p[aiCriteriaKey], p[aiExtraKey]) }
+
+    suspend fun setAssessConfig(c: AssessConfig) {
+        appContext.serverDataStore.edit {
+            it[aiCriteriaKey] = c.criteria.joinToString(",")
+            it[aiExtraKey] = c.extraPrompt
+        }
     }
 
     suspend fun saveServer(s: ServerSettings) {
@@ -94,3 +109,9 @@ class SettingsStore(context: Context) : SyncStateStore {
         }
     }
 }
+
+/** Stored criteria (comma list; null = never set → defaults) and extra prompt; unknown keys are dropped. */
+fun assessConfigOf(criteria: String?, extra: String?): AssessConfig = AssessConfig(
+    criteria = criteria?.split(',')?.map { it.trim() }?.filter { Criteria.byKey(it) != null }?.distinct() ?: Criteria.DEFAULT,
+    extraPrompt = extra.orEmpty(),
+)

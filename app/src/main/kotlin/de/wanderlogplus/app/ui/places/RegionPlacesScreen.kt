@@ -79,6 +79,10 @@ fun RegionPlacesScreen(
     modifier: Modifier = Modifier,
     /** Opens the place search for this region; null hides it. */
     onSearch: (() -> Unit)? = null,
+    /** Starts the web research for the given saved places; null hides "Recherchieren". */
+    onResearch: ((savedPlaceIds: List<String>) -> Unit)? = null,
+    /** Progress or outcome of a running research (fixed German text). */
+    researchStatus: String? = null,
 ) {
     val region = remember(snapshot, regionKey) { snapshot.regions.firstOrNull { it.id == regionKey } }
     val title = if (regionKey == NO_REGION) "Ohne Region" else region?.name.orEmpty()
@@ -91,6 +95,7 @@ fun RegionPlacesScreen(
 
     var category by rememberSaveable(regionKey) { mutableStateOf<PlaceCategory?>(null) }
     var showMap by rememberSaveable { mutableStateOf(false) }
+    var confirmResearch by rememberSaveable(regionKey) { mutableStateOf(false) }
 
     val groups = remember(all, category) { placeGroups(all, category) }
     val markers = remember(snapshot, regionKey, category) {
@@ -120,6 +125,14 @@ fun RegionPlacesScreen(
                     modifier = Modifier.testTag("region-search"),
                 )
             }
+            if (onResearch != null && all.isNotEmpty()) {
+                androidx.compose.material3.AssistChip(
+                    onClick = { confirmResearch = true },
+                    label = { Text("Recherchieren (KI)") },
+                    leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
+                    modifier = Modifier.testTag("region-research"),
+                )
+            }
             (listOf<PlaceCategory?>(null) + PlaceCategory.entries).forEach { c ->
                 FilterChip(
                     selected = category == c,
@@ -128,6 +141,14 @@ fun RegionPlacesScreen(
                     modifier = Modifier.testTag("filter-category-${c?.name ?: "ALL"}"),
                 )
             }
+        }
+        researchStatus?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("region-research-status"),
+            )
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
             SegmentedButton(
@@ -163,6 +184,46 @@ fun RegionPlacesScreen(
             }
         }
     }
+    if (confirmResearch && onResearch != null) {
+        ResearchRegionDialog(all, onResearch, onDismiss = { confirmResearch = false })
+    }
+}
+
+/** Saved places of a list that were never researched on the web (judgement only counts as not researched). */
+fun unresearched(all: List<Suggestion>): List<String> = all.filter { (it.saved.dossier?.researchedAt ?: 0L) == 0L }.map { it.saved.id }
+
+/** "≈ 12 Cent" for [n] places (Parallel Search + Task "base": about one cent each). */
+fun researchCostHint(n: Int): String = if (n <= 1) "≈ 1 Cent" else "≈ $n Cent"
+
+@Composable
+private fun ResearchRegionDialog(all: List<Suggestion>, onResearch: (List<String>) -> Unit, onDismiss: () -> Unit) {
+    val fresh = unresearched(all)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Region recherchieren?") },
+        text = {
+            Text(
+                "Die KI sucht für jeden Ort im Netz nach Geheimtipps, versteckten Ecken und Hinweisen und bewertet ihn nach deinen KI-Kriterien. " +
+                    "${all.size} Orte, davon ${fresh.size} noch nicht recherchiert. Kosten ${researchCostHint(fresh.size.coerceAtLeast(1))} " +
+                    "(alle: ${researchCostHint(all.size)}). Läuft im Hintergrund weiter.",
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                onClick = { onDismiss(); onResearch(fresh) },
+                enabled = fresh.isNotEmpty(),
+                modifier = Modifier.testTag("research-new"),
+            ) { Text("Nur neue (${fresh.size})") }
+        },
+        dismissButton = {
+            Row {
+                androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Abbrechen") }
+                androidx.compose.material3.TextButton(onClick = { onDismiss(); onResearch(all.map { it.saved.id }) }, modifier = Modifier.testTag("research-all")) {
+                    Text("Alle (${all.size})")
+                }
+            }
+        },
+    )
 }
 
 @Composable

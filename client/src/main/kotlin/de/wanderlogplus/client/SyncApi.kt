@@ -11,6 +11,8 @@ import de.wanderlogplus.shared.sync.PushResponse
 import de.wanderlogplus.shared.sync.RouteInfo
 import de.wanderlogplus.shared.sync.AiJobInfo
 import de.wanderlogplus.shared.sync.AssessRequest
+import de.wanderlogplus.shared.sync.AssessConfig
+import de.wanderlogplus.shared.sync.ResearchRequest
 import de.wanderlogplus.shared.sync.ReelRequest
 import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
@@ -160,16 +162,16 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     }
 
     /** Starts the assistant on a reel link; NOT_CONFIGURED without an OpenRouter key on the server. */
-    suspend fun startReel(url: String): AiJobInfo = call {
+    suspend fun startReel(url: String, config: AssessConfig = AssessConfig()): AiJobInfo = call {
         client.post("$base/api/ai/reels") {
             auth()
             contentType(ContentType.Application.Json)
-            setBody(ReelRequest(url))
+            setBody(ReelRequest(url, config))
         }
     }
 
     /** Starts the assistant on a video file (when the link cannot be downloaded); [caption] is optional. */
-    suspend fun uploadReel(file: File, mimeType: String, caption: String? = null): AiJobInfo = call {
+    suspend fun uploadReel(file: File, mimeType: String, caption: String? = null, config: AssessConfig = AssessConfig()): AiJobInfo = call {
         client.post("$base/api/ai/reels/upload") {
             auth()
             timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
@@ -185,6 +187,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
                             },
                         )
                         caption?.takeIf { it.isNotBlank() }?.let { append("caption", it) }
+                        append("config", Json.encodeToString(AssessConfig.serializer(), config))
                     },
                 ),
             )
@@ -192,11 +195,20 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     }
 
     /** Judges saved places (empty = all without a judgement). */
-    suspend fun startAssessment(savedPlaceIds: List<String> = emptyList()): AiJobInfo = call {
+    suspend fun startAssessment(savedPlaceIds: List<String> = emptyList(), config: AssessConfig = AssessConfig()): AiJobInfo = call {
         client.post("$base/api/ai/assess") {
             auth()
             contentType(ContentType.Application.Json)
-            setBody(AssessRequest(savedPlaceIds))
+            setBody(AssessRequest(savedPlaceIds, config))
+        }
+    }
+
+    /** Web research (criteria, verdict, insider tips, hidden spots) for 1–300 saved places. */
+    suspend fun startResearch(savedPlaceIds: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo = call {
+        client.post("$base/api/ai/research") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(ResearchRequest(savedPlaceIds, config))
         }
     }
 

@@ -61,6 +61,20 @@ class RoutesApiTest {
         assertNull(api.computeRoute(req))
     }
 
+    @Test fun researchSendsIdsAndConfig() = runTest {
+        var body = ""
+        var path = ""
+        val api = SyncApi(HttpClient(MockEngine { r ->
+            path = r.url.encodedPath
+            body = String(r.body.toByteArray())
+            respond("""{"id":"j1","kind":"research","createdAt":1,"status":"QUEUED","total":1}""", HttpStatusCode.OK, jsonHeaders)
+        }), "https://s", "tok")
+        val job = api.startResearch(listOf("s1"), de.wanderlogplus.shared.sync.AssessConfig(listOf("crowds"), "Ruhig bitte"))
+        assertEquals("research", job.kind)
+        assertEquals("/api/ai/research", path)
+        assertTrue(body.contains("\"crowds\"") && body.contains("Ruhig bitte"), body)
+    }
+
     @Test fun notConfiguredIsReported() = runTest {
         val api = SyncApi(HttpClient(MockEngine { respond("""{"error":"routes_not_configured"}""", HttpStatusCode.ServiceUnavailable, jsonHeaders) }), "https://s", "tok")
         val e = assertFailsWith<ApiException> { api.computeRoute(req) }

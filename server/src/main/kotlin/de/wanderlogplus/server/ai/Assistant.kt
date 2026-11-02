@@ -1,10 +1,16 @@
 package de.wanderlogplus.server.ai
 
+import de.wanderlogplus.shared.model.Criteria
+import de.wanderlogplus.shared.model.CriterionScore
 import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Place
+import de.wanderlogplus.shared.model.PlaceDossier
 import de.wanderlogplus.shared.model.Region
 import de.wanderlogplus.shared.model.SavedPlace
+import de.wanderlogplus.shared.sync.AssessConfig
 import de.wanderlogplus.shared.sync.Assessment
+import de.wanderlogplus.shared.sync.DossierResult
+import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.ReelCandidate
@@ -12,6 +18,10 @@ import de.wanderlogplus.shared.sync.Worth
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import java.util.concurrent.Callable
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 /** A place the model found in a reel, before geocoding and research. */
@@ -20,12 +30,39 @@ data class FoundPlace(val name: String, val localName: String?, val city: String
 /** How far from the trip a reel's place may be to count as "on the route", in km (as for regions). */
 const val ON_ROUTE_KM = 50.0
 
-private val WORTH_SCALE = """Stufen für "worth": MUST = muss man gesehen haben, WORTH = lohnt sich, OPTIONAL = wenn Zeit ist, SKIP = eher auslassen."""
+/** How many places are researched at the same time. */
+const val RESEARCH_PARALLELISM = 4
+
+internal val WORTH_SCALE = """Gesamtfazit "worth": MUST = muss man gesehen haben, WORTH = lohnt sich, OPTIONAL = wenn Zeit ist, SKIP = eher auslassen."""
+
+/** The criteria part of a prompt: what to score (1–5, higher = better for the travellers) and the user's own wishes. */
+internal fun criteriaPrompt(config: AssessConfig): String = buildString {
+    val chosen = config.criteria.mapNotNull { Criteria.byKey(it) }.ifEmpty { Criteria.DEFAULT.mapNotNull { Criteria.byKey(it) } }
+    append("Bewerte jedes dieser Kriterien mit 1–5 Punkten (5 = am besten für die Reisenden) und einer kurzen Notiz:\n")
+    chosen.forEach { append("- ").append(it.key).append(" (").append(it.label).append("): ").append(it.question).append('\n') }
+    append("Leite daraus ein Gesamtfazit ab (verdict: 1–2 Sätze) und die Stufe worth. ").append(WORTH_SCALE).append('\n')
+    append("Jede Region der Reise wird ohnehin besucht: werte nie die Anreise in die Region ab, nur einen Abstecher innerhalb der Region.\n")
+    config.extraPrompt.trim().takeIf { it.isNotEmpty() }?.let { append("Wünsche der Reisenden: ").append(it.take(1000)).append('\n') }
+}
+
+/** Criteria scores from a model answer, limited to the chosen keys, labels filled in, scores clamped to 1–5. */
+internal fun parseCriteria(arr: JsonArray?, config: AssessConfig): List<CriterionScore> {
+    val allowed = config.criteria.ifEmpty { Criteria.DEFAULT }.toSet()
+    return arr.orEmpty().mapNotNull { e ->
+        val o = e as? JsonObject ?: return@mapNotNull null
+        val key = o.str("key")?.lowercase()?.takeIf { it in allowed } ?: return@mapNotNull null
+        val score = (o["score"] as? JsonPrimitive)?.let { it.intOrNull ?: it.content.toDoubleOrNull()?.roundToInt() }?.coerceIn(1, 5) ?: return@mapNotNull null
+        CriterionScore(key, Criteria.byKey(key)?.label ?: key, score, o.str("note").orEmpty())
+    }.distinctBy { it.key }
+}
+
+internal fun parseWorth(s: String?): Worth? = s?.let { w -> Worth.entries.firstOrNull { it.name == w.uppercase() } }
 
 /**
  * The assistant's work: find places in a reel (frames, sound, caption), locate them, check whether they fit the
- * trip, research them on the web and describe them in German; and judge saved places' worth. Prompts never contain
- * booking data, only place names, regions and reel content.
+ * trip, research them on the web (insider tips, hidden spots, good-to-know, criteria scores and verdict, in German);
+ * research saved places the same way; and judge saved places cheaply by criteria without web search.
+ * Prompts never contain booking data, only place names, regions, categories and reel content.
  */
 class Assistant(
     private val model: ChatModel,
@@ -62,8 +99,8 @@ class Assistant(
         return o.str("summary") to found
     }
 
-    /** Coordinates, distance to the trip, web research and a German description for one found place. */
-    fun research(p: FoundPlace, context: TripContext): ReelCandidate {
+    /** Coordinates, distance to the trip and the full research for one place found in a reel. */
+    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig()): ReelCandidate {
         val hit = listOfNotNull(
             listOfNotNull(p.name, p.city).joinToString(" "),
             p.localName,
@@ -71,10 +108,11 @@ class Assistant(
         ).distinct().firstNotNullOfOrNull { geocoder.find(it) }
         val near = hit?.let { context.nearest(it.lat, it.lng) }
         val r = try {
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence))
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence), config)
         } catch (e: AiFailed) {
             null // a place without research is still worth showing
         }
+        val d = r?.dossier
         return ReelCandidate(
             name = p.name,
             city = p.city,
@@ -83,41 +121,57 @@ class Assistant(
             address = hit?.address,
             category = r?.category?.uppercase()?.takeIf { it in CATEGORIES } ?: categoryOf(p.kind),
             description = r?.description.orEmpty(),
-            tips = r?.tips.orEmpty().take(4),
-            hints = r?.hints.orEmpty().take(4),
-            worth = r?.worth?.let { w -> Worth.entries.firstOrNull { it.name == w.uppercase() } },
-            worthReason = r?.worthReason.orEmpty(),
+            tips = d?.tips.orEmpty(),
+            hints = d?.hints.orEmpty(),
+            worth = parseWorth(r?.worth),
+            worthReason = d?.verdict.orEmpty(),
             distanceKm = near?.second?.let { (it * 10).roundToInt() / 10.0 },
             nearestAnchor = near?.first?.name,
             onRoute = near != null && near.second <= ON_ROUTE_KM,
             evidence = p.evidence,
-            sources = r?.sources.orEmpty(),
+            sources = d?.sources.orEmpty(),
+            dossier = d,
         )
     }
 
-    /** Judges the given saved places (all without judgement when [ids] is empty), in batches. */
-    fun assess(store: EntityStore, ids: List<String>): List<Assessment> {
-        fun <T> live(type: EntityType, decode: (de.wanderlogplus.shared.sync.EntityRecord) -> T): List<T> =
-            store.all(type).filter { !it.isDeleted }.mapNotNull { r -> try { decode(r) } catch (e: Exception) { null } }
-        val places = live(EntityType.PLACE) { EntityCodec.decode<Place>(it) }.associateBy { it.id }
-        val regions = live(EntityType.REGION) { EntityCodec.decode<Region>(it) }.associateBy { it.id }
-        val saved = live(EntityType.SAVED_PLACE) { EntityCodec.decode<SavedPlace>(it) }
-        val wanted = if (ids.isEmpty()) saved.filter { it.worth == null } else saved.filter { it.id in ids }
+    /** Researches several reel places at once (at most [RESEARCH_PARALLELISM] at a time), keeping their order. */
+    fun researchAll(found: List<FoundPlace>, context: TripContext, config: AssessConfig, onDone: (Int) -> Unit = {}): List<ReelCandidate> =
+        inParallel(found, onDone) { research(it, context, config) }
+
+    /** Web research for saved places of the trip: full dossier, worth and (for places without one) a description. */
+    fun researchSaved(store: EntityStore, ids: List<String>, config: AssessConfig, now: () -> Long, onDone: (Int) -> Unit = {}): List<DossierResult> {
+        val data = TripData.from(store)
+        val wanted = data.saved.filter { it.id in ids }
+        return inParallel(wanted, onDone) { s ->
+            val p = data.places[s.placeId]
+            val region = s.regionId?.let { data.regions[it]?.name }
+            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty())
+            val r = try {
+                researcher.research(query, config)
+            } catch (e: AiFailed) {
+                null
+            }
+            r?.let { DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now())) }
+        }.filterNotNull()
+    }
+
+    /** Judges the given saved places by the chosen criteria (all without judgement when [ids] is empty), in batches; no web search. */
+    fun assess(store: EntityStore, ids: List<String>, config: AssessConfig = AssessConfig()): List<Assessment> {
+        val data = TripData.from(store)
+        val wanted = if (ids.isEmpty()) data.saved.filter { it.worth == null } else data.saved.filter { it.id in ids }
         val system = """
             Du bewertest Orte einer Japanreise danach, wie lohnenswert ein Besuch ist, für Reisende mit begrenzter Zeit.
-            Berücksichtige Bekanntheit, Bewertungen, Einzigartigkeit und den Aufwand vor Ort.
-            Jede genannte Region gehört zur Reiseroute und wird ohnehin besucht: werte nie die Anreise in die Region ab,
-            nur einen Abstecher innerhalb der Region.
-            $WORTH_SCALE
-            Antworte nur mit JSON: {"results": [{"id": "die gegebene id", "worth": "MUST|WORTH|OPTIONAL|SKIP", "reason": "1 kurzer Satz auf Deutsch"}]}
+            ${criteriaPrompt(config)}
+            Antworte nur mit JSON: {"results": [{"id": "die gegebene id", "criteria": [{"key": "…", "score": 1-5, "note": "kurz, Deutsch"}],
+            "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze auf Deutsch"}]}
         """.trimIndent()
         return wanted.chunked(ASSESS_BATCH).flatMap { batch ->
             val lines = batch.joinToString("\n") { s ->
-                val p = places[s.placeId]
+                val p = data.places[s.placeId]
                 listOfNotNull(
                     "id=${s.id}",
                     "name=${p?.name ?: "?"}",
-                    s.regionId?.let { regions[it]?.name }?.let { "region=$it" },
+                    s.regionId?.let { data.regions[it]?.name }?.let { "region=$it" },
                     "kategorie=${s.category.name}",
                     p?.rating?.let { "bewertung=$it (${p.numRatings ?: 0})" },
                     p?.description?.take(300)?.let { "info=$it" },
@@ -128,19 +182,27 @@ class Assistant(
             (o["results"] as? JsonArray).orEmpty().mapNotNull { e ->
                 val r = e as? JsonObject ?: return@mapNotNull null
                 val id = r.str("id")?.takeIf { it in known } ?: return@mapNotNull null
-                val worth = r.str("worth")?.let { w -> Worth.entries.firstOrNull { it.name == w.uppercase() } } ?: return@mapNotNull null
-                Assessment(id, worth, r.str("reason").orEmpty())
+                val worth = parseWorth(r.str("worth")) ?: return@mapNotNull null
+                Assessment(id, worth, r.str("verdict") ?: r.str("reason").orEmpty(), parseCriteria(r["criteria"] as? JsonArray, config))
             }
         }
     }
 
-    private fun JsonObject?.strings(key: String): List<String> =
-        (this?.get(key) as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
+    private fun <T, R> inParallel(items: List<T>, onDone: (Int) -> Unit, work: (T) -> R): List<R> {
+        if (items.isEmpty()) return emptyList()
+        val pool = Executors.newFixedThreadPool(minOf(RESEARCH_PARALLELISM, items.size))
+        val done = AtomicInteger()
+        try {
+            return pool.invokeAll(items.map { item -> Callable { work(item).also { onDone(done.incrementAndGet()) } } }).map { it.get() }
+        } finally {
+            pool.shutdownNow()
+        }
+    }
 
     companion object {
         const val MAX_PLACES = 8
         const val ASSESS_BATCH = 25
-        private val CATEGORIES = setOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER")
+        internal val CATEGORIES = setOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER")
 
         fun categoryOf(kind: String) = when (kind.lowercase()) {
             "sight" -> "SIGHT"
@@ -152,36 +214,66 @@ class Assistant(
     }
 }
 
+/** The trip's places, regions and saved places from the server's store (deleted records skipped). */
+internal class TripData(val places: Map<String, Place>, val regions: Map<String, Region>, val saved: List<SavedPlace>) {
+    companion object {
+        fun from(store: EntityStore): TripData {
+            fun <T> live(type: EntityType, decode: (EntityRecord) -> T): List<T> =
+                store.all(type).filter { !it.isDeleted }.mapNotNull { r -> try { decode(r) } catch (e: Exception) { null } }
+            return TripData(
+                live(EntityType.PLACE) { EntityCodec.decode<Place>(it) }.associateBy { it.id },
+                live(EntityType.REGION) { EntityCodec.decode<Region>(it) }.associateBy { it.id },
+                live(EntityType.SAVED_PLACE) { EntityCodec.decode<SavedPlace>(it) },
+            )
+        }
+    }
+}
+
 /** Research with the chat model's web search plugin (OpenRouter), used when no Parallel key is configured. */
 class OpenRouterResearcher(private val model: ChatModel) : PlaceResearcher {
-    override fun research(query: ResearchQuery): PlaceResearch? {
+    override fun research(query: ResearchQuery, config: AssessConfig): ResearchOutcome? {
         val system = """
-            Du schreibst für eine Reise-App kurze, sachliche Ortsinfos auf Deutsch, im Stil eines Reiseführers.
-            Recherchiere im Web Bewertungen, Tipps und praktische Hinweise (Öffnungszeiten, Reservierung, Andrang, Preise, beste Zeit).
-            $WORTH_SCALE
-            Antworte nur mit JSON: {"description": "2–4 Sätze, was der Ort ist und was ihn ausmacht",
-            "tips": ["höchstens 4 kurze Tipps"], "hints": ["höchstens 4 Hinweise/Warnungen"],
-            "worth": "MUST|WORTH|OPTIONAL|SKIP", "worthReason": "1 Satz Begründung",
-            "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER"}
+            Du recherchierst für eine Reise-App im Web zu einem Ort und schreibst sachlich auf Deutsch, wie ein guter Reiseführer.
+            Suche Bewertungen, praktische Hinweise, Geheimtipps von Einheimischen und Kennern, versteckte Ecken in der Nähe und Dinge, die man vorher wissen sollte.
+            ${criteriaPrompt(config)}
+            Antworte nur mit JSON: ${RESEARCH_JSON_SHAPE}
         """.trimIndent()
-        val prompt = buildString {
-            append("Ort: ").append(query.name)
-            query.localName?.let { append(" (").append(it).append(")") }
-            query.city?.let { append(", ").append(it) }
-            query.country?.let { append(", ").append(it) }
-            append("\nArt laut Video: ").append(query.kind)
-            if (query.evidence.isNotBlank()) append("\nIm Reel: ").append(query.evidence)
-        }
-        val o = OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(prompt)), webSearch = true))
-        fun strings(key: String) = (o[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
-        return PlaceResearch(
-            description = o.str("description").orEmpty(),
+        return parseResearch(OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(researchPrompt(query))), webSearch = true)), config, emptyList())
+    }
+}
+
+/** The JSON shape both researchers ask for. */
+internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was der Ort ist und was ihn ausmacht",
+"category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER",
+"criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
+"insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
+"goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"]}"""
+
+internal fun researchPrompt(q: ResearchQuery) = buildString {
+    append("Ort: ").append(q.name)
+    q.localName?.let { append(" (").append(it).append(")") }
+    q.city?.let { append(", ").append(it) }
+    q.country?.let { append(", ").append(it) }
+    append("\nArt: ").append(q.kind)
+    if (q.evidence.isNotBlank()) append("\nBekannt: ").append(q.evidence)
+}
+
+/** A research answer (from either researcher) as outcome; [extraSources] are pages found before (search). */
+internal fun parseResearch(o: JsonObject, config: AssessConfig, extraSources: List<String>): ResearchOutcome {
+    fun strings(key: String) = (o[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }.take(4)
+    return ResearchOutcome(
+        description = o.str("description").orEmpty(),
+        category = o.str("category"),
+        worth = o.str("worth"),
+        dossier = PlaceDossier(
+            criteria = parseCriteria(o["criteria"] as? JsonArray, config),
+            verdict = o.str("verdict") ?: o.str("worthReason").orEmpty(),
+            insiderTips = strings("insiderTips"),
+            hiddenSpots = strings("hiddenSpots"),
+            goodToKnow = strings("goodToKnow"),
             tips = strings("tips"),
             hints = strings("hints"),
-            worth = o.str("worth"),
-            worthReason = o.str("worthReason").orEmpty(),
-            category = o.str("category"),
-            sources = emptyList(),
-        )
-    }
+            sources = extraSources.distinct().take(ParallelResearcher.MAX_SOURCES),
+        ),
+    )
 }

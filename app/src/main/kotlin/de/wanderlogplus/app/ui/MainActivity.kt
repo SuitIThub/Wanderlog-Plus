@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
                 val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
                 val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
+                val assessConfig by remember { container.settings.assessConfig }.collectAsState(de.wanderlogplus.shared.sync.AssessConfig())
                 // Not on the very first launch before Setup: ask once a server is configured.
                 LaunchedEffect(remindersEnabled, hasServer) { if (remindersEnabled && hasServer == true) requestNotificationPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
@@ -160,6 +161,8 @@ class MainActivity : ComponentActivity() {
                         onTripZone = { z -> scope.launch { container.settings.setTripZone(z) } },
                         remindersEnabled = remindersEnabled,
                         onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
+                        assessConfig = assessConfig,
+                        onAssessConfig = { c -> scope.launch { container.settings.setAssessConfig(c) } },
                         clock = { tripZone.now() },
                         attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                         attachmentFiles = container.attachmentFiles,
@@ -179,7 +182,7 @@ class MainActivity : ComponentActivity() {
     private fun reelsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            ReelsViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, { container.syncApi() }, PrefsImportedJobs(applicationContext), container.scope) as T
+            ReelsViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, { container.syncApi() }, PrefsImportedJobs(applicationContext), container.scope, config = { container.settings.assessConfig.first() }) as T
     }
 
     private fun tripFactory(container: AppContainer) = object : ViewModelProvider.Factory {
@@ -191,7 +194,7 @@ class MainActivity : ComponentActivity() {
     private fun placesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }) as T
+            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }, config = { container.settings.assessConfig.first() }) as T
     }
 
     private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {

@@ -7,6 +7,8 @@ import de.wanderlogplus.shared.sync.PushRequest
 import de.wanderlogplus.shared.sync.RouteRequest
 import de.wanderlogplus.shared.sync.ReelRequest
 import de.wanderlogplus.shared.sync.AssessRequest
+import de.wanderlogplus.shared.sync.AssessConfig
+import de.wanderlogplus.shared.sync.ResearchRequest
 import de.wanderlogplus.server.ai.AiJobs
 import de.wanderlogplus.server.ai.AiNotConfigured
 import de.wanderlogplus.server.ai.ReelInput
@@ -209,8 +211,9 @@ fun Application.module(services: Services) {
             }
             post("/api/ai/reels") {
                 if (!services.ai.configured) throw AiNotConfigured()
-                val url = firstUrlIn(call.receive<ReelRequest>().url)?.takeIf { isSupportedVideoUrl(it) } ?: throw BadInput()
-                call.respond(services.ai.startReel(ReelInput.Link(url)))
+                val req = call.receive<ReelRequest>()
+                val url = firstUrlIn(req.url)?.takeIf { isSupportedVideoUrl(it) } ?: throw BadInput()
+                call.respond(services.ai.startReel(ReelInput.Link(url), req.config))
             }
             post("/api/ai/reels/upload") {
                 if (!services.ai.configured) throw AiNotConfigured()
@@ -218,6 +221,7 @@ fun Application.module(services: Services) {
                 withContext(Dispatchers.IO) { Files.createDirectories(work) }
                 var video: java.nio.file.Path? = null
                 var caption: String? = null
+                var config = AssessConfig()
                 val multipart = call.receiveMultipart(formFieldLimit = MAX_REEL_BYTES + MULTIPART_HEADROOM)
                 try {
                     multipart.forEachPart { part ->
@@ -231,6 +235,8 @@ fun Application.module(services: Services) {
                                 if (size > MAX_REEL_BYTES) throw FileTooLarge()
                             } else if (part is PartData.FormItem && part.name == "caption") {
                                 caption = part.value.take(10_000).ifBlank { null }
+                            } else if (part is PartData.FormItem && part.name == "config") {
+                                config = try { Json.decodeFromString(AssessConfig.serializer(), part.value) } catch (e: Exception) { AssessConfig() }
                             }
                         } finally {
                             part.dispose()
@@ -242,16 +248,23 @@ fun Application.module(services: Services) {
                     throw e
                 }
                 val v = video ?: throw BadInput()
-                call.respond(services.ai.startReel(ReelInput.Video(v, caption)))
+                call.respond(services.ai.startReel(ReelInput.Video(v, caption), config))
             }
             post("/api/ai/assess") {
                 if (!services.ai.configured) throw AiNotConfigured()
-                call.respond(services.ai.startAssessment(call.receive<AssessRequest>().savedPlaceIds))
+                val req = call.receive<AssessRequest>()
+                call.respond(services.ai.startAssessment(req.savedPlaceIds, req.config))
+            }
+            post("/api/ai/research") {
+                if (!services.ai.configured) throw AiNotConfigured()
+                val req = call.receive<ResearchRequest>()
+                if (req.savedPlaceIds.isEmpty() || req.savedPlaceIds.size > 300) throw BadInput()
+                call.respond(services.ai.startResearch(req.savedPlaceIds.distinct(), req.config))
             }
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()
-                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess") }
+                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research") }
                 call.respond(withContext(Dispatchers.IO) { services.ai.list(kind, limit) })
             }
             get("/api/ai/jobs/{id}") {
