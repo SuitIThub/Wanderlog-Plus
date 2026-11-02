@@ -123,6 +123,10 @@ fun PlacesScreen(
     modifier: Modifier = Modifier,
     /** Opens the place search (name or map); null hides it. */
     onSearch: (() -> Unit)? = null,
+    /** Starts the assistant's judgement of all places; null hides it. */
+    onAssess: (() -> Unit)? = null,
+    /** Progress/outcome of the judgement, shown below the buttons. */
+    assessing: String? = null,
 ) {
     val tiles = remember(snapshot) {
         regionTileOrder(snapshot).map { r ->
@@ -143,12 +147,20 @@ fun PlacesScreen(
         item(key = "label", span = { GridItemSpan(maxLineSpan) }) {
             androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { SectionLabel("Regionen") }
+                onAssess?.let { assess ->
+                    androidx.compose.material3.TextButton(onClick = assess, modifier = Modifier.padding(top = 8.dp).testTag("places-assess")) { Text("Einschätzen (KI)") }
+                }
                 onSearch?.let { search ->
                     androidx.compose.material3.FilledTonalButton(onClick = search, modifier = Modifier.padding(top = 8.dp).testTag("places-search")) {
                         androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                         Text("Ort suchen")
                     }
                 }
+            }
+        }
+        assessing?.let { msg ->
+            item(key = "assessing", span = { GridItemSpan(maxLineSpan) }) {
+                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("places-assessing"))
             }
         }
         items(tiles, key = { it.key }) { RegionTileCard(it, onOpenRegion) }

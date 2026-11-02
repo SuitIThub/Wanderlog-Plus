@@ -9,6 +9,10 @@ import de.wanderlogplus.shared.sync.PullResponse
 import de.wanderlogplus.shared.sync.PushRequest
 import de.wanderlogplus.shared.sync.PushResponse
 import de.wanderlogplus.shared.sync.RouteInfo
+import de.wanderlogplus.shared.sync.AiJobInfo
+import de.wanderlogplus.shared.sync.AssessRequest
+import de.wanderlogplus.shared.sync.ReelRequest
+import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -155,6 +159,57 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         if (e.status == 404 && e.code == "no_route") null else throw e
     }
 
+    /** Starts the assistant on a reel link; NOT_CONFIGURED without an OpenRouter key on the server. */
+    suspend fun startReel(url: String): AiJobInfo = call {
+        client.post("$base/api/ai/reels") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(ReelRequest(url))
+        }
+    }
+
+    /** Starts the assistant on a video file (when the link cannot be downloaded); [caption] is optional. */
+    suspend fun uploadReel(file: File, mimeType: String, caption: String? = null): AiJobInfo = call {
+        client.post("$base/api/ai/reels/upload") {
+            auth()
+            timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append(
+                            "file",
+                            InputProvider(file.length()) { file.inputStream().asInput() },
+                            Headers.build {
+                                append(HttpHeaders.ContentType, mimeType)
+                                append(HttpHeaders.ContentDisposition, ContentDisposition.File.withParameter(ContentDisposition.Parameters.Name, "file").withParameter(ContentDisposition.Parameters.FileName, "reel.mp4").toString())
+                            },
+                        )
+                        caption?.takeIf { it.isNotBlank() }?.let { append("caption", it) }
+                    },
+                ),
+            )
+        }
+    }
+
+    /** Judges saved places (empty = all without a judgement). */
+    suspend fun startAssessment(savedPlaceIds: List<String> = emptyList()): AiJobInfo = call {
+        client.post("$base/api/ai/assess") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(AssessRequest(savedPlaceIds))
+        }
+    }
+
+    suspend fun aiJob(id: String): AiJobInfo = call { client.get("$base/api/ai/jobs/${id.encodeURLPathPart()}") { auth() } }
+
+    suspend fun aiJobs(kind: String? = null, limit: Int = 20): List<AiJobInfo> = call {
+        client.get("$base/api/ai/jobs") {
+            auth()
+            kind?.let { parameter("kind", it) }
+            parameter("limit", limit)
+        }
+    }
+
     suspend fun uploadFile(file: File, fileName: String, mimeType: String): UploadedFile = call {
         client.post("$base/api/files") {
             auth()
@@ -267,6 +322,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             status == 400 && code == "clock_drift" -> ApiErrorKind.CLOCK_DRIFT
             status == 400 && code == "import_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status == 503 && code == "routes_not_configured" -> ApiErrorKind.NOT_CONFIGURED
+            status == 503 && code == "ai_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status in 400..499 -> ApiErrorKind.BAD_REQUEST
             else -> ApiErrorKind.SERVER
         }

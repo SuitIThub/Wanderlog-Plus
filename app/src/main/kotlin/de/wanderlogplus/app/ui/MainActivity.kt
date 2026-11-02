@@ -50,6 +50,7 @@ import de.wanderlogplus.app.ui.trip.TripViewModel
 import de.wanderlogplus.client.TripSnapshot
 import androidx.compose.runtime.rememberCoroutineScope
 import de.wanderlogplus.app.ui.more.ImportViewModel
+import de.wanderlogplus.app.ui.reels.ReelsViewModel
 import de.wanderlogplus.app.ui.more.MoreViewModel
 import de.wanderlogplus.app.ui.more.SettingsInfo
 import de.wanderlogplus.client.SyncApi
@@ -62,11 +63,17 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     /** Setup link from the deep link; prefill only (never saved automatically). Held in memory only, never logged. */
     private val pendingSetup = MutableStateFlow<ServerSettings?>(null)
+    private val pendingReel = MutableStateFlow<String?>(null)
 
     // launchMode="singleTop": a new wlp:// link reaches the running activity via onNewIntent.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleSetupIntent(intent)
+        handleReelIntent(intent)
+    }
+
+    private fun handleReelIntent(intent: Intent?) {
+        intent?.getStringExtra(EXTRA_REEL_JOB)?.takeIf { it.isNotBlank() }?.let { pendingReel.value = it }
     }
 
     private fun handleSetupIntent(intent: Intent?) {
@@ -91,7 +98,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as WanderlogPlusApp).container
-        if (savedInstanceState == null) handleSetupIntent(intent)
+        if (savedInstanceState == null) {
+            handleSetupIntent(intent)
+            handleReelIntent(intent)
+        }
         setContent {
             WanderlogPlusTheme {
                 val hasServer by remember { container.settings.server.map { it != null } }.collectAsState(null)
@@ -124,12 +134,16 @@ class MainActivity : ComponentActivity() {
                     return@WanderlogPlusTheme
                 }
                 val pending by pendingSetup.collectAsState()
+                val reelJob by pendingReel.collectAsState()
                 // Real maps only here: MapLibre is initialized lazily on first use, never in tests (they keep the defaults).
                 val routeMaps = remember { RouteMapRenderer(applicationContext) }
                 CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs) {
                     AppNavigation(
                         pendingSetup = pending,
                         onPendingSetupConsumed = { pendingSetup.value = null },
+                        reelsViewModelFactory = remember { reelsFactory(container) },
+                        pendingReelJob = reelJob,
+                        onPendingReelConsumed = { pendingReel.value = null },
                         hasServer = hasServer,
                         placeSearch = { q, near -> container.geoSearch.search(q, near) },
                         geoSearch = container.geoSearch,
@@ -162,6 +176,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun reelsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            ReelsViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, { container.syncApi() }, PrefsImportedJobs(applicationContext), container.scope) as T
+    }
+
     private fun tripFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -171,7 +191,7 @@ class MainActivity : ComponentActivity() {
     private fun placesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
+            PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }) as T
     }
 
     private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {
@@ -209,5 +229,18 @@ class MainActivity : ComponentActivity() {
                 container.syncScheduler.requestNow()
             } as T
         }
+    }
+}
+
+/** Intent extra with the id of a reel job started from the share sheet. */
+const val EXTRA_REEL_JOB = "de.wanderlogplus.app.REEL_JOB"
+
+/** Imported reel jobs in SharedPreferences (per device; the places themselves sync). */
+class PrefsImportedJobs(context: android.content.Context) : de.wanderlogplus.app.ui.reels.ImportedJobs {
+    private val prefs = context.getSharedPreferences("reels", android.content.Context.MODE_PRIVATE)
+    override fun contains(id: String) = id in prefs.getStringSet("imported", emptySet()).orEmpty()
+    override fun add(id: String) {
+        val set = prefs.getStringSet("imported", emptySet()).orEmpty() + id
+        prefs.edit().putStringSet("imported", set).apply()
     }
 }

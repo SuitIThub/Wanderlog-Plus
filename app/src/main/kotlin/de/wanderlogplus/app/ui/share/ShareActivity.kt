@@ -92,9 +92,38 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
+    private val reelVm: ReelShareViewModel by viewModels {
+        val c = container
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = ReelShareViewModel({ c.syncApi() }, c.scope, cacheDir) as T
+        }
+    }
+
+    private val sharedText: String? by lazy { intent.getStringExtra(Intent.EXTRA_TEXT) }
+
+    /** A reel link shared as text (Instagram's "Teilen" → app). */
+    private val reelLink: String? by lazy { firstLinkIn(sharedText)?.takeIf { isReelLink(it) } }
+
+    /** A single shared video can also go to the reel analysis instead of becoming an attachment. */
+    private val videoMime: String? by lazy {
+        uris.singleOrNull()?.let { contentResolver.getType(it) }?.takeIf { it.startsWith("video/") }
+    }
+
+    private fun openReel(jobId: String) {
+        startActivity(
+            Intent(this, de.wanderlogplus.app.ui.MainActivity::class.java)
+                .putExtra(de.wanderlogplus.app.ui.EXTRA_REEL_JOB, jobId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        )
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = container
+        // A shared reel link (no file): hand it to the server right away.
+        if (savedInstanceState == null && uris.isEmpty()) reelLink?.let { reelVm.startLink(it) }
         setContent {
             WanderlogPlusTheme {
                 Surface(Modifier.fillMaxSize()) {
@@ -109,6 +138,8 @@ class ShareActivity : ComponentActivity() {
                                 value = null
                             }
                         }
+                        val reelState by reelVm.state.collectAsState()
+                        LaunchedEffect(reelState) { (reelState as? ReelShareState.Started)?.let { openReel(it.jobId) } }
                         val importing by vm.importing.collectAsState()
                         val result by vm.result.collectAsState()
                         // Leaving mid-import would hide the outcome; the import finishes on its own.
@@ -119,13 +150,19 @@ class ShareActivity : ComponentActivity() {
                                 finish()
                             }
                         }
-                        ShareContent(
-                            hasServer = hasServer,
-                            snapshot = snapshot,
-                            fileCount = uris.size,
-                            importing = importing,
-                            onPick = vm::attach,
-                        )
+                        when {
+                            reelState == ReelShareState.Working -> ReelWorking()
+                            reelState is ReelShareState.Failed -> Message((reelState as ReelShareState.Failed).message)
+                            uris.isEmpty() && reelLink != null -> ReelWorking()
+                            else -> ShareContent(
+                                hasServer = hasServer,
+                                snapshot = snapshot,
+                                fileCount = uris.size,
+                                importing = importing,
+                                onPick = vm::attach,
+                                onReel = videoMime?.let { mime -> { reelVm.startVideo(contentResolver, uris.single(), mime, sharedText) } },
+                            )
+                        }
                     }
                 }
             }
@@ -134,17 +171,29 @@ class ShareActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ShareContent(hasServer: Boolean?, snapshot: TripSnapshot?, fileCount: Int, importing: Boolean, onPick: (ShareTarget) -> Unit) {
+private fun ShareContent(hasServer: Boolean?, snapshot: TripSnapshot?, fileCount: Int, importing: Boolean, onPick: (ShareTarget) -> Unit, onReel: (() -> Unit)? = null) {
     when {
-        fileCount == 0 -> Message("Keine Datei zum Anhängen erhalten")
+        fileCount == 0 -> Message("Keine Datei und kein Reel-Link erhalten")
         importing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         hasServer == null -> Unit
         hasServer == false || (snapshot != null && snapshot.isEmpty) -> Message(MSG_SETUP_FIRST)
         snapshot == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else -> {
             val targets = remember(snapshot) { shareTargets(snapshot) }
-            ShareTargetScreen(targets, fileCount, onPick)
+            ShareTargetScreen(targets, fileCount, onPick, onReel = onReel)
         }
+    }
+}
+
+@Composable
+private fun ReelWorking() {
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        CircularProgressIndicator()
+        Text("Reel wird an die KI geschickt …", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp))
     }
 }
 

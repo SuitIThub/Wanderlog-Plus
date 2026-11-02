@@ -86,6 +86,12 @@ import de.wanderlogplus.app.ui.more.NOTE_ROUTE
 import de.wanderlogplus.app.ui.more.NoteDetailScreen
 import de.wanderlogplus.app.ui.more.NotesScreen
 import de.wanderlogplus.app.ui.more.SETTINGS_ROUTE
+import de.wanderlogplus.app.ui.reels.REELS_ROUTE
+import de.wanderlogplus.app.ui.reels.REEL_ROUTE
+import de.wanderlogplus.app.ui.reels.ReelJobScreen
+import de.wanderlogplus.app.ui.reels.ReelsScreen
+import de.wanderlogplus.app.ui.reels.ReelsViewModel
+import de.wanderlogplus.app.ui.reels.reelRoute
 import de.wanderlogplus.app.ui.more.SettingsInfo
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.ui.more.SettingsScreen
@@ -139,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE)
             else -> emptySet()
         }
 }
@@ -186,6 +192,11 @@ fun AppNavigation(
     /** Server settings from a setup deep link; shown on the setup screen (prefill only), then [onPendingSetupConsumed]. */
     pendingSetup: ServerSettings? = null,
     onPendingSetupConsumed: () -> Unit = {},
+    /** Reel analyses (Mehr → Reels); null hides the screens. */
+    reelsViewModelFactory: ViewModelProvider.Factory? = null,
+    /** A reel job started from the share sheet: shown once, then [onPendingReelConsumed]. */
+    pendingReelJob: String? = null,
+    onPendingReelConsumed: () -> Unit = {},
     /** Deletes the cached route map pictures ("Kartenbilder neu laden" in Einstellungen). */
     onReloadMapImages: suspend () -> Unit = {},
 ) {
@@ -200,6 +211,11 @@ fun AppNavigation(
         if (pendingSetup != null && nav.currentDestination?.route != SETUP_ROUTE) {
             nav.navigate(SETUP_ROUTE) { launchSingleTop = true }
         }
+    }
+    LaunchedEffect(pendingReelJob, graphReady) {
+        if (!graphReady || pendingReelJob == null || reelsViewModelFactory == null) return@LaunchedEffect
+        nav.navigate(reelRoute(pendingReelJob))
+        onPendingReelConsumed()
     }
 
     val snackbar = remember { SnackbarHostState() }
@@ -410,11 +426,16 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            else -> PlacesScreen(
-                                s,
-                                onOpenRegion = { nav.navigate(regionRoute(it)) },
-                                onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
-                            )
+                            else -> {
+                                val assessing by vm.assessing.collectAsState()
+                                PlacesScreen(
+                                    s,
+                                    onOpenRegion = { nav.navigate(regionRoute(it)) },
+                                    onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
+                                    onAssess = if (vm.canAssess) vm::assessAll else null,
+                                    assessing = assessing,
+                                )
+                            }
                         }
                     }
                 }
@@ -540,6 +561,44 @@ fun AppNavigation(
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
                             LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch)
+                        }
+                    }
+                }
+                if (reelsViewModelFactory != null) {
+                    composable(REELS_ROUTE) {
+                        val vm: ReelsViewModel = viewModel(factory = reelsViewModelFactory)
+                        val jobs by vm.jobs.collectAsState()
+                        val msg by vm.message.collectAsState()
+                        LaunchedEffect(Unit) { vm.refreshList() }
+                        LaunchedEffect(msg) { msg?.let { vm.consumeMessage(); snackbar.showSnackbar(it) } }
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            ReelsScreen(
+                                jobs = jobs,
+                                isImported = vm::isImported,
+                                onStart = { url -> vm.start(url) { id -> nav.navigate(reelRoute(id)) } },
+                                onOpen = { id -> nav.navigate(reelRoute(id)) },
+                                onBack = { nav.popBackStack() },
+                            )
+                        }
+                    }
+                    composable(REEL_ROUTE) { entry ->
+                        val vm: ReelsViewModel = viewModel(factory = reelsViewModelFactory)
+                        val id = entry.arguments?.getString("jobId").orEmpty()
+                        val job by vm.job.collectAsState()
+                        val snap by vm.snapshot.collectAsState()
+                        val imported by vm.importedNow.collectAsState()
+                        val msg by vm.message.collectAsState()
+                        LaunchedEffect(id) { vm.watch(id) }
+                        LaunchedEffect(msg) { msg?.let { vm.consumeMessage(); snackbar.showSnackbar(it) } }
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            ReelJobScreen(
+                                job = job?.takeIf { it.id == id },
+                                snapshot = snap,
+                                imported = imported,
+                                onImport = { picks -> vm.import(id, picks, job?.source) },
+                                onOpenPlaces = { nav.navigateToTab(Tab.ORTE) },
+                                onBack = { nav.popBackStack() },
+                            )
                         }
                     }
                 }

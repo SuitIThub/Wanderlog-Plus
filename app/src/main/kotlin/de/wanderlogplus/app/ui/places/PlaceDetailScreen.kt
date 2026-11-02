@@ -229,7 +229,7 @@ fun PlaceDetailScreen(
         }
 
         when (tab) {
-            TAB_INFO -> PlaceInfoTab(place, accent, today)
+            TAB_INFO -> PlaceInfoTab(place, accent, today, saved)
             TAB_NOTE -> PlaceNoteTab(
                 note = pendingNote ?: saved.note,
                 accent = accent,
