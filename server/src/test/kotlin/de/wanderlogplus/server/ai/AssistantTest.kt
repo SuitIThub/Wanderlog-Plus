@@ -225,4 +225,22 @@ class AssistantTest {
         val assess = client.post("/api/ai/assess") { authed(); contentType(ContentType.Application.Json); setBody("{}") }
         assertEquals(HttpStatusCode.OK, assess.status)
     }
+
+    @Test fun interruptedJobsResumeOrFail() {
+        seedTrip()
+        val json = Json { encodeDefaults = true }
+        fun put(j: de.wanderlogplus.shared.sync.AiJobInfo) = store.putAiJob(j.id, j.kind, j.createdAt, json.encodeToString(de.wanderlogplus.shared.sync.AiJobInfo.serializer(), j))
+        put(de.wanderlogplus.shared.sync.AiJobInfo("link", "reel", 1, "RESEARCHING", source = "https://www.instagram.com/reel/abc/"))
+        put(de.wanderlogplus.shared.sync.AiJobInfo("video", "reel", 2, "ANALYZING", source = "Video"))
+        put(de.wanderlogplus.shared.sync.AiJobInfo("assess", "assess", 3, "ASSESSING"))
+        put(de.wanderlogplus.shared.sync.AiJobInfo("done", "reel", 4, "DONE", source = "https://www.instagram.com/reel/x/"))
+        val j = jobs()
+        j.resumeInterrupted()
+        j.drain()
+        assertEquals("DONE", j.get("link")!!.status)
+        assertEquals(2, j.get("link")!!.candidates.size)
+        assertEquals("interrupted", j.get("video")!!.error)
+        assertEquals("interrupted", j.get("assess")!!.error)
+        assertEquals("DONE", j.get("done")!!.status)
+    }
 }

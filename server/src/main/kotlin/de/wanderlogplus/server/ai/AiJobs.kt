@@ -59,6 +59,23 @@ class AiJobs(
         return job
     }
 
+    /**
+     * Jobs a restart interrupted (still queued or running in the database): a reel from a link starts over, with the
+     * same id so the app's watcher still finds it; an uploaded video is gone and an assessment's input may have
+     * changed, so those are marked failed ("interrupted"). Call once at startup.
+     */
+    fun resumeInterrupted() {
+        list(null, 100).filter { !(it.status == "DONE" || it.status == "FAILED") }.forEach { job ->
+            val url = job.source?.takeIf { it.startsWith("https://") }
+            if (job.kind == "reel" && url != null && assistant != null) {
+                val restarted = save(job.copy(status = "QUEUED", summary = null, candidates = emptyList()))
+                executor.execute { runReel(restarted, ReelInput.Link(url)) }
+            } else {
+                fail(job, "interrupted")
+            }
+        }
+    }
+
     private fun save(job: AiJobInfo): AiJobInfo {
         store.putAiJob(job.id, job.kind, job.createdAt, json.encodeToString(AiJobInfo.serializer(), job))
         return job

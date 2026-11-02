@@ -39,5 +39,6 @@ fun main() {
             config.dataDir.resolve("ai-work"),
         ),
     )
+    services.ai.resumeInterrupted()
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }

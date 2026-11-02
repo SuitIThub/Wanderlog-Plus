@@ -45,6 +45,7 @@ fun errorText(code: String?): String = when (code) {
     "ai_key_rejected" -> "OpenRouter hat den Key abgelehnt."
     "ai_no_credit" -> "Das OpenRouter-Guthaben ist aufgebraucht."
     "ai_unreachable" -> "OpenRouter war nicht erreichbar. Später noch einmal versuchen."
+    "interrupted" -> "Die Auswertung wurde durch einen Neustart des Servers unterbrochen. Bitte das Reel noch einmal teilen."
     "ai_bad_answer", "ai_failed" -> "Die KI hat keine verwertbare Antwort geliefert. Noch einmal versuchen."
     else -> "Die Auswertung ist fehlgeschlagen."
 }
