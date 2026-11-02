@@ -74,6 +74,13 @@ import de.wanderlogplus.app.ui.more.noteRoute
 import de.wanderlogplus.app.ui.today.TodayScreen
 import de.wanderlogplus.app.ui.today.rememberMinuteNow
 import de.wanderlogplus.app.ui.trip.DAY_ROUTE
+import de.wanderlogplus.app.ui.trip.DAY_SEARCH_ROUTE
+import de.wanderlogplus.app.ui.trip.PlaceSearchScreen
+import de.wanderlogplus.app.ui.trip.daySearchRoute
+import de.wanderlogplus.app.ui.trip.rememberPlaceSearchModel
+import de.wanderlogplus.app.ui.trip.searchStart
+import de.wanderlogplus.client.GeoSearch
+import de.wanderlogplus.client.ItemPosition
 import de.wanderlogplus.app.ui.trip.DayDetailScreen
 import de.wanderlogplus.app.ui.trip.TripScreen
 import de.wanderlogplus.app.ui.trip.TripViewModel
@@ -107,7 +114,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     /** Routes nested below this tab's root (the tab stays highlighted there). */
     val nestedRoutes: Set<String>
         get() = when (this) {
-            REISE -> setOf(DAY_ROUTE)
+            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE)
@@ -132,6 +139,8 @@ fun AppNavigation(
     hasServer: Boolean? = true,
     /** Place search for stopovers (OpenStreetMap); null hides the search buttons. */
     placeSearch: PlaceSearch? = null,
+    /** Place search with map for the day program ("Ort suchen"); null hides it. */
+    geoSearch: GeoSearch? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -276,6 +285,33 @@ fun AppNavigation(
                                 onShowLegs = vm::setShowLegs,
                                 onLegMode = vm::setLegMode,
                                 onOpenLink = onOpenLink,
+                                onAddSuggestionAt = vm::addSuggestionAt,
+                                onAddNoteAt = vm::addNoteAt,
+                                onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
+                            )
+                        }
+                    }
+                }
+                composable(DAY_SEARCH_ROUTE) { entry ->
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val date = entry.arguments?.getString("date").orEmpty()
+                    val position = ItemPosition.decode(entry.arguments?.getString("position"))
+                    val geo = geoSearch
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        if (s != null && geo != null) {
+                            val start = remember(date, position) { searchStart(s, date, (position as? ItemPosition.After)?.itemId) }
+                            val model = rememberPlaceSearchModel(
+                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                lookup = { lat, lng -> geo.reverse(lat, lng) },
+                                home = start,
+                            )
+                            PlaceSearchScreen(
+                                model = model,
+                                start = start,
+                                onAdd = { place -> vm.addSearchedPlace(date, position, place); nav.popBackStack() },
+                                onBack = { nav.popBackStack() },
                             )
                         }
                     }

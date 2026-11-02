@@ -132,6 +132,7 @@ class MainActivity : ComponentActivity() {
                         onPendingSetupConsumed = { pendingSetup.value = null },
                         hasServer = hasServer,
                         placeSearch = { q, near -> container.geoSearch.search(q, near) },
+                        geoSearch = container.geoSearch,
                         snapshot = snapshot,
                         syncStatus = status,
                         onRefresh = container.syncScheduler::requestNow,

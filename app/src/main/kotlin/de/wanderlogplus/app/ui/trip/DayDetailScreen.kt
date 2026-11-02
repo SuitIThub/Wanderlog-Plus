@@ -34,6 +34,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import de.wanderlogplus.app.links.ExternalLink
+import de.wanderlogplus.client.ItemPosition
+import androidx.compose.material.icons.filled.Search
 import de.wanderlogplus.shared.sync.TravelMode
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -90,6 +92,11 @@ fun DayDetailScreen(
     onShowLegs: ((date: String, show: Boolean) -> Unit)? = null,
     onLegMode: (itemId: String, mode: TravelMode) -> Unit = { _, _ -> },
     onOpenLink: ((ExternalLink) -> Unit)? = null,
+    /** Suggestion added at a position (from a ＋ between items). */
+    onAddSuggestionAt: (date: String, savedPlaceId: String, position: ItemPosition) -> Unit = { d, id, _ -> onAddSuggestion(d, id) },
+    onAddNoteAt: (date: String, text: String, position: ItemPosition) -> Unit = { d, t, _ -> onAddNote(d, t) },
+    /** Opens the place search (text + map) for a position; null hides "Ort suchen". */
+    onSearchPlace: ((date: String, position: ItemPosition) -> Unit)? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -107,6 +114,9 @@ fun DayDetailScreen(
     var editingDay by rememberSaveable(date) { mutableStateOf(false) }
     var adding by rememberSaveable(date) { mutableStateOf(false) }
     var addingNote by rememberSaveable(date) { mutableStateOf(false) }
+    // Where "Hinzufügen" puts new items (encoded ItemPosition); a suggestion picked after "Ort aus Vorschlägen" goes there too.
+    var insertAt by rememberSaveable(date) { mutableStateOf(ItemPosition.End.encode()) }
+    var suggestionAt by rememberSaveable(date) { mutableStateOf<String?>(null) }
 
     // Shown right after saving, until the snapshot carries the new value (or a save failed).
     var pendingTitle by remember(date) { mutableStateOf<String?>(null) }
@@ -164,6 +174,7 @@ fun DayDetailScreen(
                     onShowLegs = onShowLegs?.let { f -> { show: Boolean -> f(date, show) } },
                     onLegMode = onLegMode,
                     onOpenLink = onOpenLink,
+                    onInsert = { pos -> insertAt = pos.encode(); addingNote = false; adding = true },
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,
@@ -174,7 +185,16 @@ fun DayDetailScreen(
                     onCategory = { category = it },
                     openOnly = openOnly,
                     onOpenOnly = { openOnly = it },
-                    onAdd = onAddSuggestion,
+                    onAdd = { d, id ->
+                        val pos = suggestionAt
+                        if (pos == null) {
+                            onAddSuggestion(d, id)
+                        } else {
+                            onAddSuggestionAt(d, id, ItemPosition.decode(pos))
+                            suggestionAt = null
+                            tab = TAB_PROGRAM
+                        }
+                    },
                 )
                 else -> DayNotesTab(
                     snapshot = snapshot,
@@ -193,7 +213,7 @@ fun DayDetailScreen(
             }
             if (tab == TAB_PROGRAM) {
                 ExtendedFloatingActionButton(
-                    onClick = { addingNote = false; adding = true },
+                    onClick = { insertAt = ItemPosition.End.encode(); addingNote = false; adding = true },
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text("Hinzufügen") },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("day-add"),
@@ -221,11 +241,25 @@ fun DayDetailScreen(
         EditSheet(if (addingNote) "Notiz hinzufügen" else "Hinzufügen", onDismiss = { adding = false; addingNote = false }) {
             if (addingNote) {
                 AddNoteForm(
-                    onAdd = { text -> onAddNote(date, text); adding = false; addingNote = false },
+                    onAdd = { text ->
+                        val pos = ItemPosition.decode(insertAt)
+                        if (pos == ItemPosition.End) onAddNote(date, text) else onAddNoteAt(date, text, pos)
+                        adding = false; addingNote = false
+                    },
                     onCancel = { addingNote = false },
                 )
             } else {
-                AddOption(Icons.Filled.Place, "Ort aus Vorschlägen", "add-from-suggestions") { adding = false; tab = TAB_SUGGESTIONS }
+                AddOption(Icons.Filled.Place, "Ort aus Vorschlägen", "add-from-suggestions") {
+                    adding = false
+                    suggestionAt = insertAt.takeIf { ItemPosition.decode(it) != ItemPosition.End }
+                    tab = TAB_SUGGESTIONS
+                }
+                onSearchPlace?.let { search ->
+                    AddOption(Icons.Filled.Search, "Ort suchen (Name oder Karte)", "add-search") {
+                        adding = false
+                        search(date, ItemPosition.decode(insertAt))
+                    }
+                }
                 AddOption(Icons.AutoMirrored.Filled.Notes, "Notiz", "add-note-open") { addingNote = true }
             }
         }
