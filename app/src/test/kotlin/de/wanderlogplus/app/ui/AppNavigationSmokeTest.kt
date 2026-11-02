@@ -86,6 +86,12 @@ class AppNavigationSmokeTest {
                     },
                     attachmentFiles = files,
                     onReloadMapImages = { mapReloads++ },
+                    reelsViewModelFactory = factory {
+                        de.wanderlogplus.app.ui.reels.ReelsViewModel({ flow }, edit, { null }, object : de.wanderlogplus.app.ui.reels.ImportedJobs {
+                            override fun contains(id: String) = false
+                            override fun add(id: String) {}
+                        }, scope)
+                    },
                 )
             }
         }
@@ -192,5 +198,14 @@ class AppNavigationSmokeTest {
     @Test fun setupAsStartDestination() {
         launch(hasServer = false)
         shows("setup-scan")
+    }
+
+    @Test fun reelScreensOpenFromMehr() {
+        launch()
+        tab("mehr")
+        rule.onNodeWithText("Reels auswerten (KI)").tap()
+        rule.waitForIdle()
+        shows("reels-screen")
+        shows("reel-link")
     }
 }

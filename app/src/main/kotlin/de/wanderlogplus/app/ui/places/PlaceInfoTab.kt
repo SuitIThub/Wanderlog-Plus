@@ -30,8 +30,15 @@ internal fun weekdayIndex(today: String?): Int? =
 
 /** Info tab: description, opening hours (today highlighted), duration and address. */
 @Composable
-internal fun PlaceInfoTab(place: Place?, accent: Color, today: String?) {
+internal fun PlaceInfoTab(place: Place?, accent: Color, today: String?, saved: de.wanderlogplus.shared.model.SavedPlace? = null) {
     Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        saved?.worth?.let { w ->
+            SectionLabel("Einschätzung", color = accent)
+            androidx.compose.foundation.layout.Row(Modifier.padding(top = 4.dp).testTag("place-worth")) {
+                de.wanderlogplus.app.ui.design.Badge(de.wanderlogplus.app.ui.design.BadgeSpec(de.wanderlogplus.app.ui.reels.worthLabel(w), de.wanderlogplus.app.ui.reels.worthTone(w)))
+            }
+            if (saved.worthReason.isNotBlank()) Text(saved.worthReason, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+        }
         place?.description?.takeIf { it.isNotBlank() }?.let {
             SectionLabel("Beschreibung", color = accent)
             Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))

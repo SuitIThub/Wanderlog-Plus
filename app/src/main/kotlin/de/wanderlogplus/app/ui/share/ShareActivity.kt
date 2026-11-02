@@ -9,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -92,11 +94,43 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
+    private val reelVm: ReelShareViewModel by viewModels {
+        val c = container
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = ReelShareViewModel({ c.syncApi() }, c.scope, cacheDir) as T
+        }
+    }
+
+    private val sharedText: String? by lazy { intent.getStringExtra(Intent.EXTRA_TEXT) }
+
+    /** A reel link shared as text (Instagram's "Teilen" → app). */
+    private val reelLink: String? by lazy { firstLinkIn(sharedText)?.takeIf { isReelLink(it) } }
+
+    /** A single shared video can also go to the reel analysis instead of becoming an attachment. */
+    private val videoMime: String? by lazy {
+        uris.singleOrNull()?.let { contentResolver.getType(it) }?.takeIf { it.startsWith("video/") }
+    }
+
+    /** True when this share is about a reel (a link, or a video the user chose to analyse): shown as a small popup. */
+    private fun reelMode(state: ReelShareState) = state != ReelShareState.Idle || (uris.isEmpty() && reelLink != null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = container
+        // A shared reel link (no file): hand it to the server right away.
+        if (savedInstanceState == null && uris.isEmpty()) reelLink?.let { reelVm.startLink(it) }
         setContent {
             WanderlogPlusTheme {
+                val reelState by reelVm.state.collectAsState()
+                // Once the server has the job, a background worker waits for it and notifies; the user stays in Instagram.
+                LaunchedEffect(reelState) {
+                    (reelState as? ReelShareState.Started)?.let { de.wanderlogplus.app.ui.reels.ReelWatchWorker.enqueue(applicationContext, it.jobId) }
+                }
+                if (reelMode(reelState)) {
+                    ReelPopup(reelState, onClose = { finish() })
+                    return@WanderlogPlusTheme
+                }
                 Surface(Modifier.fillMaxSize()) {
                     Box(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                         val hasServer by remember { c.settings.server.map { it != null } }.collectAsState(null)
@@ -125,6 +159,7 @@ class ShareActivity : ComponentActivity() {
                             fileCount = uris.size,
                             importing = importing,
                             onPick = vm::attach,
+                            onReel = videoMime?.let { mime -> { reelVm.startVideo(contentResolver, uris.single(), mime, sharedText) } },
                         )
                     }
                 }
@@ -134,19 +169,68 @@ class ShareActivity : ComponentActivity() {
 }
 
 @Composable
-private fun ShareContent(hasServer: Boolean?, snapshot: TripSnapshot?, fileCount: Int, importing: Boolean, onPick: (ShareTarget) -> Unit) {
+private fun ShareContent(hasServer: Boolean?, snapshot: TripSnapshot?, fileCount: Int, importing: Boolean, onPick: (ShareTarget) -> Unit, onReel: (() -> Unit)? = null) {
     when {
-        fileCount == 0 -> Message("Keine Datei zum Anhängen erhalten")
+        fileCount == 0 -> Message("Keine Datei und kein Reel-Link erhalten")
         importing -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         hasServer == null -> Unit
         hasServer == false || (snapshot != null && snapshot.isEmpty) -> Message(MSG_SETUP_FIRST)
         snapshot == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else -> {
             val targets = remember(snapshot) { shareTargets(snapshot) }
-            ShareTargetScreen(targets, fileCount, onPick)
+            ShareTargetScreen(targets, fileCount, onPick, onReel = onReel)
         }
     }
 }
+
+/**
+ * Small popup over the sharing app (Instagram stays visible behind it): sending, then "läuft im Hintergrund" with the
+ * hint about the notification, or the reason it could not start. Asks once for the notification permission (Android 13+).
+ * Tags: `reel-popup`, `reel-popup-ok`.
+ */
+@Composable
+internal fun ReelPopup(state: ReelShareState, onClose: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val askPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(state) {
+        if (state is ReelShareState.Started && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) askPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+    Box(
+        Modifier.fillMaxSize().scrim().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp), tonalElevation = 6.dp, shadowElevation = 8.dp, modifier = Modifier.testTag("reel-popup")) {
+            androidx.compose.foundation.layout.Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                when (state) {
+                    is ReelShareState.Failed -> {
+                        Text("Konnte nicht starten", style = MaterialTheme.typography.titleLarge)
+                        Text(state.message, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
+                    }
+                    is ReelShareState.Started -> {
+                        Text("🎬 Reel wird ausgewertet", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            "Die KI sucht die Orte im Reel und recherchiert sie. Das läuft im Hintergrund; du bekommst eine Benachrichtigung, sobald das Ergebnis da ist.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                    else -> {
+                        CircularProgressIndicator()
+                        Text("Reel wird an den Server geschickt …", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 16.dp))
+                    }
+                }
+                if (state is ReelShareState.Started || state is ReelShareState.Failed) {
+                    androidx.compose.material3.Button(onClick = onClose, modifier = Modifier.padding(top = 20.dp).testTag("reel-popup-ok")) { Text("OK") }
+                }
+            }
+        }
+    }
+}
+
+private fun Modifier.scrim() = this.then(Modifier.background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.45f)))
 
 @Composable
 private fun Message(text: String) {

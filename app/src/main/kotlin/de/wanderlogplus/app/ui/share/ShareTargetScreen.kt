@@ -25,10 +25,28 @@ import de.wanderlogplus.app.ui.design.EmptyHint
 
 /** Searchable, grouped list of attach targets. [fileCount] only shapes the title. */
 @Composable
-fun ShareTargetScreen(targets: List<ShareTarget>, fileCount: Int, onPick: (ShareTarget) -> Unit, modifier: Modifier = Modifier) {
+fun ShareTargetScreen(
+    targets: List<ShareTarget>,
+    fileCount: Int,
+    onPick: (ShareTarget) -> Unit,
+    modifier: Modifier = Modifier,
+    /** For a shared video: analyse it as a reel instead of attaching it; null hides the option. */
+    onReel: (() -> Unit)? = null,
+) {
     var query by rememberSaveable { mutableStateOf("") }
     val shown = remember(targets, query) { filterTargets(targets, query) }
     Column(modifier.fillMaxSize()) {
+        onReel?.let { reel ->
+            de.wanderlogplus.app.ui.design.SurfaceCard(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp).testTag("share-reel"),
+                onClick = reel,
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("🎬 Als Reel auswerten (KI)", style = MaterialTheme.typography.titleMedium)
+                    Text("Orte im Video finden, recherchieren und zu den Orten hinzufügen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         Text(
             if (fileCount == 1) "Anhängen an …" else "$fileCount Dateien anhängen an …",
             style = MaterialTheme.typography.titleLarge,

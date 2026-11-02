@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -42,6 +43,8 @@ fun MoreScreen(
             MoreRow("Notizen", Icons.AutoMirrored.Filled.Notes) { onOpen(NOTES_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Import", Icons.Filled.CloudDownload) { onOpen(IMPORT_ROUTE) }
+            HorizontalDivider(Modifier.padding(start = 68.dp))
+            MoreRow("Reels auswerten (KI)", Icons.Filled.Movie) { onOpen(de.wanderlogplus.app.ui.reels.REELS_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Konflikte", Icons.Filled.SyncProblem, badge = if (conflictCount > 0) BadgeSpec("$conflictCount", BadgeTone.Warning) else null) {
                 onOpen(CONFLICTS_ROUTE)

@@ -29,6 +29,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import de.wanderlogplus.app.ui.reels.worthLabel
+import de.wanderlogplus.shared.sync.Worth
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -90,11 +92,7 @@ fun RegionPlacesScreen(
     var category by rememberSaveable(regionKey) { mutableStateOf<PlaceCategory?>(null) }
     var showMap by rememberSaveable { mutableStateOf(false) }
 
-    val groups = remember(all, category) {
-        PlaceCategory.entries.filter { category == null || it == category }.mapNotNull { c ->
-            sortSuggestions(all.filter { it.saved.category == c }).takeIf { it.isNotEmpty() }?.let { c to it }
-        }
-    }
+    val groups = remember(all, category) { placeGroups(all, category) }
     val markers = remember(snapshot, regionKey, category) {
         val categoryOf = all.associate { it.saved.id to it.saved.category }
         mapMarkers(snapshot, regionKey).filter { category == null || categoryOf[it.savedPlaceId] == category }
@@ -159,9 +157,9 @@ fun RegionPlacesScreen(
                     EmptyHint(if (category == null) "Keine Orte" else "Keine Orte in „${categoryLabel(category)}“", Modifier.padding(top = 8.dp))
                 }
             }
-            groups.forEach { (c, list) ->
-                item(key = "category-${c.name}") { SectionLabel(categoryLabel(c), Modifier.testTag("category-${c.name}"), color = accent) }
-                items(list, key = { it.saved.id }) { s -> PlaceCard(s, accent) { onOpenPlace(s.saved.id) } }
+            groups.forEach { g ->
+                item(key = g.key) { SectionLabel(g.label, Modifier.testTag(g.key), color = accent) }
+                items(g.places, key = { it.saved.id }) { s -> PlaceCard(s, accent) { onOpenPlace(s.saved.id) } }
             }
         }
     }
@@ -188,5 +186,26 @@ private fun StatusIndicator(savedPlaceId: String, status: PlaceStatus) {
     Row(Modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(10.dp).background(statusColor(status), CircleShape).testTag("status-dot-$savedPlaceId"))
         Text(statusLabel(status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A section of a region's list: [key] doubles as test tag (`worth-MUST`, `worth-NONE`, `category-FOOD`, …). */
+data class PlaceGroup(val key: String, val label: String, val places: List<Suggestion>)
+
+/**
+ * Sections of a region's list (after the [category] filter): by the assistant's judgement once any place of the
+ * region has one ("Muss man sehen" … "Eher auslassen", then "Noch nicht eingeschätzt"); otherwise by category.
+ */
+fun placeGroups(all: List<Suggestion>, category: PlaceCategory?): List<PlaceGroup> {
+    val shown = all.filter { category == null || it.saved.category == category }
+    if (all.any { it.saved.worth != null }) {
+        return (Worth.entries.map { it as Worth? } + listOf(null)).mapNotNull { w ->
+            sortSuggestions(shown.filter { it.saved.worth == w }).takeIf { it.isNotEmpty() }?.let {
+                PlaceGroup("worth-${w?.name ?: "NONE"}", w?.let(::worthLabel) ?: "Noch nicht eingeschätzt", it)
+            }
+        }
+    }
+    return PlaceCategory.entries.filter { category == null || it == category }.mapNotNull { c ->
+        sortSuggestions(shown.filter { it.saved.category == c }).takeIf { it.isNotEmpty() }?.let { PlaceGroup("category-${c.name}", categoryLabel(c), it) }
     }
 }
