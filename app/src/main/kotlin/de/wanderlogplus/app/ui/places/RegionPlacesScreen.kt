@@ -83,6 +83,8 @@ fun RegionPlacesScreen(
     onResearch: ((savedPlaceIds: List<String>) -> Unit)? = null,
     /** Progress or outcome of a running research (fixed German text). */
     researchStatus: String? = null,
+    /** Opens the running research's "Ablauf"; null hides the link. */
+    onShowProgress: (() -> Unit)? = null,
 ) {
     val region = remember(snapshot, regionKey) { snapshot.regions.firstOrNull { it.id == regionKey } }
     val title = if (regionKey == NO_REGION) "Ohne Region" else region?.name.orEmpty()
@@ -143,12 +145,17 @@ fun RegionPlacesScreen(
             }
         }
         researchStatus?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("region-research-status"),
-            )
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f).testTag("region-research-status"),
+                )
+                onShowProgress?.let { show ->
+                    androidx.compose.material3.TextButton(onClick = show, modifier = Modifier.testTag("region-research-progress")) { Text("Ablauf") }
+                }
+            }
         }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
             SegmentedButton(

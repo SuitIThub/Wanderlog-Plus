@@ -145,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
             else -> emptySet()
         }
 }
@@ -291,12 +291,14 @@ fun AppNavigation(
         fun PlaceDetailFor(vm: PlacesViewModel, snap: TripSnapshot, id: String, onBack: (() -> Unit)?) {
             val failures by vm.failures.collectAsState()
             val researching by vm.researching.collectAsState()
+            val researchJob by vm.researchJob.collectAsState()
             ResearchSnack(vm, snackbar)
+            val showProgress: (() -> Unit)? = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } }
             PlaceDetailScreen(
                 snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions,
                 onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
-                research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching) { vm.research(listOf(id)) } else null,
+                research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
             )
         }
@@ -305,12 +307,14 @@ fun AppNavigation(
         fun RegionFor(vm: PlacesViewModel, snap: TripSnapshot, key: String, onOpenPlace: (String) -> Unit) {
             val researching by vm.researching.collectAsState()
             val status by vm.researchStatus.collectAsState()
+            val researchJob by vm.researchJob.collectAsState()
             ResearchSnack(vm, snackbar)
             RegionPlacesScreen(
                 snap, key, onBack = { nav.popBackStack() }, onOpenPlace = onOpenPlace,
                 onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } },
                 onResearch = if (vm.canAssess) vm::research else null,
                 researchStatus = status.takeIf { researching.isNotEmpty() },
+                onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
             )
         }
 
@@ -631,7 +635,38 @@ fun AppNavigation(
                                 onImport = { picks -> vm.import(id, picks, job?.source) },
                                 onOpenPlaces = { nav.navigateToTab(Tab.ORTE) },
                                 onBack = { nav.popBackStack() },
+                                onShowProgress = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(id)) },
                             )
+                        }
+                    }
+                    composable(de.wanderlogplus.app.ui.reels.JOB_ROUTE) { entry ->
+                        // Own view model per screen: watching this job must not switch another screen's job.
+                        val vm: ReelsViewModel = viewModel(factory = reelsViewModelFactory)
+                        val id = entry.arguments?.getString("jobId").orEmpty()
+                        val job by vm.job.collectAsState()
+                        val msg by vm.message.collectAsState()
+                        LaunchedEffect(id) { vm.watch(id) }
+                        LaunchedEffect(msg) { msg?.let { vm.consumeMessage(); snackbar.showSnackbar(it) } }
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            val j = job?.takeIf { it.id == id }
+                            de.wanderlogplus.app.ui.reels.JobProgressScreen(
+                                job = j,
+                                onBack = { nav.popBackStack() },
+                                onOpenResult = if (j?.kind == "reel") { { nav.navigate(reelRoute(id)) } } else null,
+                            )
+                        }
+                    }
+                    composable(de.wanderlogplus.app.ui.reels.JOBS_ROUTE) {
+                        val vm: ReelsViewModel = viewModel(factory = reelsViewModelFactory)
+                        val jobs by vm.jobs.collectAsState()
+                        LaunchedEffect(Unit) {
+                            while (true) {
+                                vm.refreshList(kind = null)
+                                kotlinx.coroutines.delay(5_000)
+                            }
+                        }
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            de.wanderlogplus.app.ui.reels.AiJobsScreen(jobs, onOpen = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(it)) }, onBack = { nav.popBackStack() })
                         }
                     }
                 }

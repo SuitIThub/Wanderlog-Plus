@@ -114,7 +114,7 @@ class ResearchTest {
         var researched = 0
         rule.setContent {
             WanderlogPlusTheme {
-                PlaceDetailScreen(snap, "s-tempel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, research = ResearchAction(false) { researched++ })
+                PlaceDetailScreen(snap, "s-tempel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, research = ResearchAction(false, { researched++ }))
             }
         }
         rule.onNodeWithTag("tab-assessment").performSemanticsAction(SemanticsActions.OnClick)
@@ -137,7 +137,7 @@ class ResearchTest {
         val snap = Fixtures.trip()
         rule.setContent {
             WanderlogPlusTheme {
-                PlaceDetailScreen(snap, "s-nudel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, research = ResearchAction(true) {})
+                PlaceDetailScreen(snap, "s-nudel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, research = ResearchAction(true, {}))
             }
         }
         rule.onNodeWithTag("tab-research").performSemanticsAction(SemanticsActions.OnClick)

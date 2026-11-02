@@ -99,6 +99,10 @@ class PlacesViewModel(
     private val _researchStatus = MutableStateFlow<String?>(null)
     val researchStatus: StateFlow<String?> = _researchStatus
 
+    /** Id of the research job started last (for its "Ablauf"); null before the first. */
+    private val _researchJob = MutableStateFlow<String?>(null)
+    val researchJob: StateFlow<String?> = _researchJob
+
     fun consumeResearchStatus() { if (_researching.value.isEmpty()) _researchStatus.value = null }
 
     /**
@@ -115,6 +119,7 @@ class PlacesViewModel(
             val outcome = try {
                 val a = provider() ?: throw IllegalStateException("no server")
                 var job = a.startResearch(todo, config())
+                _researchJob.value = job.id
                 while (job.status != "DONE" && job.status != "FAILED") {
                     kotlinx.coroutines.delay(pollMillis)
                     job = a.aiJob(job.id)
