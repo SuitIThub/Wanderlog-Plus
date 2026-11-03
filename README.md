@@ -67,3 +67,10 @@ Betrieb und Konfiguration: `server/README.md`.
 ## Echte Daten
 
 Echte Wanderlog-Exporte enthalten Buchungsdaten und gehören ausschließlich nach `testdata/private/` (per `.gitignore` ausgeschlossen). Tests, die diese Datei brauchen, werden ohne sie übersprungen.
+
+## Releases und Updates
+
+- **Release bauen:** `versionName`/`versionCode` in `app/build.gradle.kts` hochzählen, einen Abschnitt `## <version>` in `CHANGELOG.md` schreiben und nach `main` pushen. Die Action `.github/workflows/release.yml` baut dann eine signierte APK und veröffentlicht sie als Release `v<version>`. Den Changelog-Abschnitt übernimmt sie als Release-Text. Gibt es den Tag schon, tut sie nichts. Über „Run workflow“ lässt sie sich auch von Hand starten.
+- **Signatur:** Die Action braucht die Repository-Secrets `WLP_KEYSTORE_BASE64`, `WLP_KEYSTORE_PASSWORD`, `WLP_KEY_ALIAS` und `WLP_KEY_PASSWORD`. Lokal liest Gradle den Schlüssel aus `keystore.properties`. Diese Datei und `keystore/` sind gitignored. Den Keystore sicher aufbewahren: Geht er verloren, lassen sich keine Updates mehr über die installierte App spielen.
+- **In der App:** Release-Builds suchen höchstens alle 6 Stunden beim Start nach einer neuen Version und zeigen dann das Changelog. Unter Einstellungen geht das auch von Hand („Nach Updates suchen“). Nach dem Bestätigen lädt die App die APK, prüft Größe und SHA-256 und übergibt sie an den Android-Installer. Beim ersten Mal muss „Apps aus dieser Quelle installieren“ einmal erlaubt werden.
+

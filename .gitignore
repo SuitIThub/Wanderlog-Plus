@@ -15,3 +15,9 @@ local.properties
 server/.env
 server/Caddyfile
 .superpowers/
+
+# Signier-Schlüssel – nie committen
+keystore/
+*.jks
+*.keystore
+keystore.properties
