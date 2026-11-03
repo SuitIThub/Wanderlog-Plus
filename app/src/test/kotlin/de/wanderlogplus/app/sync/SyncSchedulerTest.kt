@@ -40,11 +40,20 @@ class SyncSchedulerTest {
         assertEquals(NetworkType.CONNECTED, active.single().constraints.requiredNetworkType)
     }
 
-    @Test fun requestNowEnqueuesUniqueWork() {
+    @Test fun requestNowReplacesWaitingWork() {
         scheduler.requestNow()
         val first = infos("sync-now").single().id
         scheduler.requestNow()
-        assertEquals(listOf(first), infos("sync-now").map { it.id }) // KEEP: second request does not replace
+        // Not running (e.g. waiting in backoff): the new request replaces it, so exactly one is waiting.
+        val active = infos("sync-now").filter { it.state == WorkInfo.State.ENQUEUED }
+        assertEquals(1, active.size)
+        assertTrue(active.single().id != first)
+    }
+
+    @Test fun nowPolicyKeepsRunningSyncAndReplacesOtherwise() {
+        assertEquals(androidx.work.ExistingWorkPolicy.KEEP, SyncScheduler.nowPolicy(listOf(WorkInfo.State.RUNNING)))
+        assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.nowPolicy(listOf(WorkInfo.State.ENQUEUED)))
+        assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.nowPolicy(emptyList()))
     }
 
     @Test fun schedulePeriodicIsFifteenMinutesWithNetworkConstraint() {

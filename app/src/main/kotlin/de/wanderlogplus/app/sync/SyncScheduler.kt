@@ -46,12 +46,20 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(SOON, soonPolicy(states), request)
     }
 
+    /**
+     * Sync on user request. A run in progress is kept (pull-to-refresh must not cancel it), but a request waiting in
+     * backoff after a failure is replaced: otherwise the button does nothing for up to hours once the server is back.
+     */
     fun requestNow() {
+        val states = try {
+            work.getWorkInfosForUniqueWork(NOW).get().map { it.state }
+        } catch (e: Exception) {
+            emptyList() // unknown state: a fresh request is the useful default
+        }
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
             .build()
-        // KEEP: pull-to-refresh must not cancel an in-flight sync.
-        work.enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+        work.enqueueUniqueWork(NOW, nowPolicy(states), request)
     }
 
     /** Uploads queued attachment files and downloads missing ones; appended only while a run is active, otherwise replaced so a backing-off chain does not grow. */
@@ -78,6 +86,10 @@ class SyncScheduler(context: Context) {
         /** APPEND_OR_REPLACE while a sync is running, REPLACE (debounce) otherwise. */
         fun soonPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy =
             if (states.any { it == WorkInfo.State.RUNNING }) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.REPLACE
+
+        /** KEEP while a sync is running, REPLACE otherwise (also a request waiting in backoff). */
+        fun nowPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy =
+            if (states.any { it == WorkInfo.State.RUNNING }) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE
 
         const val PERIODIC = "sync-periodic"
         const val SOON = "sync-soon"
