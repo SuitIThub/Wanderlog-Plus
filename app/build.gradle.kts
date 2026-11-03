@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,15 +17,35 @@ android {
         applicationId = "de.wanderlogplus.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "0.13.4"
+        versionCode = 18
+        versionName = "0.14.0"
         // MapLibre ships ~10 MB of native code per ABI; both target phones are arm64 (no emulator in use).
         ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    // Release key: CI passes it via environment (GitHub secrets), locally it comes from the gitignored keystore.properties.
+    val releaseKey = run {
+        val props = Properties()
+        rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
+        fun value(env: String, prop: String): String? = System.getenv(env)?.takeIf { it.isNotBlank() } ?: props.getProperty(prop)
+        val store = value("WLP_KEYSTORE_FILE", "storeFile")
+        if (store == null) null else listOf(store, value("WLP_KEYSTORE_PASSWORD", "storePassword"), value("WLP_KEY_ALIAS", "keyAlias"), value("WLP_KEY_PASSWORD", "keyPassword"))
+    }
+    signingConfigs {
+        if (releaseKey != null) {
+            create("release") {
+                storeFile = file(releaseKey[0]!!)
+                storePassword = releaseKey[1]
+                keyAlias = releaseKey[2]
+                keyPassword = releaseKey[3]
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

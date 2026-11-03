@@ -138,6 +138,19 @@ class MainActivity : ComponentActivity() {
                 val reelJob by pendingReel.collectAsState()
                 // Real maps only here: MapLibre is initialized lazily on first use, never in tests (they keep the defaults).
                 val routeMaps = remember { RouteMapRenderer(applicationContext) }
+                val updates: de.wanderlogplus.app.update.UpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = remember { updatesFactory(container) })
+                val updateState by updates.state.collectAsState()
+                var waitingInstall by remember { mutableStateOf<java.io.File?>(null) }
+                LaunchedEffect(Unit) { updates.checkAuto() }
+                // Back from "Installieren aus dieser Quelle erlauben": continue with the install.
+                androidx.lifecycle.compose.LifecycleResumeEffect(waitingInstall) {
+                    val apk = waitingInstall
+                    if (apk != null && packageManager.canRequestPackageInstalls()) {
+                        waitingInstall = null
+                        de.wanderlogplus.app.update.installApk(this@MainActivity, apk)
+                    }
+                    onPauseOrDispose { }
+                }
                 CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs) {
                     AppNavigation(
                         pendingSetup = pending,
@@ -167,6 +180,8 @@ class MainActivity : ComponentActivity() {
                         attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                         attachmentFiles = container.attachmentFiles,
                         onReloadMapImages = routeMaps::clearCache,
+                        appVersion = updates.version,
+                        onCheckUpdates = updates::checkNow,
                         onResetSync = {
                             scope.launch {
                                 container.syncRunner.resetCursor()
@@ -174,9 +189,37 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                     )
+                    de.wanderlogplus.app.update.UpdateDialog(
+                        state = updateState,
+                        currentVersion = updates.version,
+                        debugBuild = isDebugBuild,
+                        onUpdate = updates::download,
+                        onLater = updates::later,
+                        onSkip = updates::skip,
+                        onCancelDownload = updates::cancelDownload,
+                        onInstall = { ready ->
+                            updates.dismiss()
+                            if (!de.wanderlogplus.app.update.installApk(this@MainActivity, ready.apk)) waitingInstall = ready.apk
+                        },
+                        onDismiss = updates::dismiss,
+                    )
                 }
             }
         }
+    }
+
+    private val isDebugBuild: Boolean
+        get() = (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    private fun updatesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.update.UpdateViewModel(
+            source = de.wanderlogplus.app.update.ReleaseSource(container.http),
+            currentVersion = packageManager.getPackageInfo(packageName, 0).versionName ?: "0",
+            prefs = PrefsUpdatePrefs(applicationContext),
+            downloadDir = java.io.File(cacheDir, "updates"),
+            autoCheck = !isDebugBuild,
+        ) as T
     }
 
     private fun reelsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
@@ -239,6 +282,17 @@ class MainActivity : ComponentActivity() {
 const val EXTRA_REEL_JOB = "de.wanderlogplus.app.REEL_JOB"
 
 /** Imported reel jobs in SharedPreferences (per device; the places themselves sync). */
+/** When the app last looked for an update and which version the user skipped (per device). */
+class PrefsUpdatePrefs(context: android.content.Context) : de.wanderlogplus.app.update.UpdatePrefs {
+    private val prefs = context.getSharedPreferences("updates", android.content.Context.MODE_PRIVATE)
+    override var lastCheckAt: Long
+        get() = prefs.getLong("lastCheckAt", 0L)
+        set(v) { prefs.edit().putLong("lastCheckAt", v).apply() }
+    override var skippedVersion: String?
+        get() = prefs.getString("skipped", null)
+        set(v) { prefs.edit().putString("skipped", v).apply() }
+}
+
 class PrefsImportedJobs(context: android.content.Context) : de.wanderlogplus.app.ui.reels.ImportedJobs {
     private val prefs = context.getSharedPreferences("reels", android.content.Context.MODE_PRIVATE)
     override fun contains(id: String) = id in prefs.getStringSet("imported", emptySet()).orEmpty()

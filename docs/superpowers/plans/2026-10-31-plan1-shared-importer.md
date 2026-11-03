@@ -407,7 +407,7 @@ Ziffernweise Mittelwertbildung: `before` fehlt → wie `""` behandeln (unterste 
 - [ ] **Step 5: Tests ausführen** → PASS
 - [ ] **Step 6: Echten Export als lokale Fixture ablegen**
 ```bash
-mkdir -p testdata/private && curl -s -A "Mozilla/5.0" -o testdata/private/wanderlog-real.json "https://wanderlog.com/api/tripPlans/rkqpffsjnb?clientSchemaVersion=2&registerView=false"
+mkdir -p testdata/private && curl -s -A "Mozilla/5.0" -o testdata/private/wanderlog-real.json "https://wanderlog.com/api/tripPlans/<trip-key>?clientSchemaVersion=2&registerView=false"
 git status --short testdata
 ```
 Expected: `git status` zeigt **nichts** für `testdata/private` (gitignored). Dann `./gradlew :importer:test --tests "*WanderlogParserTest"` → PASS inkl. `real export parses`.
@@ -542,8 +542,8 @@ Expected: `git status` zeigt **nichts** für `testdata/private` (gitignored). Da
 - [ ] **Step 4: Tests ausführen** → `./gradlew test` → alle PASS
 - [ ] **Step 5: CLI manuell gegen Live-Endpoint prüfen**
 ```bash
-./gradlew :importer:run --args="--key rkqpffsjnb --state build/state.json --summary"
-./gradlew :importer:run --args="--key rkqpffsjnb --state build/state.json"
+./gradlew :importer:run --args="--key <trip-key> --state build/state.json --summary"
+./gradlew :importer:run --args="--key <trip-key> --state build/state.json"
 ```
 Expected: erster Lauf `created > 0`, Zusammenfassung mit 22 Zeilen und plausiblen Regionen; zweiter Lauf `created=0 updated=0 conflicts=0 removed=0 flaggedRemoved=0`.
 - [ ] **Step 6: Commit** → `git commit -m "feat(importer): http client, import runner and CLI"`

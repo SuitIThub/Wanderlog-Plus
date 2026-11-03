@@ -62,6 +62,9 @@ fun SettingsScreen(
     onRemindersEnabled: (Boolean) -> Unit = {},
     /** Null: read from the system (re-checked on resume). */
     notificationsAllowed: Boolean? = null,
+    /** Installed version and "Nach Updates suchen" (null hides the button). */
+    appVersion: String = "",
+    onCheckUpdates: (() -> Unit)? = null,
     /** Opens "KI-Kriterien"; null hides the section. */
     onOpenAiSettings: (() -> Unit)? = null,
     /** "Kartenbilder neu laden": drops the cached route snapshots so they are rendered again. */
@@ -79,6 +82,16 @@ fun SettingsScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("settings-screen"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        SectionLabel("App")
+        SurfaceCard {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Version: ${appVersion.ifBlank { "–" }}", modifier = Modifier.testTag("settings-version"))
+                onCheckUpdates?.let { check ->
+                    OutlinedButton(onClick = check, modifier = Modifier.testTag("settings-check-updates")) { Text("Nach Updates suchen") }
+                }
+            }
+        }
+
         SectionLabel("Server")
         SurfaceCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

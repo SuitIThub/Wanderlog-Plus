@@ -202,6 +202,10 @@ fun AppNavigation(
     onPendingReelConsumed: () -> Unit = {},
     /** Deletes the cached route map pictures ("Kartenbilder neu laden" in Einstellungen). */
     onReloadMapImages: suspend () -> Unit = {},
+    /** Installed app version, shown in Einstellungen. */
+    appVersion: String = "",
+    /** "Nach Updates suchen"; null hides it. */
+    onCheckUpdates: (() -> Unit)? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -760,6 +764,8 @@ fun AppNavigation(
                             remindersEnabled = remindersEnabled,
                             onRemindersEnabled = onRemindersEnabled,
                             onOpenAiSettings = { nav.navigate(de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE) },
+                            appVersion = appVersion,
+                            onCheckUpdates = onCheckUpdates,
                             onReloadMaps = {
                                 uiScope.launch {
                                     onReloadMapImages()
