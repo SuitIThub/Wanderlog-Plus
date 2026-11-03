@@ -20,6 +20,7 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_PARALLEL_PROCESSOR` | `base` | Parallel-Task-Prozessor (`lite`, `base`, `core`, …): gründlicher = langsamer und teurer. |
 | `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei für yt-dlp, falls Instagram Reels nur angemeldet zeigt. Die Datei enthält eine Anmeldung, also wie ein Passwort behandeln. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
+| `WLP_HOST_PORT` | `8080` | Nur Compose: Port auf dem Host (`127.0.0.1:<port>`), falls 8080 belegt ist. |
 
 Ohne `WLP_TRIP_KEY` und `WLP_IMPORT_FILE` antwortet der Import mit `400 import_not_configured`.
 `WLP_TRIP_KEY` gibt Zugriff auf Buchungsdaten und wird nie committet.
@@ -40,8 +41,10 @@ WLP_TOKENS=alice:<token-1>,bob:<token-2>
 WLP_DOMAIN=sync.example.org
 # WLP_TRIP_KEY=<trip-key>
 ENV
-docker compose up -d --build
+docker compose --profile caddy up -d --build
 ```
+
+Ohne `--profile caddy` startet nur der Server (z. B. wenn schon ein anderer Reverse Proxy oder `tailscale serve` HTTPS übernimmt). Beide Dienste haben `restart: unless-stopped` und starten nach einem Neustart des Geräts automatisch mit, solange der Docker-Dienst beim Booten startet (`sudo systemctl enable docker`).
 
 Für das automatische HTTPS muss `WLP_DOMAIN` per DNS auf den Host zeigen, und die Ports 80 und 443 müssen offen sein. Im Container bleibt `WLP_PORT` auf 8080 (Healthcheck und Compose setzen das voraus).
 

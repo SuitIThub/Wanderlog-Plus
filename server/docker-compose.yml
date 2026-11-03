@@ -1,4 +1,5 @@
 # Start aus dem Verzeichnis server/: docker compose up -d --build
+# Mit eigenem Caddy für HTTPS: docker compose --profile caddy up -d --build
 services:
   server:
     build:
@@ -8,14 +9,16 @@ services:
     volumes:
       - wlp-data:/data
     ports:
-      - "127.0.0.1:8080:8080"
+      # Host-Port über WLP_HOST_PORT in .env änderbar (im Container bleibt es 8080).
+      - "127.0.0.1:${WLP_HOST_PORT:-8080}:8080"
     restart: unless-stopped
 
   caddy:
     image: caddy:2
+    profiles: ["caddy"]
     # Nur die Domain, nicht die Tokens: Compose liest WLP_DOMAIN aus server/.env.
     environment:
-      - WLP_DOMAIN=${WLP_DOMAIN:?WLP_DOMAIN in .env setzen}
+      - WLP_DOMAIN=${WLP_DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"
