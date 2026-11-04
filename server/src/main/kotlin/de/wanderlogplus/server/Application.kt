@@ -51,7 +51,9 @@ import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
@@ -76,6 +78,7 @@ class Services(
     val routes: RoutesService = RoutesService(store, null),
     val ai: AiJobs = AiJobs(store, null, ToolReelMedia(), config.dataDir.resolve("ai-work")),
     val transit: TransitService = TransitService(store, null, null),
+    val tokens: TokenService = TokenService(config, store),
 )
 
 @Serializable
@@ -108,14 +111,23 @@ fun Route.protectedApi(build: Route.() -> Unit) {
     }
 }
 
-private fun findTokenName(tokens: Map<String, String>, presented: String): String? {
-    val p = presented.toByteArray(Charsets.UTF_8)
-    var found: String? = null
-    // No early exit: compare against every token in constant time per comparison.
-    for ((name, token) in tokens) {
-        if (MessageDigest.isEqual(p, token.toByteArray(Charsets.UTF_8))) found = name
+/** Admin routes: 503 without `WLP_ADMIN_TOKEN`, 401 unless the bearer token is the admin token. */
+private fun Route.adminApi(services: Services, build: Route.() -> Unit) {
+    route("/api/admin") {
+        install(
+            createRouteScopedPlugin("AdminCheck") {
+                onCall { call ->
+                    if (!services.tokens.adminConfigured) {
+                        call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("admin_not_configured"))
+                        return@onCall
+                    }
+                    val presented = call.request.headers[HttpHeaders.Authorization]?.removePrefix("Bearer ")?.trim().orEmpty()
+                    if (!services.tokens.isAdmin(presented)) call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized"))
+                }
+            },
+        )
+        build()
     }
-    return found
 }
 
 fun Application.module(services: Services) {
@@ -135,6 +147,9 @@ fun Application.module(services: Services) {
         exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
         exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
         exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }
+        exception<TokenNameTaken> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("token_name_taken")) }
+        exception<TokenInEnv> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("token_in_env")) }
+        exception<TokenNotFound> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("token_not_found")) }
         exception<NoStation> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_station")) }
         exception<TransitNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("transit_not_configured")) }
         exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
@@ -159,12 +174,24 @@ fun Application.module(services: Services) {
     authentication {
         bearer("api") {
             authenticate { cred ->
-                findTokenName(services.config.tokens, cred.token)?.let { UserIdPrincipal(it) }
+                services.tokens.nameFor(cred.token)?.let { UserIdPrincipal(it) }
             }
         }
     }
     routing {
         get("/api/health") { call.respond(Health("ok", PROTOCOL_VERSION, services.store.epoch, System.currentTimeMillis())) }
+        adminApi(services) {
+            get("/tokens") { call.respond(de.wanderlogplus.shared.sync.AccessTokens(withContext(Dispatchers.IO) { services.tokens.list() })) }
+            post("/tokens") {
+                val req = call.receive<de.wanderlogplus.shared.sync.CreateTokenRequest>()
+                call.respond(HttpStatusCode.Created, withContext(Dispatchers.IO) { services.tokens.create(req.name) })
+            }
+            delete("/tokens/{name}") {
+                val name = call.parameters["name"] ?: throw BadInput()
+                withContext(Dispatchers.IO) { services.tokens.delete(name) }
+                call.respond(HttpStatusCode.NoContent)
+            }
+        }
         protectedApi {
             get("/api/whoami") { call.respond(WhoAmI(call.author())) }
             post("/api/sync/push") {

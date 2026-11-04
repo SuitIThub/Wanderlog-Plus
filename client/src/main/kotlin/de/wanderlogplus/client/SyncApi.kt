@@ -14,6 +14,10 @@ import de.wanderlogplus.shared.sync.AssessRequest
 import de.wanderlogplus.shared.sync.AssessConfig
 import de.wanderlogplus.shared.sync.ResearchRequest
 import de.wanderlogplus.shared.sync.ReelRequest
+import de.wanderlogplus.shared.sync.AccessToken
+import de.wanderlogplus.shared.sync.AccessTokens
+import de.wanderlogplus.shared.sync.CreateTokenRequest
+import io.ktor.client.request.delete
 import de.wanderlogplus.shared.sync.TransitRequest
 import de.wanderlogplus.shared.sync.TransitResult
 import de.wanderlogplus.shared.sync.TransitStationNear
@@ -194,6 +198,30 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }.stations
 
+    /** All access tokens; this API must have been built with the admin token. NOT_CONFIGURED without one on the server. */
+    suspend fun adminTokens(): List<AccessToken> = call<AccessTokens> { client.get("$base/api/admin/tokens") { auth() } }.tokens
+
+    /** A new access token for [name]; BAD_REQUEST code `token_name_taken` when the name is in use. */
+    suspend fun createToken(name: String): AccessToken = call {
+        client.post("$base/api/admin/tokens") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(CreateTokenRequest(name))
+        }
+    }
+
+    /** Revokes a token created in the app (`token_in_env` for one from WLP_TOKENS). */
+    suspend fun deleteToken(name: String) {
+        val r = try {
+            client.delete("$base/api/admin/tokens/${name.encodeURLPathPart()}") { auth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        }
+        if (r.status.value !in 200..299) throw classify(r.status.value, try { r.body<ErrorResponse>() } catch (e: Exception) { null })
+    }
+
     /** Starts the assistant on a reel link; NOT_CONFIGURED without an OpenRouter key on the server. */
     suspend fun startReel(url: String, config: AssessConfig = AssessConfig()): AiJobInfo = call {
         client.post("$base/api/ai/reels") {
@@ -369,6 +397,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             status == 503 && code == "routes_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status == 503 && code == "ai_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status == 503 && code == "transit_not_configured" -> ApiErrorKind.NOT_CONFIGURED
+            status == 503 && code == "admin_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status in 400..499 -> ApiErrorKind.BAD_REQUEST
             else -> ApiErrorKind.SERVER
         }

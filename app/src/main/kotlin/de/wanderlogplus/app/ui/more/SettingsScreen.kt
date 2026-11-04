@@ -68,6 +68,8 @@ fun SettingsScreen(
     /** Debug mode: separate server connection and local data; switching restarts the app. Null hides it. */
     debugMode: Boolean = false,
     onDebugMode: ((Boolean) -> Unit)? = null,
+    /** Opens "Zugänge verwalten"; null hides it. */
+    onOpenAccess: (() -> Unit)? = null,
     /** The connection in use; enables "QR-Code anzeigen". */
     server: de.wanderlogplus.app.data.ServerSettings? = null,
     /** Debug mode: simulated "now" for Heute; [onSimulatedTime] null hides it. */
@@ -112,6 +114,9 @@ fun SettingsScreen(
                     if (server != null) {
                         OutlinedButton(onClick = { showQr = true }, modifier = Modifier.testTag("settings-show-qr")) { Text("QR-Code anzeigen") }
                     }
+                }
+                onOpenAccess?.let { open ->
+                    TextButton(onClick = open, modifier = Modifier.testTag("settings-access")) { Text("Zugänge verwalten (Admin)") }
                 }
             }
         }

@@ -81,6 +81,11 @@ class AppContainer(context: Context) {
         return SyncApi(http, server.url, server.token).also { api = it; apiFor = server }
     }
 
+    /** API for the current server with the admin token instead of the sync token ("Zugänge verwalten"). */
+    suspend fun adminApi(adminToken: String): SyncApi? = withContext(Dispatchers.IO) {
+        settings.server.first()?.let { SyncApi(http, it.url, adminToken) }
+    }
+
     /** API for the current server (null without one); for callers on coroutines. */
     suspend fun syncApi(): SyncApi? = withContext(Dispatchers.IO) { currentApi() }
 
