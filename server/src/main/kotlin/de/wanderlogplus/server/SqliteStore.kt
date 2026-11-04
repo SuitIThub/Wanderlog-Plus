@@ -63,6 +63,7 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             }
             conn.createStatement().use { st ->
                 st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                st.execute("CREATE TABLE IF NOT EXISTS chats(id TEXT PRIMARY KEY, updated_at INTEGER NOT NULL, json TEXT NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS ai_jobs(id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL, json TEXT NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS route_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, created_at INTEGER NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS app_tokens(name TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)")
@@ -321,4 +322,31 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
             ps.setInt(i, limit)
             ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
         }
+
+    @Synchronized
+    fun putChat(id: String, updatedAt: Long, json: String) {
+        conn.prepareStatement("INSERT OR REPLACE INTO chats(id, updated_at, json) VALUES (?,?,?)").use { ps ->
+            ps.setString(1, id); ps.setLong(2, updatedAt); ps.setString(3, json)
+            ps.executeUpdate()
+        }
+    }
+
+    @Synchronized
+    fun chat(id: String): String? =
+        conn.prepareStatement("SELECT json FROM chats WHERE id = ?").use { ps ->
+            ps.setString(1, id)
+            ps.executeQuery().use { if (it.next()) it.getString(1) else null }
+        }
+
+    /** Newest activity first. */
+    @Synchronized
+    fun chats(limit: Int): List<String> =
+        conn.prepareStatement("SELECT json FROM chats ORDER BY updated_at DESC LIMIT ?").use { ps ->
+            ps.setInt(1, limit)
+            ps.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
+        }
+
+    @Synchronized
+    fun deleteChat(id: String): Boolean =
+        conn.prepareStatement("DELETE FROM chats WHERE id = ?").use { ps -> ps.setString(1, id); ps.executeUpdate() > 0 }
 }

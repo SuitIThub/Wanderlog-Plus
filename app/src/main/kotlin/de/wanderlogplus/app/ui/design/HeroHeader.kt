@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.wanderlogplus.app.ui.HeroTitle
+
+/** Opens the trip chat with the current screen as context; null (default) shows no chat button. */
+val LocalOpenChat = androidx.compose.runtime.compositionLocalOf<(() -> Unit)?> { null }
 
 /** Soft shadow under hero texts, so they stay readable on bright spots of a photo. */
 private val TextShadow = Shadow(Color.Black.copy(alpha = 0.55f), Offset(0f, 1f), blurRadius = 6f)
@@ -76,8 +80,12 @@ fun HeroHeader(
         if (onBack != null) {
             HeroButton(Icons.AutoMirrored.Filled.ArrowBack, "Zurück", onBack, "hero-back", Modifier.align(Alignment.TopStart))
         }
-        if (onEdit != null) {
-            HeroButton(Icons.Filled.Edit, "Bearbeiten", onEdit, "hero-edit", Modifier.align(Alignment.TopEnd))
+        val openChat = LocalOpenChat.current
+        if (onEdit != null || openChat != null) {
+            Row(Modifier.align(Alignment.TopEnd)) {
+                if (openChat != null) HeroButton(Icons.AutoMirrored.Filled.Chat, "Reise-Chat", openChat, "hero-chat", Modifier)
+                if (onEdit != null) HeroButton(Icons.Filled.Edit, "Bearbeiten", onEdit, "hero-edit", Modifier)
+            }
         }
 
         Column(

@@ -16,6 +16,7 @@ import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -222,6 +223,8 @@ fun AppNavigation(
     appVersion: String = "",
     /** "Nach Updates suchen"; null hides it. */
     onCheckUpdates: (() -> Unit)? = null,
+    /** The trip chat (assistant); null hides the chat buttons. */
+    chatViewModelFactory: ViewModelProvider.Factory? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -242,6 +245,16 @@ fun AppNavigation(
     }
 
     val snackbar = remember { SnackbarHostState() }
+    val chatVm: de.wanderlogplus.app.ui.chat.ChatViewModel? = chatViewModelFactory?.let { viewModel(factory = it) }
+    val chatToday = rememberMinuteNow(clock).toLocalDate().toString()
+    val openChat: (() -> Unit)? = chatVm?.takeIf { current != SETUP_ROUTE && current != de.wanderlogplus.app.ui.chat.CHAT_ROUTE }?.let { vm ->
+        {
+            val args = backStack?.arguments
+            val map = listOf("date", "savedPlaceId", "regionKey").associateWith { args?.getString(it) }
+            vm.openFrom(de.wanderlogplus.app.ui.chat.chatContextFor(current, map, snapshot, chatToday))
+            nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
+        }
+    }
     // Unfolded (or tablet/landscape): navigation rail on the left and two panes where a screen has list and detail.
     val wide = isWideLayout()
     val onTab: (Tab) -> Unit = { tab ->
@@ -375,11 +388,28 @@ fun AppNavigation(
                 }
             }
         }
+        androidx.compose.foundation.layout.Column(Modifier.weight(1f).fillMaxHeight()) {
+        // Tab start screens have no photo header: a slim bar carries their chat button.
+        if (openChat != null && current in CHAT_BAR_ROUTES) {
+            de.wanderlogplus.app.ui.chat.ChatTopBar(Tab.entries.firstOrNull { it.route == current }?.label.orEmpty(), openChat)
+        }
+        androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat) {
         NavHost(
             nav,
             startDestination = if (hasServer) Tab.HEUTE.route else SETUP_ROUTE,
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
+            if (chatVm != null) {
+                composable(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) {
+                    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+                    de.wanderlogplus.app.ui.chat.ChatRoute(
+                        chatVm, snapshot,
+                        onBack = { nav.popBackStack() },
+                        onOpenPlace = { id -> nav.navigate(if (placesViewModelFactory != null) placeRoute(id) else tripPlaceRoute(id)) },
+                        onOpenUrl = { url -> if (runCatching { uri.openUri(url) }.isFailure) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) } },
+                    )
+                }
+            }
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
                 LaunchedEffect(pendingSetup) {
@@ -946,8 +976,13 @@ fun AppNavigation(
             }
         }
         }
+        }
+        }
     }
 }
+
+/** Routes whose screen has no photo header; they show [de.wanderlogplus.app.ui.chat.ChatTopBar] instead. */
+private val CHAT_BAR_ROUTES = setOf(Tab.REISE.route, Tab.ORTE.route, Tab.LOGISTIK.route, Tab.MEHR.route)
 
 /** Shows the outcome of a finished place research once ("3 Orte recherchiert"). */
 @Composable
