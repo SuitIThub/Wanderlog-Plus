@@ -14,7 +14,12 @@ data class Trip(
     val startDate: String = "",
     val endDate: String = "",
     val wanderlogKey: String? = null,
+    /** The people travelling (for the budget: who paid, who shares). */
+    val travelers: List<Traveler> = emptyList(),
 )
+
+@Serializable
+data class Traveler(val id: String, val name: String = "")
 
 @Serializable
 data class Region(
@@ -198,6 +203,10 @@ data class Attachment(
     val kind: String = "file",
 )
 
+/**
+ * A cost of the trip, or with [kind] [Expense.KIND_TRANSFER] a settlement payment from [paidBy] to [toTraveler].
+ * [relatedId] links a stay, flight, train or saved place. [rate] is euros per unit of [currency] (null: unknown).
+ */
 @Serializable
 data class Expense(
     val id: String,
@@ -207,4 +216,38 @@ data class Expense(
     val description: String = "",
     val date: String? = null,
     val relatedId: String? = null,
-)
+    val kind: String = KIND_EXPENSE,
+    /** Traveler id of who paid (or pays) the cost; for a transfer: who paid. */
+    val paidBy: String? = null,
+    val splitMode: SplitMode = SplitMode.EQUAL,
+    val shares: List<ExpenseShare> = emptyList(),
+    /** Status with the hotel, airline, shop …; a transfer is always paid. */
+    val status: PaymentStatus = PaymentStatus.PAID,
+    /** Amount paid in advance when [status] is [PaymentStatus.DEPOSIT]. */
+    val deposit: Double? = null,
+    val rate: Double? = null,
+    val rateDate: String? = null,
+    /** The rate was typed in: never replaced automatically. */
+    val rateManual: Boolean = false,
+    /** For a transfer: who received it. */
+    val toTraveler: String? = null,
+) {
+    val isTransfer: Boolean get() = kind == KIND_TRANSFER
+
+    companion object {
+        const val KIND_EXPENSE = "expense"
+        const val KIND_TRANSFER = "transfer"
+    }
+}
+
+/**
+ * One traveller's part of an [Expense]: [value] is the percentage ([SplitMode.PERCENT]) or the amount
+ * ([SplitMode.AMOUNT]), unused for [SplitMode.EQUAL]; [repaid] is what they already gave back to the payer (in the
+ * expense's currency).
+ */
+@Serializable
+data class ExpenseShare(val travelerId: String, val value: Double = 0.0, val repaid: Double = 0.0)
+
+enum class SplitMode { EQUAL, PERCENT, AMOUNT }
+
+enum class PaymentStatus { OPEN, DEPOSIT, PAID }
