@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.26.2
+
+- **Teilweise Rückzahlung:** Unter jedem Ausgleichsvorschlag gibt es „Teilbetrag“ (Formular mit dem noch offenen Betrag als Hinweis) und „Komplett bezahlt“ (trägt den vollen Betrag sofort ein). „Zahlung eintragen“ im Abschnitt Ausgleich geht auch ohne Vorschlag.
+
 ## 0.26.1
 
 - Behoben: Der Budget-Tab zeigte nur einen leeren Platzhalter statt der Übersicht.

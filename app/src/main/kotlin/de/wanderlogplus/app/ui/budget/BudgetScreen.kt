@@ -59,7 +59,8 @@ import kotlin.math.abs
 
 /** Which sheet is open: a cost (new or existing) or the people. */
 private sealed interface BudgetSheet {
-    data class Edit(val expense: Expense, val isNew: Boolean) : BudgetSheet
+    /** [openAmount]: what is still owed, shown as a hint for a partial repayment. */
+    data class Edit(val expense: Expense, val isNew: Boolean, val openAmount: Double? = null) : BudgetSheet
     data object People : BudgetSheet
 }
 
@@ -131,14 +132,40 @@ fun BudgetScreen(snapshot: TripSnapshot, today: String, actions: BudgetActions, 
             }
 
             val transfers = snapshot.expenses.filter { it.isTransfer }.sortedByDescending { it.date.orEmpty() }
-            if (summary.settlements.isNotEmpty() || transfers.isNotEmpty()) {
-                SectionLabel("Ausgleich")
+            if (people.size >= 2 || transfers.isNotEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel("Ausgleich", Modifier.weight(1f))
+                    if (people.size >= 2) {
+                        TextButton(
+                            onClick = {
+                                val first = summary.settlements.firstOrNull()
+                                sheet = BudgetSheet.Edit(newTransfer(today, first?.from ?: people[1].id, first?.to ?: people[0].id), true)
+                            },
+                            modifier = Modifier.testTag("transfer-add"),
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                            Text("Zahlung eintragen")
+                        }
+                    }
+                }
+                if (summary.settlements.isEmpty() && people.size >= 2) {
+                    Text("Alles ausgeglichen.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 summary.settlements.forEachIndexed { i, s ->
-                    Row(Modifier.fillMaxWidth().testTag("settle-$i"), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Handshake, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                        Text("${travelerName(snapshot, s.from)} → ${travelerName(snapshot, s.to)}: ${eurText(s.amount)}", Modifier.weight(1f))
-                        TextButton(onClick = { sheet = BudgetSheet.Edit(newTransfer(today, s.from, s.to, s.amount), true) }, modifier = Modifier.testTag("settle-$i-book")) {
-                            Text("Als bezahlt eintragen")
+                    Column(Modifier.fillMaxWidth().testTag("settle-$i")) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Handshake, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("${travelerName(snapshot, s.from)} → ${travelerName(snapshot, s.to)}: ${eurText(s.amount)}", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(
+                                onClick = { sheet = BudgetSheet.Edit(newTransfer(today, s.from, s.to), true, openAmount = s.amount) },
+                                modifier = Modifier.testTag("settle-$i-part"),
+                            ) { Text("Teilbetrag") }
+                            TextButton(
+                                onClick = { actions.save(null, newTransfer(today, s.from, s.to, s.amount)) },
+                                modifier = Modifier.testTag("settle-$i-book"),
+                            ) { Text("Komplett bezahlt") }
                         }
                     }
                 }
@@ -205,7 +232,7 @@ fun BudgetScreen(snapshot: TripSnapshot, today: String, actions: BudgetActions, 
     }
 
     when (val s = sheet) {
-        is BudgetSheet.Edit -> ExpenseSheet(snapshot, s.expense, s.isNew, actions, onDismiss = { sheet = null })
+        is BudgetSheet.Edit -> ExpenseSheet(snapshot, s.expense, s.isNew, actions, onDismiss = { sheet = null }, openAmount = s.openAmount)
         BudgetSheet.People -> PeopleSheet(snapshot, actions, onDismiss = { sheet = null })
         null -> Unit
     }

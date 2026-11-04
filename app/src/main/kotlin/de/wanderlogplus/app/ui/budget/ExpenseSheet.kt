@@ -75,6 +75,8 @@ fun ExpenseSheet(
     isNew: Boolean,
     actions: BudgetActions,
     onDismiss: () -> Unit,
+    /** For a repayment: what is still owed (in euros), shown under the amount. */
+    openAmount: Double? = null,
 ) {
     val people = snapshot.trip?.travelers.orEmpty()
     val targets = remember(snapshot) { costTargets(snapshot) }
@@ -122,6 +124,7 @@ fun ExpenseSheet(
             OutlinedTextField(
                 amountText, { amountText = it }, label = { Text("Betrag") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                supportingText = openAmount?.let { o -> { Text("Offen: ${eurText(o)}") } },
                 modifier = Modifier.weight(1f).testTag("expense-amount"),
             )
             LabeledDropdown(
