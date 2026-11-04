@@ -130,4 +130,13 @@ data class ChatSummary(val id: String, val title: String, val updatedAt: Long, v
 
 /** Body of `POST /api/chats/{id}/messages`. */
 @Serializable
-data class ChatSendRequest(val text: String, val context: ChatContext = ChatContext())
+data class ChatSendRequest(
+    val text: String,
+    val context: ChatContext = ChatContext(),
+    /** Where the user is, if they share it; used for this answer only, never stored in the chat. */
+    val location: ChatLocation? = null,
+)
+
+/** A device position: degrees and the accuracy radius in metres. */
+@Serializable
+data class ChatLocation(val lat: Double, val lng: Double, val accuracyMeters: Int? = null)

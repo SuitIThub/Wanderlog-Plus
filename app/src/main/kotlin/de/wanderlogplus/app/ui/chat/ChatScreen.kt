@@ -26,6 +26,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationSearching
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -91,11 +93,24 @@ fun ChatRoute(
     val context by vm.context.collectAsState()
     val sending by vm.sending.collectAsState()
     val message by vm.message.collectAsState()
+    val shareLocation by vm.shareLocation.collectAsState()
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val askLocation = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted -> if (granted.values.any { it }) vm.setShareLocation(true) else vm.locationDenied() }
     ChatScreen(
         chat, chats, context, sending, message, snapshot,
         onBack = onBack, onSend = vm::send, onRetry = vm::retry, onClearContext = vm::clearContext, onNewChat = vm::newChat,
         onShowList = vm::refreshList, onSelect = vm::select, onDelete = vm::delete, onConsumeMessage = vm::consumeMessage,
         onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl, actions = actions,
+        shareLocation = shareLocation,
+        onToggleLocation = if (!vm.canShareLocation) null else { on ->
+            when {
+                !on -> vm.setShareLocation(false)
+                hasLocationPermission(ctx) -> vm.setShareLocation(true)
+                else -> askLocation.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        },
     )
 }
 
@@ -121,6 +136,9 @@ fun ChatScreen(
     onOpenUrl: (String) -> Unit,
     /** Card buttons ("Einplanen", "Zu Orten"); null: cards only open. */
     actions: ChatActions? = null,
+    shareLocation: Boolean = false,
+    /** "Standort mitsenden" on/off; null hides the switch. */
+    onToggleLocation: ((Boolean) -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var showList by remember { mutableStateOf(false) }
@@ -196,11 +214,26 @@ fun ChatScreen(
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp).testTag("chat-context"),
             )
         }
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (onToggleLocation != null) {
+                androidx.compose.material3.IconToggleButton(
+                    checked = shareLocation,
+                    onCheckedChange = onToggleLocation,
+                    modifier = Modifier.testTag("chat-location"),
+                ) {
+                    Icon(
+                        if (shareLocation) Icons.Filled.MyLocation else Icons.Filled.LocationSearching,
+                        contentDescription = if (shareLocation) "Standort wird mitgesendet" else "Standort mitsenden",
+                        tint = if (shareLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Spacer(Modifier.size(8.dp))
+            }
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it.take(4000) },
-                placeholder = { Text("Frag nach Vorschlägen oder Wünschen …") },
+                placeholder = { Text(if (shareLocation) "Frag, was hier in der Nähe geht …" else "Frag nach Vorschlägen oder Wünschen …") },
                 modifier = Modifier.weight(1f).testTag("chat-input"),
                 maxLines = 5,
                 shape = RoundedCornerShape(20.dp),

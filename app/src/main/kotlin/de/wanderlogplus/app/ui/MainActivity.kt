@@ -280,6 +280,7 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.chat.ChatViewModel(
             de.wanderlogplus.app.ui.chat.SyncApiChatBackend { container.syncApi() },
             PrefsLastChat(applicationContext),
+            locator = de.wanderlogplus.app.ui.chat.AndroidChatLocator(applicationContext),
         ) as T
     }
 

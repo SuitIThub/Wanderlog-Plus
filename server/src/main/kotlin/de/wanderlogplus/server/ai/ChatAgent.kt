@@ -210,6 +210,24 @@ object ChatContextText {
     private fun programItems(day: Day?, t: ChatTrip): List<DayItem> =
         day?.let { d -> t.dayItems.filter { it.dayId == d.id }.sortedBy { it.sortKey } }.orEmpty()
 
+    /** The user's shared position: coordinates, the nearest stay and saved places around it. */
+    fun location(l: de.wanderlogplus.shared.sync.ChatLocation, t: ChatTrip): String = buildString {
+        val here = Anchor("Dein Standort", l.lat, l.lng)
+        append("Standort des Nutzers (jetzt, \"hier\"): ").append(coords(here))
+        l.accuracyMeters?.let { append(", Genauigkeit ca. ").append(distanceText(it / 1000.0)) }
+        append(". Entfernungen in den Werkzeugen beziehen sich darauf.\n")
+        t.stays.mapNotNull { s -> t.point(s.placeId, t.stayName(s))?.let { p -> p to distanceKm(l.lat, l.lng, p.lat, p.lng) } }.minByOrNull { it.second }?.let { (p, km) ->
+            append("Nächste Unterkunft: ").append(p.name).append(", ").append(distanceText(km)).append(" entfernt\n")
+        }
+        val near = t.saved.filter { it.status != PlaceStatus.DROPPED }
+            .mapNotNull { s -> t.point(s.placeId)?.let { p -> s to distanceKm(l.lat, l.lng, p.lat, p.lng) } }
+            .filter { it.second <= 3.0 }.sortedBy { it.second }.take(10)
+        if (near.isNotEmpty()) {
+            append("Hinterlegte Orte im Umkreis von 3 km:\n")
+            near.forEach { (s, _) -> append("- ").append(row(s, t, here)).append('\n') }
+        }
+    }
+
     /** Where the chat was opened from: the point distances are measured from. */
     fun anchor(c: ChatContext, t: ChatTrip, today: String): Anchor? = when (c.screen) {
         ChatScreens.DAY, ChatScreens.TODAY -> t.dayAnchor(c.date ?: today)
@@ -413,6 +431,8 @@ class ChatTools(
     private val geocoder: Geocoder? = null,
     /** Timetable connections and routes; null: the chat cannot look them up. */
     private val ways: ChatWays? = null,
+    /** Where the user is right now (shared from the app), as "hier" for the tools. */
+    private val here: Anchor? = null,
     private val say: (String) -> Unit,
 ) {
     private var transitCalls = 0
@@ -433,7 +453,7 @@ class ChatTools(
                 putJsonObject("includePlanned") { put("type", "boolean"); put("description", "auch schon eingeplante/besuchte Orte zeigen (Standard: nein)") }
                 putJsonObject("near") {
                     put("type", "string")
-                    put("description", "Umkreissuche, nach Entfernung sortiert: id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext' (= Bezugspunkt) oder 'lat,lng'")
+                    put("description", "Umkreissuche, nach Entfernung sortiert: " + POINT_HELP)
                 }
                 putJsonObject("maxKm") { put("type", "number"); put("description", "Radius für near in km (Standard 15)") }
             },
@@ -722,6 +742,7 @@ class ChatTools(
             return Anchor("Punkt $v", m.groupValues[1].toDouble(), m.groupValues[2].toDouble())
         }
         if (v.equals("kontext", ignoreCase = true)) return anchor
+        if (v.equals("hier", ignoreCase = true) || v.equals("standort", ignoreCase = true)) return here
         if (runCatching { LocalDate.parse(v) }.isSuccess) return t.dayAnchor(v)
         t.savedById[v]?.let { return t.point(it.placeId) }
         return t.point(v)
@@ -948,7 +969,7 @@ class ChatTools(
         const val MAX_ROWS = 25
         const val DEFAULT_KM = 15.0
         const val MAX_TRANSIT = 3
-        const val POINT_HELP = "id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext' oder 'lat,lng'"
+        const val POINT_HELP = "id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext', 'hier' (Standort des Nutzers, falls geteilt) oder 'lat,lng'"
         const val MAX_LOCATE_KM = 60.0
         const val SAME_PLACE_KM = 0.15
         const val MAX_CARDS = 10
@@ -984,11 +1005,12 @@ class ChatAgent(
 ) {
 
     /** Answers the last user message of [history] (the earlier ones are context). Blocking; throws [AiFailed]. */
-    fun answer(history: List<ChatMessage>, trip: ChatTrip, say: (String) -> Unit = {}): ChatAnswer {
+    fun answer(history: List<ChatMessage>, trip: ChatTrip, location: de.wanderlogplus.shared.sync.ChatLocation? = null, say: (String) -> Unit = {}): ChatAnswer {
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
-        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), geocoder, ways, say)
-        val messages = mutableListOf(system(systemPrompt(trip, context)))
+        val here = location?.let { Anchor("Dein Standort", it.lat, it.lng) }
+        val tools = ChatTools(trip, web, here ?: ChatContextText.anchor(context, trip, today()), geocoder, ways, here, say)
+        val messages = mutableListOf(system(systemPrompt(trip, context, location)))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
                 msg("user", (m.context?.label?.let { "[Geöffnet bei: $it] " } ?: "") + m.text)
@@ -1018,7 +1040,7 @@ class ChatAgent(
         throw AiFailed("ai_bad_answer")
     }
 
-    fun systemPrompt(trip: ChatTrip, context: ChatContext): String = buildString {
+    fun systemPrompt(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): String = buildString {
         append(
             """
             Du bist der Reiseassistent der App „Wanderlog Plus“ für eine Japanreise. Antworte auf Deutsch, freundlich und knapp
@@ -1033,6 +1055,7 @@ class ChatAgent(
               aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
               als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
               steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
+            - Teilt der Nutzer seinen Standort, beziehen sich „hier“, „in der Nähe“ und „von hier“ darauf (near/from/to = "hier").
             - Fragt der Nutzer, ob ein Tag passt („schaffen wir das?“, „Plan-Check“), nutzt du check_day und erklärst die Probleme
               mit konkreten Lösungen (früher los, Reihenfolge tauschen, etwas streichen). Die Zeiten dort sind Schätzungen; sag das.
             """.trimIndent(),
@@ -1070,6 +1093,7 @@ class ChatAgent(
         append("- Du kannst nichts an der Reise ändern; der Nutzer plant selbst. Bei Unsicherheit frag kurz nach.\n\n")
         append(ChatContextText.overview(trip)).append('\n')
         append("Aktueller Kontext:\n").append(ChatContextText.current(context, trip, today()))
+        location?.let { append(ChatContextText.location(it, trip)) }
     }
 
     private fun system(text: String) = msg("system", text)

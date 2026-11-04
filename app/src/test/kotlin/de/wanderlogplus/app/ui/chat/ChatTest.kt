@@ -115,6 +115,43 @@ class ChatTest {
         assertNull(vm.chat.value)
     }
 
+    @Test fun locationGoesWithMessagesOnlyWhenSwitchedOn() {
+        val backend = FakeBackend(answerAfter = 1)
+        var fix: de.wanderlogplus.shared.sync.ChatLocation? = de.wanderlogplus.shared.sync.ChatLocation(35.0, 135.7, 30)
+        val vm = ChatViewModel(backend, MemLast(), pollMillis = 10, locator = { fix })
+        assertEquals(true, vm.canShareLocation)
+        vm.send("Ohne")
+        waitUntil { backend.sent.size == 1 && vm.chat.value?.pending == false }
+        assertNull(backend.sent.last().location)
+
+        vm.setShareLocation(true)
+        vm.send("Was ist hier?")
+        waitUntil { backend.sent.size == 2 && vm.chat.value?.pending == false }
+        assertEquals(de.wanderlogplus.shared.sync.ChatLocation(35.0, 135.7, 30), backend.sent.last().location)
+
+        fix = null // no fix: sent without, and the user is told
+        vm.send("Und jetzt?")
+        waitUntil { backend.sent.size == 3 }
+        assertNull(backend.sent.last().location)
+        assertEquals("Standort gerade nicht verfügbar – ohne Standort gesendet.", vm.message.value)
+
+        vm.locationDenied()
+        assertEquals(false, vm.shareLocation.value)
+        assertEquals("no locator: stays off", false, ChatViewModel(backend, MemLast()).also { it.setShareLocation(true) }.shareLocation.value)
+    }
+
+    @Test fun locationSwitchShowsItsState() {
+        var on by androidx.compose.runtime.mutableStateOf(false)
+        rule.setContent {
+            WanderlogPlusTheme {
+                ChatScreen(null, emptyList(), null, false, null, null, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, shareLocation = on, onToggleLocation = { on = it })
+            }
+        }
+        rule.onNodeWithTag("chat-location").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(true, on)
+        rule.onNodeWithText("Frag, was hier in der Nähe geht …").assertExists()
+    }
+
     @Test fun lastChatIsRestoredAndErrorsBecomeMessages() {
         val backend = FakeBackend()
         backend.chats["old"] = ChatInfo("old", "Alter Chat", 0, 0)

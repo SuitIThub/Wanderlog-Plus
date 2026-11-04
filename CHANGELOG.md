@@ -3,6 +3,15 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.24.0
+
+- **Verbindungen im Chat:** „Wann fährt der letzte Zug zurück?“, „Wie lange laufe ich vom Onsen zur Unterkunft?“ – der Chat fragt die Fahrplanauskunft (Abfahrt, Umstiege, Gleis, Preis) und Fuß-/Autorouten ab, statt Zeiten zu raten.
+- **Plan-Check:** „Passt mein Programm morgen?“ – der Chat rechnet den Tag durch (Wege, Aufenthaltsdauer, Öffnungszeiten und Ruhetage, Zug- und Flugzeiten) und nennt Probleme mit Lösungsvorschlag.
+- **Tag nach Wünschen planen:** „Plan mir den Kiso-Tag: Wanderung, danach Onsen, abends gut essen“ oder „Füll die Lücke 12–15 Uhr“ – der Chat zeigt eine Plan-Karte mit dem ganzen Ablauf. Jede Änderung hat ein Häkchen; neue Punkte sind als „Neu“ markiert, wegfallende rot, durchgestrichen und mit „Entfällt“. „Plan übernehmen“ schreibt die angehakten Änderungen, „Zurücksetzen“ macht es rückgängig.
+- **Verlauf eines Tages:** Vor jedem übernommenen Plan (und jedem Wiederherstellen) speichert der Tag sein Programm. Unter „Verlauf“ im Programm lässt sich jede Version wiederherstellen (die letzten 10, auf allen Geräten).
+- **Standort mitsenden:** Ein Schalter im Chat schickt deinen Standort mit („Was ist hier in der Nähe offen?“, „Wie komme ich von hier zurück?“). Die Berechtigung wird erst beim Einschalten abgefragt; der Standort wird nur für die jeweilige Antwort genutzt und nicht im Chat gespeichert.
+- Benötigt das Server-Update.
+
 ## 0.23.0
 
 - **Aus dem Chat einplanen:** Unter den Karten im Reise-Chat gibt es jetzt „Einplanen“. Ein Dialog fragt Tag und Stelle im Programm (am Anfang, nach einem Programmpunkt, am Ende); hat der Chat einen Tag oder eine Stelle vorgeschlagen, ist das vorausgewählt.
