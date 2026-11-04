@@ -13,6 +13,7 @@ import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Trip
 import de.wanderlogplus.shared.sync.ChatCard
+import de.wanderlogplus.shared.sync.ChatPlanStep
 import de.wanderlogplus.shared.sync.ChatContext
 import de.wanderlogplus.shared.sync.ChatMessage
 import de.wanderlogplus.shared.sync.ChatScreens
@@ -121,7 +122,7 @@ class ChatAgentTest {
     fun `failed web search is reported to the model, not thrown`() {
         val t = tools(WebSearch { _, _ -> throw AiFailed("research_no_credit") })
         assertTrue(t.run("web_search", """{"objective":"x"}""").startsWith("Websuche fehlgeschlagen (research_no_credit)"))
-        assertEquals(listOf("search_saved_places", "get_place", "check_day", "get_day", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
+        assertEquals(listOf("search_saved_places", "get_place", "check_day", "get_day", "show_day_plan", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
     }
 
     @Test
@@ -256,6 +257,39 @@ class ChatAgentTest {
         assertEquals("Unterkunft Hotel Gion → Kiyomizu-dera: Zu Fuß: 25 Min., 1,9 km", t.run("route", """{"from":"kontext","to":"s-kiyo","mode":"WALK"}"""))
         assertTrue(t.run("route", """{"from":"kontext","to":"s-kiyo","mode":"DRIVE"}""").startsWith("Routen sind auf dem Server nicht eingerichtet; Luftlinie 1,1 km"))
         assertTrue("transit" in t.definitions.toString() && "transit" !in tools().definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
+    }
+
+    @Test
+    fun `day plan card keeps forgotten items, checks the result and replaces itself`() {
+        val geo = Geocoder { q -> if (q == "Gion Onsen, Kyoto") GeoHit(35.0040, 135.7760, "Gion, Kyoto") else null }
+        val t = ChatTools(trip, null, trip.dayAnchor("2027-05-19"), geocoder = geo) {}
+        val r = t.run(
+            "show_day_plan",
+            """{"date":"2027-05-19","steps":[
+              {"action":"add","id":"s-kiyo","time":"09:00","reason":"früh leer"},
+              {"action":"add","place":"Gion Onsen, Kyoto","title":"Gion Onsen","category":"SIGHT","time":"18:00"},
+              {"action":"add","place":"Nirgendwo"},
+              {"action":"add","id":"s-ramen"}]}""",
+        )
+        assertTrue(r.startsWith("Plan-Karte gezeigt. Hinweise: ") && "Ramen Ichiran ist schon im Programm (keep nutzen)" in r && "Lage von Nirgendwo nicht gefunden" in r, r)
+        assertTrue("Prüfung:\nZeitplan Mittwoch, 19.05.2027" in r, r)
+        val plan = t.cards.single().plan!!
+        assertEquals(
+            listOf(ChatPlanStep.ADD to "Kiyomizu-dera", ChatPlanStep.KEEP to "Ramen Ichiran", ChatPlanStep.ADD to "Gion Onsen"),
+            plan.steps.map { it.action to it.title },
+            "the forgotten program item stays, at its place",
+        )
+        assertEquals("12:00", plan.steps[1].oldTime)
+        assertEquals(35.0040, plan.steps[2].lat)
+        assertEquals("Plan für Mittwoch, 19.05.2027", t.cards.single().title)
+        assertTrue(plan.check!!.isNotBlank())
+
+        t.run("show_day_plan", """{"date":"2027-05-19","steps":[{"action":"remove","id":"s-ramen","reason":"zu weit"},{"action":"add","id":"s-market","time":"10:00"}]}""")
+        val again = t.cards.single().plan!!
+        assertEquals(listOf(ChatPlanStep.REMOVE, ChatPlanStep.ADD), again.steps.map { it.action })
+        assertEquals("i1", again.steps.first().itemId)
+        assertEquals("1 neu · 1 entfällt", t.cards.single().subtitle)
+        assertEquals("date fehlt oder ist kein Reisetag.", t.run("show_day_plan", """{"date":"2030-01-01","steps":[]}"""))
     }
 
     @Test

@@ -76,6 +76,7 @@ class DayDetailTest {
                 onAddSuggestion = { d, id -> editor.addSuggestionToDay(snapshot, d, id); refresh() },
                 onMove = { id, up -> editor.moveDayItem(snapshot, id, up); refresh() },
                 onRemove = { id -> editor.removeDayItem(snapshot, id); refresh() },
+                onRestoreVersion = { d, at -> editor.restoreDayVersion(snapshot, d, at, now = 5000); refresh() },
             )
         }
     }
@@ -92,6 +93,24 @@ class DayDetailTest {
     private fun menu(itemId: String, entry: String) {
         rule.onNodeWithTag("item-menu-$itemId").performClick()
         rule.onNodeWithTag("item-$entry-$itemId").performClick()
+    }
+
+    @Test fun historyRestoresTheProgramBeforeAChatPlan() {
+        seedTrip()
+        // A chat plan replaced the museum by the shrine.
+        editor.applyDayPlan(TripSnapshot.from(store.all()), "2027-05-09", listOf(de.wanderlogplus.client.PlanOp.AddSaved("sv-star", "09:00")), setOf("i1"), "Vor Chat-Plan", now = 1_800_000_000_000)
+        show("2027-05-09")
+        rule.onNode(hasText("Schrein Alpha") and hasAnyAncestor(hasTestTag("program-list"))).assertExists()
+        rule.onNodeWithTag("program-row-i1").assertDoesNotExist()
+        rule.onNodeWithTag("day-history-open").performClick()
+        rule.onNodeWithText("Vor Chat-Plan", substring = true).assertExists()
+        rule.onNodeWithText("10:00 Museum Gamma").assertExists()
+        rule.onNodeWithTag("day-restore-1800000000000").performClick()
+        rule.onNodeWithTag("program-row-i1").assertExists()
+        rule.onNode(hasText("Schrein Alpha") and hasAnyAncestor(hasTestTag("program-list"))).assertDoesNotExist()
+        // The plan is a version now, so it can come back.
+        rule.onNodeWithTag("day-history-open").performClick()
+        rule.onNodeWithTag("day-restore-5000").assertExists()
     }
 
     @Test fun suggestionsStarBeforeWarning() {

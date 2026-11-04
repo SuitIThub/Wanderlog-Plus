@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.Alignment
@@ -69,12 +70,21 @@ internal fun DayProgramTab(
     onTransitDetails: ((itemId: String) -> Unit)? = null,
     /** Opens the detail of a program place; null: places are not tappable. */
     onOpenPlace: ((placeId: String) -> Unit)? = null,
+    /** Saved versions of the program ("Verlauf"); empty hides the button. */
+    history: List<de.wanderlogplus.shared.model.DayVersion> = emptyList(),
+    /** Restores a version by its time; null hides "Verlauf". */
+    onRestoreVersion: ((Long) -> Unit)? = null,
 ) {
+    var showHistory by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (showHistory && onRestoreVersion != null) {
+        DayHistoryDialog(snapshot, history, onRestore = { at -> showHistory = false; onRestoreVersion(at) }, onDismiss = { showHistory = false })
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         val places = items.count { it.kind == DayItemKind.PLACE }
         val legsSwitch = onShowLegs != null && places >= 2
         val mapButton = onOpenMap != null && places >= 1
-        if (legsSwitch || mapButton) {
+        val historyButton = onRestoreVersion != null && history.isNotEmpty()
+        if (legsSwitch || mapButton || historyButton) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -83,6 +93,12 @@ internal fun DayProgramTab(
                     FilledTonalButton(onClick = { onOpenMap?.invoke() }, modifier = Modifier.testTag("day-map")) {
                         Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                         Text("Karte")
+                    }
+                }
+                if (historyButton) {
+                    androidx.compose.material3.TextButton(onClick = { showHistory = true }, modifier = Modifier.testTag("day-history-open")) {
+                        Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text("Verlauf")
                     }
                 }
                 Spacer(Modifier.weight(1f))

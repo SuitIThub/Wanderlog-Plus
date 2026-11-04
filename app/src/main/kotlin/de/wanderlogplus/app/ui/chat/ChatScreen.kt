@@ -270,9 +270,13 @@ private fun AssistantMessage(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         MarkdownText(m.text, Modifier.padding(horizontal = 4.dp))
         m.cards.forEachIndexed { i, c ->
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                ChatCardView(c, snapshot, onOpenPlace, onOpenUrl)
-                if (actions != null) ChatCardActions(c, "${m.id}-$i", snapshot, defaultDate, actions)
+            if (c.kind == ChatCard.KIND_PLAN) {
+                ChatPlanCard(c, "${m.id}-$i", actions)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ChatCardView(c, snapshot, onOpenPlace, onOpenUrl)
+                    if (actions != null) ChatCardActions(c, "${m.id}-$i", snapshot, defaultDate, actions)
+                }
             }
         }
     }

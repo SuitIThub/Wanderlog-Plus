@@ -178,6 +178,9 @@ class ChatTest {
         override fun planSaved(savedPlaceId: String, date: String, position: de.wanderlogplus.client.ItemPosition) { calls += "saved:$savedPlaceId@$date/${position.encode()}" }
         override fun planFound(card: ChatCard, date: String, position: de.wanderlogplus.client.ItemPosition) { calls += "found:${card.title}@$date/${position.encode()}" }
         override fun addFound(card: ChatCard) { calls += "add:${card.title}" }
+        var plans = mutableListOf<Triple<String, List<de.wanderlogplus.client.PlanOp>, Set<String>>>()
+        override fun applyPlan(date: String, ops: List<de.wanderlogplus.client.PlanOp>, remove: Set<String>, at: Long) { plans += Triple(date, ops, remove); calls += "plan:$date" }
+        override fun restorePlan(date: String, at: Long) { calls += "restore:$date" }
     }
 
     @Test fun cardButtonsPlanAndAddWithTheChatsSuggestion() {
@@ -229,6 +232,73 @@ class ChatTest {
 
         rule.onNodeWithTag("chat-plan-a-3").assertDoesNotExist()
         rule.onNodeWithTag("chat-add-a-3").assertDoesNotExist()
+    }
+
+    private val plan = de.wanderlogplus.shared.sync.ChatPlan(
+        "2027-04-02",
+        listOf(
+            de.wanderlogplus.shared.sync.ChatPlanStep("add", "Moosgarten", savedPlaceId = "s-garten", time = "08:30", reason = "früh leer"),
+            de.wanderlogplus.shared.sync.ChatPlanStep("keep", "Alter Bergtempel", itemId = "i-2", time = "10:00", oldTime = "09:00"),
+            de.wanderlogplus.shared.sync.ChatPlanStep("remove", "Nudelküche Weizenhalm", itemId = "i-3", oldTime = "12:30", reason = "zu voll"),
+            de.wanderlogplus.shared.sync.ChatPlanStep("keep", "Notiz: Tickets", itemId = "i-1"),
+            de.wanderlogplus.shared.sync.ChatPlanStep("add", "Onsen am Fluss", lat = 35.0, lng = 135.7, category = "SIGHT", time = "17:00"),
+        ),
+        check = "- Moosgarten öffnet erst ca. 09:00.",
+    )
+
+    @Test fun planOpsFollowTheCheckedRows() {
+        val all = planOps(plan, setOf(0, 1, 2, 4))
+        assertEquals(
+            listOf(
+                de.wanderlogplus.client.PlanOp.AddSaved("s-garten", "08:30"),
+                de.wanderlogplus.client.PlanOp.Keep("i-2", "10:00"),
+                de.wanderlogplus.client.PlanOp.Keep("i-1"),
+                de.wanderlogplus.client.PlanOp.AddFound("Onsen am Fluss", 35.0, 135.7, null, de.wanderlogplus.shared.model.PlaceCategory.SIGHT, "17:00", "Aus dem Reise-Chat"),
+            ),
+            all.first,
+        )
+        assertEquals(setOf("i-3"), all.second)
+        // Rejected: the removal (item stays at its row), the new time and the web find.
+        val few = planOps(plan, setOf(0))
+        assertEquals(
+            listOf(
+                de.wanderlogplus.client.PlanOp.AddSaved("s-garten", "08:30"),
+                de.wanderlogplus.client.PlanOp.Keep("i-2", null),
+                de.wanderlogplus.client.PlanOp.Keep("i-3"),
+                de.wanderlogplus.client.PlanOp.Keep("i-1"),
+            ),
+            few.first,
+        )
+        assertEquals(emptySet<String>(), few.second)
+    }
+
+    @Test fun planCardMarksRemovalsAppliesAndResets() {
+        val actions = RecordingActions()
+        val chat = ChatInfo("c1", "x", 0, 0, messages = listOf(
+            ChatMessage("a", ChatMessage.ROLE_ASSISTANT, "So ginge es:", 1, cards = listOf(ChatCard(ChatCard.KIND_PLAN, "Plan für Freitag, 02.04.2027", plan = plan))),
+        ))
+        rule.setContent {
+            WanderlogPlusTheme {
+                ChatScreen(chat, emptyList(), null, false, null, Fixtures.trip(), {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions)
+            }
+        }
+        rule.onNodeWithText("Entfällt").assertExists()
+        rule.onNodeWithText("09:00 → 10:00").assertExists()
+        rule.onNodeWithText("Plan-Check:\n- Moosgarten öffnet erst ca. 09:00.").assertExists()
+        rule.onNodeWithText("Plan übernehmen (4 Änderungen)").assertExists()
+        // Keep the noodle kitchen after all.
+        rule.onNodeWithTag("plan-step-a-0-2-check").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithText("bleibt").assertExists()
+        rule.onNodeWithText("Entfällt").assertDoesNotExist()
+        rule.onNodeWithTag("plan-apply-a-0").performSemanticsAction(SemanticsActions.OnClick)
+        val (date, ops, remove) = actions.plans.single()
+        assertEquals("2027-04-02", date)
+        assertEquals(emptySet<String>(), remove)
+        assertEquals(de.wanderlogplus.client.PlanOp.Keep("i-3"), ops[2])
+        rule.onNodeWithText("Übernommen").assertExists()
+        rule.onNodeWithTag("plan-reset-a-0").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("restore:2027-04-02", actions.calls.last())
+        rule.onNodeWithTag("plan-apply-a-0").assertExists()
     }
 
     @Test fun errorOffersRetryAndEmptyChatOffersExamples() {

@@ -46,12 +46,49 @@ data class ChatCard(
     /** The chat's planning suggestion: the day (yyyy-MM-dd) and the place (saved place or place id) to put it after. */
     val planDate: String? = null,
     val planAfter: String? = null,
+    /** A whole day plan ([KIND_PLAN]). */
+    val plan: ChatPlan? = null,
 ) {
     val canAdd: Boolean get() = kind == KIND_WEB && lat != null && lng != null
 
     companion object {
         const val KIND_PLACE = "place"
         const val KIND_WEB = "web"
+        const val KIND_PLAN = "plan"
+    }
+}
+
+/**
+ * A proposed program for [date], in order. Every existing item of the day appears as [ChatPlanStep.KEEP] or
+ * [ChatPlanStep.REMOVE]; [check] is the server's plan check of the result (German, short).
+ */
+@Serializable
+data class ChatPlan(val date: String, val steps: List<ChatPlanStep>, val check: String? = null)
+
+/**
+ * One row of a [ChatPlan]: keep an existing program item ([itemId], maybe at a new [time]), add a place (a saved one,
+ * or a web find with a location), or remove an item. [reason] is the chat's short note on the row.
+ */
+@Serializable
+data class ChatPlanStep(
+    val action: String,
+    val title: String,
+    val itemId: String? = null,
+    val savedPlaceId: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+    val category: String? = null,
+    /** "HH:mm" to set; null keeps the item's time (or none for a new one). */
+    val time: String? = null,
+    /** The item's time before the plan (for KEEP), to show what changes. */
+    val oldTime: String? = null,
+    val reason: String? = null,
+) {
+    companion object {
+        const val KEEP = "keep"
+        const val ADD = "add"
+        const val REMOVE = "remove"
     }
 }
 

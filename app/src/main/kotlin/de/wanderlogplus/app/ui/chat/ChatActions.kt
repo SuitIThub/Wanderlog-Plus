@@ -65,6 +65,12 @@ interface ChatActions {
 
     /** Adds the web find [card] (with a location) to the places of its region as an idea. */
     fun addFound(card: ChatCard)
+
+    /** Applies a day plan; the program before is saved in the day's history at [at] (epoch ms). */
+    fun applyPlan(date: String, ops: List<de.wanderlogplus.client.PlanOp>, remove: Set<String>, at: Long)
+
+    /** Restores the program of [date] saved at [at] ("Zurücksetzen" of a plan). */
+    fun restorePlan(date: String, at: Long)
 }
 
 /** The saved place a card stands for: its own id, or a saved place at the web find's spot (added meanwhile). */

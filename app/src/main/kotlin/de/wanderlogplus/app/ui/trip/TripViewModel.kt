@@ -105,6 +105,14 @@ class TripViewModel(
         e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position)
     }
 
+    /** Applies a chat's day plan; the program before is saved as a version at [at] (epoch ms). */
+    fun applyPlan(date: String, ops: List<de.wanderlogplus.client.PlanOp>, remove: Set<String>, at: Long) =
+        write { e, s -> e.applyDayPlan(s, date, ops, remove, "Vor Chat-Plan", at) }
+
+    /** Restores the day's version saved at [at]; the current program becomes a version too (at [now]). */
+    fun restoreVersion(date: String, at: Long, now: Long = System.currentTimeMillis()) =
+        write { e, s -> e.restoreDayVersion(s, date, at, now) }
+
     /** A chat's web find becomes a planned place of the day's region and a program item at [position]. */
     fun addFoundToDay(date: String, position: ItemPosition, name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory) =
         write { e, s -> e.addPlaceToDay(s, date, name, lat, lng, address, category, position) }
