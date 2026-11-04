@@ -79,6 +79,7 @@ class AppNavigationSmokeTest {
                     tripViewModelFactory = factory { TripViewModel({ flow }, edit, scope) },
                     placesViewModelFactory = factory { PlacesViewModel({ flow }, edit, scope) },
                     moreViewModelFactory = factory { MoreViewModel({ flow }, edit, scope) },
+                    budgetViewModelFactory = factory { de.wanderlogplus.app.ui.budget.BudgetViewModel(edit, scope, { null }, { "2027-04-02" }) },
                     importViewModelFactory = factory { ImportViewModel({ null }, onImported = {}) },
                     vaultScanViewModelFactory = factory {
                         de.wanderlogplus.app.ui.vault.VaultScanViewModel({ MutableStateFlow(null) }, { MutableStateFlow(0) }, { MutableStateFlow(0) }, {}, {})
@@ -132,12 +133,14 @@ class AppNavigationSmokeTest {
         rule.onNodeWithText("Alter Bergtempel").assertExists()
     }
 
-    @Test fun allFiveTabs() {
+    @Test fun allTabs() {
         launch()
         shows("today-header")
         tab("reise"); shows("trip-list")
         tab("orte"); shows("regions-list")
         tab("logistik"); shows("logistics-list")
+        // The real budget screen, not the tab placeholder.
+        tab("budget"); shows("budget-total"); shows("budget-add")
         tab("mehr"); shows("more-list")
         tab("heute"); shows("today-header")
     }

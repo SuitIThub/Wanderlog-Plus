@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.26.1
+
+- Behoben: Der Budget-Tab zeigte nur einen leeren Platzhalter statt der Übersicht.
+
 ## 0.26.0
 
 - **Budget (neuer Tab):** Alle Kosten der Reise mit Gesamtsumme, Summen nach Kategorie, was beim Anbieter noch offen ist, und pro Person „bezahlt / Anteil / Saldo“. „Ausgleich“ schlägt vor, wer wem wie viel zahlt; „Als bezahlt eintragen“ hält die Zahlung fest. Liste aller Kosten mit Filter nach Kategorie und Person.

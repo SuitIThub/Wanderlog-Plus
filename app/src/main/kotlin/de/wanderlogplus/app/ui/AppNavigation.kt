@@ -1017,7 +1017,7 @@ fun AppNavigation(
                 !(it == Tab.REISE && tripViewModelFactory != null) &&
                     !(it == Tab.HEUTE && tripViewModelFactory != null) &&
                     !(it == Tab.ORTE && placesViewModelFactory != null) &&
-                    !((it == Tab.LOGISTIK || it == Tab.MEHR) && moreViewModelFactory != null)
+                    !((it == Tab.LOGISTIK || it == Tab.BUDGET || it == Tab.MEHR) && moreViewModelFactory != null)
             }.forEach { tab ->
                 composable(tab.route) {
                     SyncedScreen(syncStatus, onRefresh) {
