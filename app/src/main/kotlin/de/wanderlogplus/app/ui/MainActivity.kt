@@ -199,6 +199,7 @@ class MainActivity : ComponentActivity() {
                         onPendingSetupConsumed = { pendingSetup.value = null },
                         reelsViewModelFactory = remember { reelsFactory(container) },
                         chatViewModelFactory = remember { chatFactory(container) },
+                        budgetViewModelFactory = remember { budgetFactory(container) },
                         vaultScanViewModelFactory = remember { vaultScanFactory(container) },
                         hasAdminToken = hasAdminToken,
                         pendingReelJob = reelJob,
@@ -283,6 +284,14 @@ class MainActivity : ComponentActivity() {
             adminApi = { t -> container.adminApi(t) },
             loadToken = { container.settings.adminToken() },
             saveToken = { t -> container.settings.setAdminToken(t) },
+        ) as T
+    }
+
+    private fun budgetFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.budget.BudgetViewModel(
+            { block -> container.edit(block) }, container.scope, { container.syncApi() },
+            today = { kotlinx.coroutines.runBlocking { container.settings.tripZone.first() }.now().toLocalDate().toString() },
         ) as T
     }
 

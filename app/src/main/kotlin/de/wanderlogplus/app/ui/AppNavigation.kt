@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Train
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -138,6 +139,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     REISE("reise", "Reise", Icons.Filled.CalendarMonth),
     ORTE("orte", "Orte", Icons.Filled.Place),
     LOGISTIK("logistik", "Logistik", Icons.Filled.Train),
+    BUDGET("budget", "Budget", Icons.Filled.AccountBalanceWallet),
     MEHR("mehr", "Mehr", Icons.Filled.MoreHoriz),
     ;
 
@@ -228,6 +230,8 @@ fun AppNavigation(
     onCheckUpdates: (() -> Unit)? = null,
     /** The trip chat (assistant); null hides the chat buttons. */
     chatViewModelFactory: ViewModelProvider.Factory? = null,
+    /** The budget (costs, splits); null hides the Kosten sections and leaves the Budget tab read-only. */
+    budgetViewModelFactory: ViewModelProvider.Factory? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -249,6 +253,14 @@ fun AppNavigation(
 
     val snackbar = remember { SnackbarHostState() }
     val chatVm: de.wanderlogplus.app.ui.chat.ChatViewModel? = chatViewModelFactory?.let { viewModel(factory = it) }
+    val budgetVm: de.wanderlogplus.app.ui.budget.BudgetViewModel? = budgetViewModelFactory?.let { viewModel(factory = it) }
+    val budgetMessage = budgetVm?.message?.collectAsState()?.value
+    LaunchedEffect(budgetMessage) {
+        if (budgetMessage != null) {
+            snackbar.showSnackbar(budgetMessage)
+            budgetVm.messageShown()
+        }
+    }
     val chatToday = rememberMinuteNow(clock).toLocalDate().toString()
     val chatPane = remember { de.wanderlogplus.app.ui.chat.ChatPaneHolder() }
     val openChat: (() -> Unit)? = chatVm?.takeIf { current != SETUP_ROUTE && current != de.wanderlogplus.app.ui.chat.CHAT_ROUTE }?.let { vm ->
@@ -404,6 +416,7 @@ fun AppNavigation(
         androidx.compose.runtime.CompositionLocalProvider(
             de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat,
             de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
+            de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
         ) {
         NavHost(
             nav,
@@ -861,6 +874,17 @@ fun AppNavigation(
                         }
                     }
                 }
+                composable(Tab.BUDGET.route) {
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
+                    val snap by vm.snapshot.collectAsState()
+                    val s = snap
+                    when {
+                        s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        s.isEmpty -> EmptyState(onSyncNow = onRefresh)
+                        budgetVm == null -> EmptyHint("Das Budget ist hier nicht verfügbar", Modifier.padding(24.dp))
+                        else -> de.wanderlogplus.app.ui.budget.BudgetScreen(s, rememberMinuteNow(clock).toLocalDate().toString(), budgetVm)
+                    }
+                }
                 composable(Tab.MEHR.route) {
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
@@ -1013,7 +1037,7 @@ fun AppNavigation(
 }
 
 /** Routes whose screen has no photo header; they show [de.wanderlogplus.app.ui.chat.ChatTopBar] instead. */
-private val CHAT_BAR_ROUTES = setOf(Tab.REISE.route, Tab.ORTE.route, Tab.LOGISTIK.route, Tab.MEHR.route)
+private val CHAT_BAR_ROUTES = setOf(Tab.REISE.route, Tab.ORTE.route, Tab.LOGISTIK.route, Tab.BUDGET.route, Tab.MEHR.route)
 
 /** Shows the outcome of a finished place research once ("3 Orte recherchiert"). */
 @Composable

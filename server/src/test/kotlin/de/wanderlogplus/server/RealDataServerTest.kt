@@ -33,7 +33,7 @@ class RealDataServerTest {
                 val c = createClient { install(ContentNegotiation) { json() } }
                 val first = c.post("/api/import/wanderlog") { authed() }
                 assertEquals(HttpStatusCode.OK, first.status)
-                assertEquals(533, first.body<ImportLogEntry>().created)
+                assertEquals(536, first.body<ImportLogEntry>().created)
 
                 val ids = HashSet<String>()
                 var since = 0L
@@ -42,7 +42,7 @@ class RealDataServerTest {
                     page.records.forEach { ids += "${it.type}/${it.id}" }
                     since = page.nextSeq
                 } while (page.hasMore)
-                assertEquals(533, ids.size)
+                assertEquals(536, ids.size)
 
                 val second = c.post("/api/import/wanderlog") { authed() }.body<ImportLogEntry>()
                 assertTrue(second.ok)
