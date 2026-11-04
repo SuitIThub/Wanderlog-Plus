@@ -9,6 +9,7 @@ import de.wanderlogplus.client.SyncStateStore
 import de.wanderlogplus.shared.model.Criteria
 import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.security.SecureRandom
 
@@ -67,6 +68,15 @@ class SettingsStore(context: Context) : SyncStateStore {
             it[aiCriteriaKey] = c.criteria.joinToString(",")
             it[aiExtraKey] = c.extraPrompt
         }
+    }
+
+    private val adminTokenKey = stringPreferencesKey("admin_token")
+
+    /** The admin token for "Zugänge verwalten" (per profile); never used for sync. */
+    suspend fun adminToken(): String? = appContext.serverDataStore.data.first()[adminTokenKey]?.takeIf { it.isNotBlank() }
+
+    suspend fun setAdminToken(token: String?) {
+        appContext.serverDataStore.edit { if (token == null) it.remove(adminTokenKey) else it[adminTokenKey] = token }
     }
 
     private val simDateKey = stringPreferencesKey("sim_date")

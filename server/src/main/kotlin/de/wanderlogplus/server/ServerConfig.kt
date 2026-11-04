@@ -19,6 +19,8 @@ data class ServerConfig(
     val parallelProcessor: String = "base",
     /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
     val instagramCookies: Path? = null,
+    /** Manages the access tokens (the /api/admin endpoints); never a sync token. Null: no administration. */
+    val adminToken: String? = null,
     /** Apify token for public-transport connections in Japan; without it `/api/transit` answers `transit_not_configured`. */
     val apifyToken: String? = null,
     /** Apify actor of the timetable search ("Japan Train Route & Fare Finder"). */
@@ -69,6 +71,10 @@ data class ServerConfig(
                 parallelKey = env["WLP_PARALLEL_KEY"]?.takeIf { it.isNotBlank() },
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
+                adminToken = env["WLP_ADMIN_TOKEN"]?.trim()?.takeIf { it.isNotBlank() }?.also { admin ->
+                    require(admin.length >= MIN_TOKEN_LENGTH) { "WLP_ADMIN_TOKEN must be at least $MIN_TOKEN_LENGTH characters" }
+                    require(admin !in tokens.values) { "WLP_ADMIN_TOKEN must differ from every WLP_TOKENS token" }
+                },
                 apifyToken = env["WLP_APIFY_TOKEN"]?.takeIf { it.isNotBlank() },
                 apifyTransitActor = env["WLP_APIFY_TRANSIT_ACTOR"]?.takeIf { it.isNotBlank() } ?: ApifyTransitSource.DEFAULT_ACTOR,
             )

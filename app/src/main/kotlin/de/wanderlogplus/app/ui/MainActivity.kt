@@ -188,6 +188,7 @@ class MainActivity : ComponentActivity() {
                         simulatedTime = simulated?.takeIf { debugMode },
                         onSimulatedTime = if (debugMode) { s -> scope.launch { container.settings.setSimulatedTime(s) } } else null,
                         currentServer = server,
+                        accessViewModelFactory = remember { accessFactory(container) },
                         attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                         attachmentFiles = container.attachmentFiles,
                         onReloadMapImages = routeMaps::clearCache,
@@ -236,6 +237,15 @@ class MainActivity : ComponentActivity() {
             prefs = PrefsUpdatePrefs(applicationContext),
             downloadDir = java.io.File(cacheDir, "updates"),
             autoCheck = !isDebugBuild,
+        ) as T
+    }
+
+    private fun accessFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.more.AccessViewModel(
+            adminApi = { t -> container.adminApi(t) },
+            loadToken = { container.settings.adminToken() },
+            saveToken = { t -> container.settings.setAdminToken(t) },
         ) as T
     }
 

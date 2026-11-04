@@ -145,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
             else -> emptySet()
         }
 }
@@ -208,6 +208,8 @@ fun AppNavigation(
     simulatedTime: de.wanderlogplus.app.data.SimulatedTime? = null,
     /** Sets or clears it; null outside debug mode (hides the controls). */
     onSimulatedTime: ((de.wanderlogplus.app.data.SimulatedTime?) -> Unit)? = null,
+    /** "Zugänge verwalten" (admin token); null hides it. */
+    accessViewModelFactory: androidx.lifecycle.ViewModelProvider.Factory? = null,
     /** The connection in use, for "QR-Code anzeigen" in Einstellungen. */
     currentServer: ServerSettings? = null,
     /** The app runs with the separate debug profile (own server and data). */
@@ -810,6 +812,24 @@ fun AppNavigation(
                         de.wanderlogplus.app.ui.more.AiSettingsScreen(assessConfig, onAssessConfig)
                     }
                 }
+                if (accessViewModelFactory != null) {
+                    composable(de.wanderlogplus.app.ui.more.ACCESS_ROUTE) {
+                        val vm: de.wanderlogplus.app.ui.more.AccessViewModel = viewModel(factory = accessViewModelFactory)
+                        val state by vm.state.collectAsState()
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            de.wanderlogplus.app.ui.more.AccessScreen(
+                                state = state,
+                                serverUrl = currentServer?.url,
+                                onSaveAdminToken = vm::setAdminToken,
+                                onForgetAdminToken = vm::forgetAdminToken,
+                                onCreate = vm::create,
+                                onDelete = vm::delete,
+                                onDismissCreated = vm::dismissCreated,
+                                onBack = { nav.popBackStack() },
+                            )
+                        }
+                    }
+                }
                 composable(SETTINGS_ROUTE) {
                     // SettingsScreen scrolls itself; a scrollable wrapper would nest two vertical scrolls (crash).
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
@@ -829,6 +849,7 @@ fun AppNavigation(
                             debugMode = debugMode,
                             onDebugMode = onDebugMode,
                             server = currentServer,
+                            onOpenAccess = accessViewModelFactory?.let { { nav.navigate(de.wanderlogplus.app.ui.more.ACCESS_ROUTE) } },
                             simulatedTime = simulatedTime,
                             onSimulatedTime = onSimulatedTime,
                             onReloadMaps = {

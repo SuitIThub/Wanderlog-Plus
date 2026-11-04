@@ -52,12 +52,12 @@ fun qrBitmap(text: String, scale: Int = 8): ImageBitmap {
  * token, which is said plainly. Tags: `setup-qr-dialog`, `setup-qr`.
  */
 @Composable
-fun SetupQrDialog(server: ServerSettings, debugMode: Boolean, onDismiss: () -> Unit) {
+fun SetupQrDialog(server: ServerSettings, debugMode: Boolean, onDismiss: () -> Unit, title: String? = null) {
     val image = remember(server) { qrBitmap(SetupLink.build(server)) }
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("setup-qr-dialog"),
-        title = { Text(if (debugMode) "QR-Code (Debug-Server)" else "QR-Code für die Einrichtung") },
+        title = { Text(title ?: if (debugMode) "QR-Code (Debug-Server)" else "QR-Code für die Einrichtung") },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Image(

@@ -65,6 +65,7 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
                 st.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS ai_jobs(id TEXT PRIMARY KEY, kind TEXT NOT NULL, created_at INTEGER NOT NULL, json TEXT NOT NULL)")
                 st.execute("CREATE TABLE IF NOT EXISTS route_cache(key TEXT PRIMARY KEY, json TEXT NOT NULL, created_at INTEGER NOT NULL)")
+                st.execute("CREATE TABLE IF NOT EXISTS app_tokens(name TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)")
             }
             conn.prepareStatement("INSERT OR IGNORE INTO meta(key, value) VALUES ('db_epoch', ?)").use { ps ->
                 ps.setString(1, UUID.randomUUID().toString()); ps.executeUpdate()
@@ -252,6 +253,30 @@ class SqliteStore(dbFile: Path) : EntityStore, AutoCloseable {
         }
         return out
     }
+
+    /** Access tokens created in the app: name -> (token, created_at). */
+    @Synchronized
+    fun appTokens(): Map<String, Pair<String, Long>> =
+        conn.prepareStatement("SELECT name, token, created_at FROM app_tokens").use { ps ->
+            ps.executeQuery().use { rs ->
+                val out = linkedMapOf<String, Pair<String, Long>>()
+                while (rs.next()) out[rs.getString(1)] = rs.getString(2) to rs.getLong(3)
+                out
+            }
+        }
+
+    @Synchronized
+    fun putAppToken(name: String, token: String, createdAt: Long) {
+        conn.prepareStatement("INSERT INTO app_tokens(name, token, created_at) VALUES (?,?,?)").use { ps ->
+            ps.setString(1, name); ps.setString(2, token); ps.setLong(3, createdAt)
+            ps.executeUpdate()
+        }
+    }
+
+    /** Removes an app token; false when there was none. */
+    @Synchronized
+    fun deleteAppToken(name: String): Boolean =
+        conn.prepareStatement("DELETE FROM app_tokens WHERE name = ?").use { ps -> ps.setString(1, name); ps.executeUpdate() > 0 }
 
     /** Cached Routes API result (`{}` = no route) and the time it was stored, or null. */
     @Synchronized

@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.18.0
+
+- **Zugänge verwalten** (Einstellungen → Server → „Zugänge verwalten (Admin)“): Mit dem Admin-Token des Servers (`WLP_ADMIN_TOKEN`) siehst du alle Zugänge, legst neue an und widerrufst sie. Jeder Zugang hat einen QR-Code, mit dem sich ein weiteres Gerät direkt einrichtet. Den Admin-Token gibst du einmal ein oder scannst ihn; er bleibt auf dem Gerät und wird nie zum Synchronisieren benutzt.
+
 ## 0.17.0
 
 - **Heute simulieren** (nur im Debug-Modus, Einstellungen → Entwicklung): ein Datum und auf Wunsch eine Uhrzeit, die der Heute-Screen vorgibt, um ihn vor der Abreise zu testen. Eine Leiste über „Heute“ zeigt den simulierten Tag, schaltet einen Tag vor oder zurück oder die Simulation aus.
