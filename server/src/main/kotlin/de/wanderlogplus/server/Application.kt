@@ -83,6 +83,8 @@ class Services(
     val vault: VaultStore = VaultStore.forConfig(config),
     /** The trip chat (assistant with the saved places and web search). */
     val chats: ChatService = ChatService(store, null),
+    /** Weather per trip day (Open-Meteo, JMA models); without HTTP it answers an empty list. */
+    val weather: WeatherService = WeatherService(store, null),
 )
 
 @Serializable
@@ -252,6 +254,10 @@ fun Application.module(services: Services) {
                 val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
                 val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
+            }
+            get("/api/weather") {
+                val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
+                call.respond(withContext(Dispatchers.IO) { services.weather.forTrip(de.wanderlogplus.server.ai.ChatTrip.from(services.store), today) })
             }
             post("/api/routes") {
                 val req = call.receive<RouteRequest>()

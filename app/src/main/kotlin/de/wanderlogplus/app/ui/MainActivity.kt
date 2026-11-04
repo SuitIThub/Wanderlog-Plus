@@ -182,7 +182,18 @@ class MainActivity : ComponentActivity() {
                     }
                     onPauseOrDispose { }
                 }
-                CompositionLocalProvider(LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs) {
+                val tripWeather by container.weather.weather.collectAsState()
+                // The repository asks the server only when its weather is older than 3 hours.
+                LaunchedEffect(hasServer) {
+                    if (hasServer == true) while (true) {
+                        container.weather.refresh()
+                        kotlinx.coroutines.delay(15 * 60_000L)
+                    }
+                }
+                CompositionLocalProvider(
+                    LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs,
+                    de.wanderlogplus.app.ui.weather.LocalTripWeather provides tripWeather,
+                ) {
                     AppNavigation(
                         pendingSetup = pending,
                         onPendingSetupConsumed = { pendingSetup.value = null },

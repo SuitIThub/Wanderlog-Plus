@@ -37,6 +37,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -144,6 +146,8 @@ fun PlaceDetailScreen(
     onOpenMap: (() -> Unit)? = null,
     /** Opens photo [index] of the gallery full screen; null: photos are only shown. */
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
+    /** "Reserviert" for a place that needs a reservation. */
+    onSetReserved: (savedPlaceId: String, reserved: Boolean) -> Unit = { _, _ -> },
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -217,6 +221,8 @@ fun PlaceDetailScreen(
                     )
                 }
             }
+            val reason = remember(saved) { de.wanderlogplus.shared.query.Reservations.reason(saved) }
+            if (reason != null || saved.reserved) ReservationRow(reason, saved.reserved) { onSetReserved(saved.id, it) }
         }
 
         if (place != null && onOpenLink != null) {
@@ -376,4 +382,29 @@ private fun PlaceEditForm(
         modifier = Modifier.fillMaxWidth(),
     )
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("place-edit-done")) { Text("Fertig") }
+}
+
+/** "Reservierung nötig" with the reason and the "Reserviert" switch. */
+@Composable
+private fun ReservationRow(reason: String?, reserved: Boolean, onReserved: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = if (reserved) scheme.secondaryContainer else scheme.tertiaryContainer,
+        contentColor = if (reserved) scheme.onSecondaryContainer else scheme.onTertiaryContainer,
+        modifier = Modifier.fillMaxWidth().testTag("place-reservation"),
+    ) {
+        Row(Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(
+                if (reserved) androidx.compose.material.icons.Icons.Filled.EventAvailable else androidx.compose.material.icons.Icons.Filled.ConfirmationNumber,
+                contentDescription = null,
+                modifier = Modifier.padding(end = 10.dp),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(if (reserved) "Reserviert" else "Reservierung nötig", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                reason?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+            }
+            androidx.compose.material3.Switch(checked = reserved, onCheckedChange = onReserved, modifier = Modifier.testTag("place-reserved-toggle"))
+        }
+    }
 }

@@ -73,6 +73,8 @@ data class SavedPlace(
     val worthReason: String = "",
     /** Multi-criteria judgement and research results; null = never researched or judged by criteria. */
     val dossier: PlaceDossier? = null,
+    /** The travellers booked it (a reservation or tickets): no more reservation reminders. */
+    val reserved: Boolean = false,
 )
 
 @Serializable

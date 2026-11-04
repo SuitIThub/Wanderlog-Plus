@@ -47,10 +47,12 @@ class DeadlineWorker(
         if (!input.enabled || !canNotify(applicationContext)) return Result.success()
         val prefs = applicationContext.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(applicationContext, PREFS), Context.MODE_PRIVATE)
         val sent = prefs.getStringSet(SENT, emptySet()).orEmpty().toSet()
-        val due = dueReminders(input.snapshot.stays, input.snapshot.places, input.today, sent)
+        val s = input.snapshot
+        val open = de.wanderlogplus.shared.query.Reservations.open(s.savedPlaces, s.days, s.dayItems, input.today.toString())
+        val due = dueReminders(s.stays, s.places, input.today, sent) + dueReservationReminders(open, s.places, input.today, sent)
         if (due.isEmpty()) return Result.success()
         ensureChannel(applicationContext)
-        val open = PendingIntent.getActivity(
+        val launch = PendingIntent.getActivity(
             applicationContext, 0,
             Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -58,13 +60,15 @@ class DeadlineWorker(
         val nm = NotificationManagerCompat.from(applicationContext)
         val posted = mutableSetOf<String>()
         for (r in due) {
-            val n = NotificationCompat.Builder(applicationContext, CHANNEL)
+            val builder = NotificationCompat.Builder(applicationContext, CHANNEL)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(r.title)
                 .setContentText(r.text)
-                .setContentIntent(open)
+                .setContentIntent(launch)
                 .setAutoCancel(true)
-                .build()
+            r.detail?.let { builder.setStyle(NotificationCompat.BigTextStyle().bigText(it)) }
+            r.savedPlaceId?.let { id -> builder.addAction(0, "Reserviert", ReservationDoneReceiver.intent(applicationContext, id, r.key.hashCode())) }
+            val n = builder.build()
             try {
                 @Suppress("MissingPermission") // checked in canNotify
                 nm.notify(r.key.hashCode(), n)

@@ -74,12 +74,20 @@ internal fun DayProgramTab(
     history: List<de.wanderlogplus.shared.model.DayVersion> = emptyList(),
     /** Restores a version by its time; null hides "Verlauf". */
     onRestoreVersion: ((Long) -> Unit)? = null,
+    /** The day's weather; null hides the card. */
+    weather: de.wanderlogplus.shared.sync.DayWeather? = null,
+    /** "Umplanen" on a rainy day; null hides the button. */
+    onReplan: (() -> Unit)? = null,
 ) {
     var showHistory by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     if (showHistory && onRestoreVersion != null) {
         DayHistoryDialog(snapshot, history, onRestore = { at -> showHistory = false; onRestoreVersion(at) }, onDismiss = { showHistory = false })
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
+        if (weather != null) {
+            val outdoor = androidx.compose.runtime.remember(snapshot, date) { de.wanderlogplus.app.ui.weather.outdoorPlacesOn(snapshot, date) }
+            de.wanderlogplus.app.ui.weather.DayWeatherCard(weather, Modifier.padding(bottom = 8.dp), outdoor = outdoor, onReplan = onReplan)
+        }
         val places = items.count { it.kind == DayItemKind.PLACE }
         val legsSwitch = onShowLegs != null && places >= 2
         val mapButton = onOpenMap != null && places >= 1

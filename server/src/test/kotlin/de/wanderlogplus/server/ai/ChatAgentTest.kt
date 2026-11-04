@@ -309,6 +309,44 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `day and place context say whether a reservation is still open`() {
+        fun with(reserved: Boolean) = ChatTrip(
+            trip.trip, trip.regions, trip.places,
+            trip.saved.map { if (it.id == "s-ramen") it.copy(tags = listOf("Nur mit Reservierung"), reserved = reserved) else it },
+            trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains,
+        )
+        val agent = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }
+        val open = agent.systemPrompt(with(false), ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertTrue("Ramen Ichiran [id=s-ramen]" in open && "Reservierung nötig, noch nicht reserviert (Tag „Nur mit Reservierung“)" in open, open)
+        val done = agent.systemPrompt(with(true), ChatContext(ChatScreens.PLACE, savedPlaceId = "s-ramen"))
+        assertTrue("Reserviert\n" in done, done)
+    }
+
+    @Test
+    fun `the weather of the trip days is in the overview and the day`() {
+        val weather = de.wanderlogplus.shared.sync.TripWeather(listOf(
+            de.wanderlogplus.shared.sync.DayWeather(
+                "2027-05-19", place = "Hotel Gion", code = 63, tempMin = 14.0, tempMax = 19.0, rainChance = 85, rainMm = 12.0,
+                hours = listOf(de.wanderlogplus.shared.sync.HourWeather("09:00", 63, 15.5, 90), de.wanderlogplus.shared.sync.HourWeather("10:00", 61, 16.0, 80)),
+            ),
+            de.wanderlogplus.shared.sync.DayWeather("2027-05-22", source = de.wanderlogplus.shared.sync.DayWeather.SOURCE_CLIMATE, tempMin = 12.0, tempMax = 21.0, rainyDays = 40),
+        ))
+        var asked: String? = null
+        val model = ScriptedModel(listOf(text("Nimm einen Schirm mit.")))
+        ChatAgent(model, null, weather = { _, today -> asked = today; weather }) { "2027-05-19" }
+            .answer(listOf(user("Wie wird das Wetter?", ChatContext(ChatScreens.DAY, date = "2027-05-19"))), trip)
+        assertEquals("2027-05-19", asked)
+        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        assertTrue("Wetter (bei Hotel Gion): Regen, 14–19 °C, Regen 85 % (12 mm) – Vorhersage JMA" in system, system)
+        assertTrue("Wetter im Tagesverlauf: 09:00 Regen 15 °C Regen 90 %\n" in system, system) // every third hour
+        assertTrue("Wetter: Klima-Mittel: 12–21 °C, an 40 % der Tage Regen" in system, system)
+        // A failing weather service does not stop the answer.
+        val again = ScriptedModel(listOf(text("ok")))
+        ChatAgent(again, null, weather = { _, _ -> error("down") }) { "2027-05-19" }.answer(listOf(user("Hallo")), trip)
+        assertFalse("Wetter (" in again.seen.first().first()["content"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `openrouter tool turn parsing keeps calls and a clean history message`() {
         val body = """{"choices":[{"message":{"role":"assistant","content":null,"reasoning":"x",
             "tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_place","arguments":"{\"id\":\"s-kiyo\"}"}}]}}]}"""

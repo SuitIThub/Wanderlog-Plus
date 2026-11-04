@@ -345,6 +345,7 @@ fun AppNavigation(
             PlaceDetailScreen(
                 snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions,
                 onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
+                onSetReserved = vm::setReserved,
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
@@ -456,6 +457,7 @@ fun AppNavigation(
                                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
                                 onOpenLink = onOpenLink,
                                 available = attachmentActions?.available ?: { true },
+                                onOpenPlace = { id -> nav.navigateToTab(Tab.ORTE); nav.navigate(placeRoute(id)) },
                             )
                             }
                         }

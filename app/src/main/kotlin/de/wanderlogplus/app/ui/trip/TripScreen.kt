@@ -135,6 +135,9 @@ private fun DayCardRow(c: DayCard, isToday: Boolean, onOpenDay: (String) -> Unit
                             Text("Heute", Modifier.padding(horizontal = 9.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium)
                         }
                     }
+                    de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(c.view.date)?.let { w ->
+                        de.wanderlogplus.app.ui.weather.WeatherBadge(w, color = if (isToday) scheme.onPrimaryContainer else scheme.onSurfaceVariant)
+                    }
                 }
                 Text(
                     c.title,

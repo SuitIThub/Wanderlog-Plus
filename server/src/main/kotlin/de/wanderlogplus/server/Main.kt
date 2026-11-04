@@ -38,6 +38,7 @@ fun main() {
         override fun transit(req: de.wanderlogplus.shared.sync.TransitRequest) = transit.search(req)
         override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) = routes.compute(req)
     }.takeIf { transit.configured || routes.configured }
+    val weather = WeatherService(store, OpenMeteoHttp())
     val services = Services(
         config, store, sync, FileStore.forConfig(config),
         ImportService(store, sync, tripSourceFrom(config)),
@@ -53,11 +54,15 @@ fun main() {
             writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         ),
         transit = transit,
+        weather = weather,
         chats = ChatService(
             store,
             openRouter?.let { model ->
                 // "Today" in Japan, where the trip happens.
-                ChatAgent(model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways) {
+                ChatAgent(
+                    model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways,
+                    weather = { trip, today -> weather.forTrip(trip, today) },
+                ) {
                     java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
                 }
             },

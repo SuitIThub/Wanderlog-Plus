@@ -200,6 +200,8 @@ fun DayDetailScreen(
                     onOpenPlace = onOpenPlace,
                     history = day?.history.orEmpty(),
                     onRestoreVersion = onRestoreVersion?.let { restore -> { at: Long -> restore(date, at) } },
+                    weather = de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(date),
+                    onReplan = de.wanderlogplus.app.ui.design.LocalOpenChat.current,
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,

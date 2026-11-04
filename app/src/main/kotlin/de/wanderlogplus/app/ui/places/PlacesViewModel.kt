@@ -241,6 +241,9 @@ class PlacesViewModel(
 
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
+
+    fun setReserved(savedPlaceId: String, reserved: Boolean) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("reserved" to JsonPrimitive(reserved))) }
 }
 
 /** At most this many places per research job (server limit). */

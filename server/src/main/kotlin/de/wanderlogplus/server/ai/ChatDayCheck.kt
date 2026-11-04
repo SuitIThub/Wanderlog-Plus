@@ -3,7 +3,9 @@ package de.wanderlogplus.server.ai
 import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.PlaceCategory
+import de.wanderlogplus.shared.query.WeatherFit
 import de.wanderlogplus.shared.query.isOpenAt
+import de.wanderlogplus.shared.sync.WeatherText
 import de.wanderlogplus.shared.query.isOpenOn
 import de.wanderlogplus.shared.sync.TravelMode
 import java.time.DayOfWeek
@@ -149,8 +151,17 @@ class ChatDayCheck(private val t: ChatTrip) {
             }
         }
         if (clock >= 24 * 60) issues += "Der Plan geht über Mitternacht hinaus."
+        val weather = t.weather[date]
+        if (weather != null && WeatherText.isRainy(weather)) {
+            val outdoor = stops.filter { s -> WeatherFit.isWeatherSensitive(t.savedFor(s.placeId), t.places[s.placeId]) }.map { it.name }.distinct()
+            if (outdoor.isNotEmpty()) {
+                issues += "Regen erwartet (${WeatherText.summary(weather)}): ${outdoor.joinToString(", ")} " +
+                    (if (outdoor.size == 1) "ist" else "sind") + " eher etwas für gutes Wetter."
+            }
+        }
         return buildString {
             append("Zeitplan ").append(germanDate(date)).append(" (geschätzt: Wege aus Luftlinie oder gewählter Verbindung, Aufenthalt aus typischer Dauer):\n")
+            weather?.let { append("Wetter: ").append(WeatherText.summary(it)).append(" – ").append(WeatherText.sourceLabel(it)).append('\n') }
             lines.forEach { append("- ").append(it).append('\n') }
             if (issues.isEmpty()) append("Keine Probleme gefunden.\n") else {
                 append("Probleme:\n")

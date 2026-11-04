@@ -74,4 +74,20 @@ class ChatDayCheckTest {
         assertTrue("Keine Probleme gefunden." in fine, fine)
         assertEquals("Ungültiges Datum.", check.check("x", emptyList()))
     }
+
+    @Test
+    fun `rain on a day with outdoor places is a problem and the weather is shown`() {
+        val wet = trip.withWeather(
+            de.wanderlogplus.shared.sync.TripWeather(listOf(
+                de.wanderlogplus.shared.sync.DayWeather("2027-05-21", code = 63, tempMin = 14.0, tempMax = 19.0, rainChance = 90, rainMm = 15.0),
+                de.wanderlogplus.shared.sync.DayWeather("2027-05-22", code = 1, tempMin = 15.0, tempMax = 24.0, rainChance = 10, rainMm = 0.0),
+            )),
+        )
+        val c = ChatDayCheck(wet)
+        val r = c.check("2027-05-21", c.programStops("2027-05-21"))
+        assertTrue("Wetter: Regen, 14–19 °C, Regen 90 % (15 mm) – Vorhersage JMA" in r, r)
+        assertTrue("Regen erwartet (Regen, 14–19 °C, Regen 90 % (15 mm)): Moosgarten, Nara-Park sind eher etwas für gutes Wetter." in r, r)
+        val dry = c.check("2027-05-22", c.programStops("2027-05-22"))
+        assertTrue("Regen erwartet" !in dry, dry)
+    }
 }
