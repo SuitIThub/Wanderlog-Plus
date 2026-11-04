@@ -11,6 +11,8 @@ data class ServerConfig(
     val importFile: Path?,
     /** Google Routes API key; without it, route computation answers `routes_not_configured`. */
     val googleRoutesKey: String? = null,
+    /** Google key for place photos (Places API New); falls back to [googleRoutesKey]. */
+    val googlePlacesKey: String? = null,
     /** OpenRouter key for the assistant (reel analysis, worth judgements); without it those answer `ai_not_configured`. */
     val openRouterKey: String? = null,
     val aiModel: String = DEFAULT_AI_MODEL,
@@ -66,6 +68,7 @@ data class ServerConfig(
                 tripKey = env["WLP_TRIP_KEY"]?.takeIf { it.isNotBlank() },
                 importFile = env["WLP_IMPORT_FILE"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
                 googleRoutesKey = env["WLP_GOOGLE_ROUTES_KEY"]?.takeIf { it.isNotBlank() },
+                googlePlacesKey = env["WLP_GOOGLE_PLACES_KEY"]?.takeIf { it.isNotBlank() } ?: env["WLP_GOOGLE_ROUTES_KEY"]?.takeIf { it.isNotBlank() },
                 openRouterKey = env["WLP_OPENROUTER_KEY"]?.takeIf { it.isNotBlank() },
                 aiModel = env["WLP_AI_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL,
                 parallelKey = env["WLP_PARALLEL_KEY"]?.takeIf { it.isNotBlank() },

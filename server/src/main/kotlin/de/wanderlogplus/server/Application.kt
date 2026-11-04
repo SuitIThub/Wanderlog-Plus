@@ -87,6 +87,8 @@ class Services(
     val weather: WeatherService = WeatherService(store, null),
     /** Euro exchange rates for the budget (ECB via Frankfurter). */
     val rates: RatesService = RatesService(store, null),
+    /** Google photos of places (Places API); without a key `/api/places/photos` answers `photos_not_configured`. */
+    val photos: PlacePhotosService = PlacePhotosService(store, config.dataDir.resolve("place-photos"), null),
 )
 
 @Serializable
@@ -162,6 +164,8 @@ fun Application.module(services: Services) {
         exception<TransitNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("transit_not_configured")) }
         exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
         exception<RatesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("rates_unavailable")) }
+        exception<PhotosNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("photos_not_configured")) }
+        exception<PhotosUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("photos_unavailable")) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
         exception<ChatBusy> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("chat_busy")) }
@@ -257,6 +261,17 @@ fun Application.module(services: Services) {
                 val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
                 val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
+            }
+            get("/api/places/photos") {
+                val id = call.request.queryParameters["placeId"] ?: throw BadInput()
+                call.respond(de.wanderlogplus.shared.sync.PlacePhotos(withContext(Dispatchers.IO) { services.photos.list(id) }))
+            }
+            get("/api/places/photos/media") {
+                val name = call.request.queryParameters["name"] ?: throw BadInput()
+                val w = call.request.queryParameters["w"]?.toIntOrNull() ?: 1200
+                val path = withContext(Dispatchers.IO) { services.photos.media(name, w) }
+                call.response.headers.append("X-Content-Type-Options", "nosniff")
+                call.respond(LocalFileContent(path.toFile(), ContentType.Image.JPEG))
             }
             get("/api/rates") {
                 val from = call.request.queryParameters["from"] ?: throw BadInput()

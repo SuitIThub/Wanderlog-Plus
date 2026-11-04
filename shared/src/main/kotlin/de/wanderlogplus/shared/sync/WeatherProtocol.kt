@@ -130,3 +130,10 @@ object WeatherText {
 /** `GET /api/rates?from=JPY&date=…`: euros per unit of [from] on [date] (the business day the rate is from). */
 @Serializable
 data class RateInfo(val from: String, val to: String = "EUR", val rate: Double, val date: String)
+
+/** A Google photo of a place (`GET /api/places/photos`); [name] fetches it, [author] must be credited. */
+@Serializable
+data class PlacePhoto(val name: String, val width: Int = 0, val height: Int = 0, val author: String = "", val authorUri: String? = null)
+
+@Serializable
+data class PlacePhotos(val photos: List<PlacePhoto> = emptyList())
