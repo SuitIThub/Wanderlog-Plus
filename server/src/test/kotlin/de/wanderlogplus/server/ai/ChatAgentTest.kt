@@ -309,6 +309,20 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `day and place context say whether a reservation is still open`() {
+        fun with(reserved: Boolean) = ChatTrip(
+            trip.trip, trip.regions, trip.places,
+            trip.saved.map { if (it.id == "s-ramen") it.copy(tags = listOf("Nur mit Reservierung"), reserved = reserved) else it },
+            trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains,
+        )
+        val agent = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }
+        val open = agent.systemPrompt(with(false), ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertTrue("Ramen Ichiran [id=s-ramen]" in open && "Reservierung nötig, noch nicht reserviert (Tag „Nur mit Reservierung“)" in open, open)
+        val done = agent.systemPrompt(with(true), ChatContext(ChatScreens.PLACE, savedPlaceId = "s-ramen"))
+        assertTrue("Reserviert\n" in done, done)
+    }
+
+    @Test
     fun `the weather of the trip days is in the overview and the day`() {
         val weather = de.wanderlogplus.shared.sync.TripWeather(listOf(
             de.wanderlogplus.shared.sync.DayWeather(

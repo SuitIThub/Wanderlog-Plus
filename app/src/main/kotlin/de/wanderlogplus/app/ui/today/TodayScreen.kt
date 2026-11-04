@@ -82,6 +82,8 @@ fun TodayScreen(
     onOpenLink: ((ExternalLink) -> Unit)? = null,
     /** Whether a file is stored locally (by hash); unavailable tickets are marked. */
     available: (hash: String) -> Boolean = { true },
+    /** Opens a place (from "Offene Reservierungen"); null: the cards are not tappable. */
+    onOpenPlace: ((savedPlaceId: String) -> Unit)? = null,
 ) {
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
@@ -91,17 +93,17 @@ fun TodayScreen(
     }
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
-        is TodayState.Before -> Before(snapshot, state, modifier)
+        is TodayState.Before -> Before(snapshot, state, now, onOpenPlace, modifier)
         TodayState.After -> Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, onOpenPlace, modifier)
     }
 }
 
 @Composable
-private fun Before(snapshot: TripSnapshot, state: TodayState.Before, modifier: Modifier) {
+private fun Before(snapshot: TripSnapshot, state: TodayState.Before, now: LocalDateTime, onOpenPlace: ((String) -> Unit)?, modifier: Modifier) {
     val accent = MaterialTheme.colorScheme.primary
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Box(Modifier.fillMaxWidth().height(170.dp).background(heroGradient(accent))) {
@@ -146,6 +148,9 @@ private fun Before(snapshot: TripSnapshot, state: TodayState.Before, modifier: M
                 }
             }
         }
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OpenReservations(snapshot, now.toLocalDate().toString(), null, onOpenPlace)
+        }
     }
 }
 
@@ -158,6 +163,7 @@ private fun During(
     onOpenAttachment: (Attachment) -> Unit,
     onOpenLink: ((ExternalLink) -> Unit)?,
     available: (String) -> Boolean,
+    onOpenPlace: ((String) -> Unit)?,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -272,7 +278,9 @@ private fun During(
             // Unfolded: the day's timeline on the left, stay and "Jetzt geöffnet" on the right.
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(8.dp)) { timeline() }
-                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) { weatherBlock(); stayBlock(); openBlock() }
+                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    weatherBlock(); stayBlock(); OpenReservations(snapshot, date, RESERVATION_DAYS_DURING, onOpenPlace, accent); openBlock()
+                }
             }
         } else {
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -280,6 +288,7 @@ private fun During(
                 weatherBlock()
                 stayBlock()
                 timeline()
+                OpenReservations(snapshot, date, RESERVATION_DAYS_DURING, onOpenPlace, accent)
                 openBlock()
             }
         }
@@ -318,5 +327,41 @@ internal fun Section(title: String, content: @Composable () -> Unit) {
         androidx.compose.material3.HorizontalDivider(Modifier.padding(bottom = 8.dp))
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp))
         content()
+    }
+}
+
+/** During the trip only reservations for the next days are listed. */
+private const val RESERVATION_DAYS_DURING = 14L
+
+/** Planned places that still need a reservation (from [today], at most [withinDays] ahead when set). */
+@Composable
+private fun OpenReservations(
+    snapshot: TripSnapshot,
+    today: String,
+    withinDays: Long?,
+    onOpenPlace: ((String) -> Unit)?,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    val open = remember(snapshot, today) {
+        val all = de.wanderlogplus.shared.query.Reservations.open(snapshot.savedPlaces, snapshot.days, snapshot.dayItems, today)
+        if (withinDays == null) all else {
+            val last = java.time.LocalDate.parse(today).plusDays(withinDays).toString()
+            all.filter { it.date <= last }
+        }
+    }
+    if (open.isEmpty()) return
+    SectionLabel("Offene Reservierungen", color = color)
+    open.forEachIndexed { i, r ->
+        val place = snapshot.places[r.saved.placeId]
+        PhotoCard(
+            title = place?.name?.takeIf { it.isNotBlank() } ?: "Ort",
+            subtitle = "Eingeplant " + dayLabel(r.date) + " · " + r.reason,
+            imageUrl = place?.heroImageUrl(),
+            placeholderSymbol = categorySymbol(r.saved.category),
+            accent = regionColor(snapshot.regions.firstOrNull { it.id == r.saved.regionId }?.color),
+            badges = listOf(BadgeSpec("Reservierung", BadgeTone.Warning)),
+            onClick = onOpenPlace?.let { open -> { open(r.saved.id) } },
+            modifier = Modifier.testTag("reservation-$i"),
+        )
     }
 }

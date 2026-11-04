@@ -3,6 +3,8 @@ package de.wanderlogplus.app.reminders
 import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.Stay
+import de.wanderlogplus.shared.query.OpenReservation
+import de.wanderlogplus.shared.query.Reservations
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -10,7 +12,37 @@ import java.time.temporal.ChronoUnit
 /** Days before a cancellation deadline on which a reminder is due. */
 val REMINDER_OFFSETS = listOf(7, 3, 1, 0)
 
-data class Reminder(val key: String, val stayId: String, val title: String, val text: String)
+/** A notification to post; [savedPlaceId] is set for a reservation reminder (it gets a "Reserviert" button). */
+data class Reminder(
+    val key: String,
+    val stayId: String,
+    val title: String,
+    val text: String,
+    val savedPlaceId: String? = null,
+    /** Longer text for the expanded notification. */
+    val detail: String? = null,
+)
+
+/**
+ * Reservation reminders for planned places that still need one: like [dueReminders], at most one per place for the
+ * smallest offset of [Reservations.REMINDER_OFFSETS] already due before its planned day, up to that day.
+ */
+fun dueReservationReminders(open: List<OpenReservation>, places: Map<String, Place>, today: LocalDate, alreadySent: Set<String>): List<Reminder> =
+    open.mapNotNull { r ->
+        val date = try { LocalDate.parse(r.date) } catch (_: DateTimeParseException) { return@mapNotNull null }
+        if (today > date) return@mapNotNull null
+        val offset = Reservations.REMINDER_OFFSETS.filter { today >= date.minusDays(it.toLong()) }.minOrNull() ?: return@mapNotNull null
+        val key = "res|${r.saved.id}|$date|$offset"
+        if (key in alreadySent) return@mapNotNull null
+        val name = places[r.saved.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Ort"
+        val days = ChronoUnit.DAYS.between(today, date)
+        val `when` = when (days) {
+            0L -> "Heute eingeplant"
+            1L -> "Morgen eingeplant"
+            else -> "Eingeplant am ${dayLabel(r.date)} (noch $days Tage)"
+        }
+        Reminder(key, "", "Reservierung: $name", "$`when` – schon reserviert?", r.saved.id, "$`when`. ${r.reason}")
+    }.sortedBy { it.key }
 
 /**
  * At most one reminder per stay: for the smallest offset that is already due (today >= deadline - offset) and

@@ -155,7 +155,7 @@ fun SettingsScreen(
         SurfaceCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Erinnerungen an Fristen", Modifier.weight(1f))
+                    Text("Erinnerungen an Fristen und Reservierungen", Modifier.weight(1f))
                     Switch(checked = remindersEnabled, onCheckedChange = onRemindersEnabled)
                 }
                 if (remindersEnabled && !allowed) {

@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.25.0
+
+- **Wetter:** Für jeden Reisetag das Wetter an der Unterkunft – die Vorhersage des japanischen Wetterdienstes (JMA, 5-km-Modell für die nächsten Tage) über Open-Meteo, weiter voraus andere Modelle als Tendenz und ohne Vorhersage das Mittel der letzten 10 Jahre („Typisches Wetter“). Zu sehen im Tag (antippen für die Stunden), auf der Heute-Seite (heute und morgen, vor der Reise der erste Tag) und als Symbol mit Temperatur in der Tagesliste.
+- **Regen-Hinweis:** Regnet es an einem Tag mit Wanderung, Garten, Aussichtspunkt & Co., warnt der Tag und „Umplanen“ öffnet den Chat. Der Chat kennt das Wetter aller Tage, schlägt bei Regen Orte für drinnen oder einen Tagestausch vor, und der Plan-Check meldet Regen bei Outdoor-Programm.
+- **Reservierungen:** Eingeplante Orte, die laut Recherche („Buchbarkeit“, Hinweise), Tag oder Notiz eine Reservierung oder Tickets im Voraus brauchen, zeigen „Reservierung nötig“ mit einem Schalter „Reserviert“. Solange er aus ist, erinnert die App 30, 14, 7 und 2 Tage vor dem Tag – direkt in der Benachrichtigung lässt sich „Reserviert“ tippen. Offene Reservierungen stehen auch auf der Heute-Seite.
+- Benötigt das Server-Update.
+
 ## 0.24.0
 
 - **Verbindungen im Chat:** „Wann fährt der letzte Zug zurück?“, „Wie lange laufe ich vom Onsen zur Unterkunft?“ – der Chat fragt die Fahrplanauskunft (Abfahrt, Umstiege, Gleis, Preis) und Fuß-/Autorouten ab, statt Zeiten zu raten.

@@ -342,6 +342,7 @@ object ChatContextText {
                     val pt = t.point(i.placeId)
                     if (pt != null && anchor != null) append(", ").append(distanceText(distanceKm(anchor.lat, anchor.lng, pt.lat, pt.lng))).append(" von der Unterkunft")
                     s?.dossier?.verdict?.takeIf { it.isNotBlank() }?.let { append(" – ").append(it.take(160)) }
+                    s?.let { reservationText(it) }?.let { append(" – ").append(it) }
                     i.legMode?.let { append(" (Anreise: ").append(it.name).append(")") }
                 } else {
                     append("Notiz [id=").append(i.id).append("]: ").append(i.text.take(300))
@@ -367,6 +368,13 @@ object ChatContextText {
         }
     }
 
+    /** "Reservierung nötig, noch nicht reserviert (…)" or "Reserviert"; null when no reservation is needed. */
+    fun reservationText(s: SavedPlace): String? {
+        if (s.reserved) return "Reserviert"
+        val why = de.wanderlogplus.shared.query.Reservations.reason(s) ?: return null
+        return "Reservierung nötig, noch nicht reserviert ($why)"
+    }
+
     fun placeDetail(s: SavedPlace, t: ChatTrip): String = buildString {
         val p = t.places[s.placeId]
         append("Name: ").append(p?.name ?: "?").append(" (id ").append(s.id).append(")\n")
@@ -386,6 +394,7 @@ object ChatContextText {
         p?.website?.takeIf { it.isNotBlank() }?.let { append("Website: ").append(it).append('\n') }
         if (s.note.isNotBlank()) append("Notiz der Reisenden: ").append(s.note.take(500)).append('\n')
         if (s.tags.isNotEmpty()) append("Tags: ").append(s.tags.joinToString(", ")).append('\n')
+        reservationText(s)?.let { append(it).append('\n') }
         s.worth?.let { append("Einschätzung: ").append(it.name).append(s.worthReason.takeIf { r -> r.isNotBlank() }?.let { r -> " – $r" } ?: "").append('\n') }
         s.dossier?.let { d ->
             if (d.verdict.isNotBlank()) append("Fazit: ").append(d.verdict).append('\n')
