@@ -273,6 +273,8 @@ class LocalEditor(
         fileName: String,
         mimeType: String,
         size: Long,
+        /** "file" or "photo" (gallery). */
+        kind: String = "file",
     ): String = create(
         EntityType.ATTACHMENT,
         mapOf(
@@ -282,7 +284,7 @@ class LocalEditor(
             "fileName" to JsonPrimitive(fileName),
             "mimeType" to JsonPrimitive(mimeType),
             "size" to JsonPrimitive(size),
-        ),
+        ) + (if (kind != "file") mapOf("kind" to JsonPrimitive(kind)) else emptyMap()),
     )
 
     fun setDayFields(snapshot: TripSnapshot, date: String, values: Map<String, JsonElement>) {

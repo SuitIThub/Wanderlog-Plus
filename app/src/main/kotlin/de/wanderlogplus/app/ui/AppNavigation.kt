@@ -302,6 +302,7 @@ fun AppNavigation(
                 onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
                 onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
                 onTransitDetails = transitApi?.let { { d, id -> nav.navigate(de.wanderlogplus.app.ui.transit.transitRoute(d, id)) } },
+                onOpenPhoto = attachmentFiles?.let { { t: EntityType, id: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, id, i)) } },
                 onOpenPlace = placesViewModelFactory?.let {
                     { placeId ->
                         uiScope.launch { vm.savedPlaceFor(placeId)?.let { id -> nav.navigate(tripPlaceRoute(id)) } }
@@ -325,6 +326,7 @@ fun AppNavigation(
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
+                onOpenPhoto = attachmentFiles?.let { { t: EntityType, tid: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, tid, i)) } },
             )
         }
 
@@ -882,6 +884,17 @@ fun AppNavigation(
                 }
             }
             if (attachmentFiles != null) {
+                composable(de.wanderlogplus.app.ui.attachments.PHOTOS_ROUTE) { entry ->
+                    val type = entry.arguments?.getString("type")?.let { t -> EntityType.entries.firstOrNull { it.name == t } }
+                    val targetId = entry.arguments?.getString("targetId").orEmpty()
+                    val index = entry.arguments?.getString("index")?.toIntOrNull() ?: 0
+                    val photos = remember(snapshot, type, targetId) { type?.let { snapshot?.photosFor(it, targetId) }.orEmpty() }
+                    de.wanderlogplus.app.ui.attachments.PhotoViewerScreen(
+                        photos, index, attachmentFiles,
+                        onDelete = attachmentActions?.onDelete,
+                        onBack = { nav.popBackStack() },
+                    )
+                }
                 composable(ATTACHMENT_ROUTE) { entry ->
                     val id = entry.arguments?.getString("attachmentId").orEmpty()
                     AttachmentViewerScreen(snapshot?.attachments?.firstOrNull { it.id == id }, attachmentFiles, onBack = { nav.popBackStack() })

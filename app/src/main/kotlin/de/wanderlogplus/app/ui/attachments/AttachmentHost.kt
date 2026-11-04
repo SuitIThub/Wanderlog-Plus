@@ -81,6 +81,13 @@ fun rememberAttachmentActions(
         pending = null
         if (uri != null && target != null) vm.add(target, ContentUriSource(context.contentResolver, uri))
     }
+    var pendingPhotos by rememberSaveable { mutableStateOf<String?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS_AT_ONCE)) { uris ->
+        val target = pendingPhotos?.let(::decodeTarget)
+        pendingPhotos = null
+        if (uris.isNotEmpty() && target != null) vm.addPhotos(target, uris.map { ContentUriSource(context.contentResolver, it) })
+    }
+    val pickImages = { photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
         message?.let {
@@ -107,9 +114,15 @@ fun rememberAttachmentActions(
                 }
             },
             onDelete = { vm.delete(it) },
+            onAddPhotos = { type, id -> pendingPhotos = "E|${type.name}|$id"; pickImages() },
+            onAddPhotosToDay = { date -> pendingPhotos = "D|$date"; pickImages() },
+            files = files,
         )
     }
 }
+
+/** At most this many photos per pick. */
+const val MAX_PHOTOS_AT_ONCE = 30
 
 private fun decodeTarget(s: String): AttachmentTarget? {
     val parts = s.split('|', limit = 3)

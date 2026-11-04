@@ -280,6 +280,7 @@ class MainActivity : ComponentActivity() {
             addAttachment = { type, id, input, name, mime -> container.addAttachment(type, id, input, name, mime) },
             ensureDay = container::ensureDay,
             writeScope = container.scope,
+            addPhoto = { type, id, input, name -> container.addPhoto(type, id, input, name) },
         ) as T
     }
 

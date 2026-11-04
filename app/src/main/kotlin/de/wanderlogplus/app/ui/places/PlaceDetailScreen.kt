@@ -77,8 +77,9 @@ private const val NO_REGION_LABEL = "Keine Region"
 private const val TAB_INFO = 0
 private const val TAB_ASSESS = 1
 private const val TAB_RESEARCH = 2
-private const val TAB_NOTE = 3
-private const val TAB_FILES = 4
+private const val TAB_PHOTOS = 3
+private const val TAB_NOTE = 4
+private const val TAB_FILES = 5
 
 /**
  * Switches the marker [emoji] in [tags]: removes every tag starting with it (e.g. "⭐ Muss man sehen"), or appends the
@@ -141,6 +142,8 @@ fun PlaceDetailScreen(
     research: ResearchAction? = null,
     /** Opens the full-size map of the place; null hides the embedded map. */
     onOpenMap: (() -> Unit)? = null,
+    /** Opens photo [index] of the gallery full screen; null: photos are only shown. */
+    onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -237,6 +240,9 @@ fun PlaceDetailScreen(
             ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
             ScreenTab("Einschätzung", tab == TAB_ASSESS, "tab-assessment") { tab = TAB_ASSESS }
             ScreenTab("Recherche", tab == TAB_RESEARCH, "tab-research") { tab = TAB_RESEARCH }
+            // Always shown: the tab positions behind it must not shift.
+            val photoCount = snapshot.photosFor(EntityType.SAVED_PLACE, saved.id).size
+            ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos") { tab = TAB_PHOTOS }
             ScreenTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
             ScreenTab(if (fileCount > 0) "Anhänge ($fileCount)" else "Anhänge", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
         }
@@ -245,6 +251,13 @@ fun PlaceDetailScreen(
             TAB_INFO -> PlaceInfoTab(place, accent, today, saved)
             TAB_ASSESS -> PlaceAssessmentTab(saved, accent, research)
             TAB_RESEARCH -> PlaceResearchTab(saved, accent, research)
+            TAB_PHOTOS -> de.wanderlogplus.app.ui.attachments.PhotoGrid(
+                snapshot.photosFor(EntityType.SAVED_PLACE, saved.id),
+                attachments?.files,
+                onAdd = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
+                onOpen = { i -> onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i) },
+                modifier = Modifier.padding(16.dp),
+            )
             TAB_NOTE -> PlaceNoteTab(
                 note = pendingNote ?: saved.note,
                 accent = accent,

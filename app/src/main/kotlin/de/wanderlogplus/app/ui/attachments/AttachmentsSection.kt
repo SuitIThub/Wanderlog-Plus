@@ -66,6 +66,11 @@ class AttachmentActions(
     val onAddToDay: (date: String) -> Unit,
     val onOpen: (Attachment) -> Unit,
     val onDelete: (Attachment) -> Unit,
+    /** Picks photos for the gallery of an entity / a day; null: no gallery uploads. */
+    val onAddPhotos: ((EntityType, String) -> Unit)? = null,
+    val onAddPhotosToDay: ((date: String) -> Unit)? = null,
+    /** Local files, for thumbnails. */
+    val files: de.wanderlogplus.app.files.AttachmentFiles? = null,
 )
 
 @Composable

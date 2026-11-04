@@ -176,6 +176,8 @@ data class Attachment(
     val fileName: String = "",
     val mimeType: String = "",
     val size: Long = 0,
+    /** "file" (Anhänge: tickets, PDFs …) or "photo" (the gallery of a place or a day). */
+    val kind: String = "file",
 )
 
 @Serializable
