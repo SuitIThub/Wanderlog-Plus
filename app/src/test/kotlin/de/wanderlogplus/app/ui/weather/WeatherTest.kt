@@ -87,16 +87,17 @@ class WeatherTest {
                 }
             }
         }
-        rule.onNode(hasText("Heute · Regen · 14–19 °C") and hasAnyAncestor(hasTestTag("today-weather"))).assertIsDisplayed()
-        rule.onNode(hasText("Regen 85 % (12 mm) · Vorhersage JMA") and hasAnyAncestor(hasTestTag("today-weather"))).assertExists()
-        rule.onNode(hasText("Regen erwartet – Moosgarten ist eher etwas für gutes Wetter.") and hasAnyAncestor(hasTestTag("day-rain-hint"))).assertExists()
-        rule.onNode(hasText("Morgen · Überwiegend klar · 15–24 °C") and hasAnyAncestor(hasTestTag("tomorrow-weather"))).assertExists()
+        rule.onNode(hasText("14–19 °C") and hasAnyAncestor(hasTestTag("today-weather")), useUnmergedTree = true).assertIsDisplayed()
+        rule.onNode(hasText("Regen · Regen 85 % (12 mm)") and hasAnyAncestor(hasTestTag("today-weather")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Regen erwartet – Moosgarten ist eher etwas für gutes Wetter.") and hasAnyAncestor(hasTestTag("day-rain-hint")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText(" 15–24 °C · 10 %") and hasAnyAncestor(hasTestTag("tomorrow-weather")), useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("day-rain-replan").performClick()
         assertEquals(1, chats)
 
-        // The hours unfold on tap.
-        rule.onNode(hasTestTag("day-weather-hours")).assertDoesNotExist()
-        rule.onNode(hasTestTag("day-weather-toggle") and hasAnyAncestor(hasTestTag("today-weather")), useUnmergedTree = true).performClick()
+        // A tap on the tile shows the day's weather with the hours.
+        rule.onNode(hasTestTag("today-weather-detail")).assertDoesNotExist()
+        rule.onNodeWithTag("today-weather").performClick()
+        rule.onNode(hasTestTag("day-weather-toggle") and hasAnyAncestor(hasTestTag("today-weather-detail")), useUnmergedTree = true).performClick()
         rule.onNode(hasText("90 %") and hasAnyAncestor(hasTestTag("day-weather-hours")), useUnmergedTree = true).assertExists()
     }
 
