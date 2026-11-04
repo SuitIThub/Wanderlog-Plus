@@ -69,6 +69,11 @@ class RealDataClientTest {
                 assertEquals(536, b.store.all().size)
 
                 val snapA = a.snapshot()
+                // The budget arrives on the devices: 12 costs and 3 settlement payments, two travellers.
+                assertEquals(15, snapA.expenses.size, "expenses decoded")
+                assertEquals(2, snapA.trip!!.travelers.size, "travelers")
+                val budget = de.wanderlogplus.shared.query.BudgetMath.summary(snapA.expenses, snapA.trip!!.travelers)
+                assertEquals(4804.33, budget.total, 0.01)
                 val days = snapA.queries()!!.days()
                 assertEquals(22, days.size)
                 assertEquals("2027-05-08", days.first().date)
