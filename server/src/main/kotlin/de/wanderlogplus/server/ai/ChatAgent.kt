@@ -26,6 +26,9 @@ import de.wanderlogplus.shared.sync.EntityRecord
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.Worth
+import de.wanderlogplus.shared.sync.DayWeather
+import de.wanderlogplus.shared.sync.TripWeather
+import de.wanderlogplus.shared.sync.WeatherText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -53,7 +56,12 @@ class ChatTrip(
     val dayItems: List<DayItem>,
     val flights: List<Flight> = emptyList(),
     val trains: List<Train> = emptyList(),
+    /** Weather by date (forecast or climate average); empty when unknown. */
+    val weather: Map<String, DayWeather> = emptyMap(),
 ) {
+    fun withWeather(w: TripWeather): ChatTrip =
+        ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date })
+
     val regionsById = regions.associateBy { it.id }
     val savedById = saved.associateBy { it.id }
     private val savedByPlace = saved.groupBy { it.placeId }
@@ -190,6 +198,7 @@ object ChatContextText {
                         if (i.kind == DayItemKind.PLACE) t.places[i.placeId]?.name ?: "Ort" else "Notiz"
                     },
                     t.movementsOn(d.date).takeIf { it.isNotEmpty() }?.joinToString("; "),
+                    t.weather[d.date]?.let { "Wetter: " + WeatherText.summary(it) },
                 ).joinToString(" · ").ifEmpty { "noch nichts geplant" })
                 append('\n')
             }
@@ -312,6 +321,7 @@ object ChatContextText {
         if (morning != null && morning.id != night?.id) append("Auschecken: ").append(stay(morning, t)).append('\n')
         if (night != null) append("Übernachtung: ").append(stay(night, t)).append('\n')
         t.movementsOn(date).forEach { append("Fahrt: ").append(it).append('\n') }
+        t.weather[date]?.let { w -> append(weatherText(w)) }
         dayEntity?.title?.takeIf { it.isNotBlank() }?.let { append("Titel: ").append(it).append('\n') }
         dayEntity?.note?.takeIf { it.isNotBlank() }?.let { append("Notiz: ").append(it.take(800)).append('\n') }
         val anchor = t.dayAnchor(date)
@@ -338,6 +348,22 @@ object ChatContextText {
                 }
                 append('\n')
             }
+        }
+    }
+
+    /** The day's weather with its source and, for a forecast, every third hour. */
+    fun weatherText(w: DayWeather): String = buildString {
+        append("Wetter").append(w.place.takeIf { it.isNotBlank() }?.let { " (bei $it)" } ?: "").append(": ")
+            .append(WeatherText.summary(w)).append(" – ").append(WeatherText.sourceLabel(w)).append('\n')
+        val hours = w.hours.filter { (it.time.take(2).toIntOrNull() ?: 0) % 3 == 0 }
+        if (hours.isNotEmpty()) {
+            append("Wetter im Tagesverlauf: ").append(hours.joinToString(", ") { h ->
+                h.time + " " + listOfNotNull(
+                    WeatherText.label(h.code),
+                    h.temp?.let { "${it.toInt()} °C" },
+                    h.rainChance?.let { "Regen $it %" },
+                ).joinToString(" ")
+            }).append('\n')
         }
     }
 
@@ -1001,11 +1027,14 @@ class ChatAgent(
     private val web: WebSearch?,
     private val geocoder: Geocoder? = null,
     private val ways: ChatWays? = null,
+    /** Weather for the trip days (trip, today); null: the chat knows no weather. */
+    private val weather: ((ChatTrip, String) -> TripWeather)? = null,
     private val today: () -> String = { LocalDate.now().toString() },
 ) {
 
     /** Answers the last user message of [history] (the earlier ones are context). Blocking; throws [AiFailed]. */
-    fun answer(history: List<ChatMessage>, trip: ChatTrip, location: de.wanderlogplus.shared.sync.ChatLocation? = null, say: (String) -> Unit = {}): ChatAnswer {
+    fun answer(history: List<ChatMessage>, plain: ChatTrip, location: de.wanderlogplus.shared.sync.ChatLocation? = null, say: (String) -> Unit = {}): ChatAnswer {
+        val trip = weather?.let { w -> try { plain.withWeather(w(plain, today())) } catch (e: Exception) { null } } ?: plain
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
         val here = location?.let { Anchor("Dein Standort", it.lat, it.lng) }
@@ -1055,6 +1084,10 @@ class ChatAgent(
               aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
               als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
               steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
+            - Das Wetter der Reisetage steht im Reiseplan (Vorhersage des japanischen Wetterdienstes JMA für die nächsten Tage,
+              sonst das Mittel der letzten Jahre – das ist keine Vorhersage, sag das). Bei Regen schlägst du von dir aus Orte
+              für drinnen vor und weist darauf hin, wenn Wanderungen, Gärten oder Aussichtspunkte geplant sind; ist ein anderer
+              Tag in derselben Region trockener, schlag einen Tausch vor.
             - Teilt der Nutzer seinen Standort, beziehen sich „hier“, „in der Nähe“ und „von hier“ darauf (near/from/to = "hier").
             - Fragt der Nutzer, ob ein Tag passt („schaffen wir das?“, „Plan-Check“), nutzt du check_day und erklärst die Probleme
               mit konkreten Lösungen (früher los, Reihenfolge tauschen, etwas streichen). Die Zeiten dort sind Schätzungen; sag das.
