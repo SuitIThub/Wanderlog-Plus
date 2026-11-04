@@ -27,10 +27,21 @@ fun main() {
     Runtime.getRuntime().addShutdownHook(Thread { store.close() })
     val sync = SyncService(store)
     val openRouter = config.openRouterKey?.let { OpenRouterModel(it, config.aiModel) }
+    val routes = RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) })
+    val transit = TransitService(
+        store,
+        config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
+        config.apifyToken?.let { PhotonStationFinder(PhotonGeocoder()) },
+    )
+    // The chat asks the same services as the app's day screens (and shares their cache).
+    val ways = object : de.wanderlogplus.server.ai.ChatWays {
+        override fun transit(req: de.wanderlogplus.shared.sync.TransitRequest) = transit.search(req)
+        override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) = routes.compute(req)
+    }.takeIf { transit.configured || routes.configured }
     val services = Services(
         config, store, sync, FileStore.forConfig(config),
         ImportService(store, sync, tripSourceFrom(config)),
-        RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) }),
+        routes,
         AiJobs(
             store,
             openRouter?.let { model ->
@@ -41,16 +52,12 @@ fun main() {
             config.dataDir.resolve("ai-work"),
             writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         ),
-        transit = TransitService(
-            store,
-            config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
-            config.apifyToken?.let { PhotonStationFinder(PhotonGeocoder()) },
-        ),
+        transit = transit,
         chats = ChatService(
             store,
             openRouter?.let { model ->
                 // "Today" in Japan, where the trip happens.
-                ChatAgent(model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder()) {
+                ChatAgent(model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways) {
                     java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
                 }
             },

@@ -220,6 +220,45 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `transit and route tools answer with times and are limited per answer`() {
+        val asked = mutableListOf<de.wanderlogplus.shared.sync.TransitRequest>()
+        val ways = object : ChatWays {
+            override fun transit(req: de.wanderlogplus.shared.sync.TransitRequest): de.wanderlogplus.shared.sync.TransitResult {
+                asked += req
+                if (req.toStation == "無い") throw de.wanderlogplus.server.NoRoute()
+                val kyoto = de.wanderlogplus.shared.sync.TransitStation("京都", "Kyoto")
+                val nara = de.wanderlogplus.shared.sync.TransitStation("奈良", "Nara")
+                return de.wanderlogplus.shared.sync.TransitResult(
+                    kyoto, nara, req.datetime, req.searchType, walkToStationMeters = 1200,
+                    routes = listOf(
+                        de.wanderlogplus.shared.sync.TransitRoute(
+                            "17:42", "18:30", 48, transfers = 0, fareYen = 1340, fastest = true,
+                            legs = listOf(de.wanderlogplus.shared.sync.TransitLeg("JR奈良線", "JR Nara Line", from = kyoto, to = nara, departure = "17:42", arrival = "18:30", departurePlatform = "9")),
+                        ),
+                    ),
+                )
+            }
+            override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) =
+                if (req.mode == de.wanderlogplus.shared.sync.TravelMode.DRIVE) throw de.wanderlogplus.server.RoutesNotConfigured()
+                else de.wanderlogplus.shared.sync.RouteInfo(1500, 1900, "")
+        }
+        val t = ChatTools(trip, null, trip.dayAnchor("2027-05-19"), ways = ways) {}
+        val r = t.run("transit", """{"from":"2027-05-19","to":"s-deer","datetime":"2027-05-19T17:30"}""")
+        assertTrue("Verbindungen Unterkunft Hotel Gion → Nara-Park, Abfahrt ab 2027-05-19 17:30" in r, r)
+        assertTrue("zum Bahnhof ca. 1,2 km" in r && "1) 17:42–18:30, 48 Min., ohne Umstieg, 1.340 ¥ [schnellste]: JR Nara Line Kyoto (京都) 17:42 Gleis 9 → Nara (奈良) 18:30" in r, r)
+        assertEquals(35.0037, asked.single().from!!.lat)
+        assertTrue(t.run("transit", """{"from":"kontext","toStation":"無い","datetime":"2027-05-19T23:00","searchType":"arrive"}""").startsWith("Keine Verbindung"))
+        assertEquals("arrive", asked.last().searchType)
+        assertTrue(t.run("transit", """{"from":"kontext","to":"s-kiyo"}""").startsWith("datetime fehlt"))
+        t.run("transit", """{"from":"kontext","to":"s-kiyo","datetime":"2027-05-19T10:00"}""")
+        assertTrue(t.run("transit", """{"from":"kontext","to":"s-kiyo","datetime":"2027-05-19T11:00"}""").startsWith("Schon 3 Fahrplanauskünfte"))
+
+        assertEquals("Unterkunft Hotel Gion → Kiyomizu-dera: Zu Fuß: 25 Min., 1,9 km", t.run("route", """{"from":"kontext","to":"s-kiyo","mode":"WALK"}"""))
+        assertTrue(t.run("route", """{"from":"kontext","to":"s-kiyo","mode":"DRIVE"}""").startsWith("Routen sind auf dem Server nicht eingerichtet; Luftlinie 1,1 km"))
+        assertTrue("transit" in t.definitions.toString() && "transit" !in tools().definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
+    }
+
+    @Test
     fun `openrouter tool turn parsing keeps calls and a clean history message`() {
         val body = """{"choices":[{"message":{"role":"assistant","content":null,"reasoning":"x",
             "tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_place","arguments":"{\"id\":\"s-kiyo\"}"}}]}}]}"""

@@ -409,8 +409,11 @@ class ChatTools(
     private val anchor: Anchor? = null,
     /** Looks up where a web find is, so it can be added to the trip; null: web finds stay links. */
     private val geocoder: Geocoder? = null,
+    /** Timetable connections and routes; null: the chat cannot look them up. */
+    private val ways: ChatWays? = null,
     private val say: (String) -> Unit,
 ) {
+    private var transitCalls = 0
     private val json = Json { ignoreUnknownKeys = true }
     val cards = mutableListOf<ChatCard>()
     private val seenUrls = LinkedHashMap<String, WebSource>()
@@ -436,6 +439,21 @@ class ChatTools(
         add(tool("get_place", "Alle Details zu einem hinterlegten Ort (Dossier, Tipps, Öffnungstage).") {
             putJsonObject("id") { put("type", "string"); put("description", "id aus search_saved_places") }
         })
+        if (ways != null) {
+            add(tool("transit", "Fahrplanauskunft (Bahn/Bus in Japan) zwischen zwei Punkten: Abfahrts-/Ankunftszeiten, Umstiege, Preis. Kostet Geld und dauert: nur für konkrete Fragen, höchstens $MAX_TRANSIT pro Antwort.") {
+                putJsonObject("from") { put("type", "string"); put("description", POINT_HELP) }
+                putJsonObject("to") { put("type", "string"); put("description", POINT_HELP) }
+                putJsonObject("fromStation") { put("type", "string"); put("description", "statt from: japanischer Bahnhofsname, z. B. 中津川") }
+                putJsonObject("toStation") { put("type", "string"); put("description", "statt to: japanischer Bahnhofsname") }
+                putJsonObject("datetime") { put("type", "string"); put("description", "yyyy-MM-ddTHH:mm, japanische Zeit") }
+                putJsonObject("searchType") { put("type", "string"); putJsonArray("enum") { add(JsonPrimitive("depart")); add(JsonPrimitive("arrive")) }; put("description", "depart = ab Uhrzeit, arrive = an bis Uhrzeit (z. B. letzter Zug: arrive spät abends)") }
+            })
+            add(tool("route", "Weg zu Fuß, mit Rad oder Auto zwischen zwei Punkten: Dauer und Länge.") {
+                putJsonObject("from") { put("type", "string"); put("description", POINT_HELP) }
+                putJsonObject("to") { put("type", "string"); put("description", POINT_HELP) }
+                putJsonObject("mode") { put("type", "string"); putJsonArray("enum") { add(JsonPrimitive("WALK")); add(JsonPrimitive("BICYCLE")); add(JsonPrimitive("DRIVE")) } }
+            })
+        }
         add(tool("get_day", "Ein Reisetag mit Unterkünften, Fahrten, Programm (mit Adressen und Entfernungen) und Notizen.") {
             putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
         })
@@ -504,6 +522,8 @@ class ChatTools(
             "get_day" -> args.s("date")?.takeIf { d -> runCatching { LocalDate.parse(d) }.isSuccess }
                 ?.let { d -> say("Lese Tag ${shortDateOf(d)} …"); ChatContextText.day(d, t) } ?: "Ungültiges Datum."
             "web_search" -> webSearch(args)
+            "transit" -> transit(args)
+            "route" -> route(args)
             "show_place_cards" -> showPlaces(args)
             "show_web_cards" -> showWeb(args)
             else -> "Unbekanntes Werkzeug."
@@ -564,6 +584,70 @@ class ChatTools(
             if (ranked.isEmpty() && tokens.isNotEmpty()) append("Keine Treffer für die Suchbegriffe; stattdessen die besten Orte der Auswahl:\n")
             append(pool.size).append(" Orte in der Auswahl, gezeigt ").append(shown.size).append(":\n")
             shown.forEach { s -> append(ChatContextText.row(s, t, from)).append('\n') }
+        }
+    }
+
+    private fun transit(args: JsonObject): String {
+        val w = ways ?: return "Fahrplanauskunft ist nicht eingerichtet."
+        if (transitCalls >= MAX_TRANSIT) return "Schon $MAX_TRANSIT Fahrplanauskünfte in dieser Antwort; antworte mit dem, was du hast."
+        val datetime = args.s("datetime")?.takeIf { runCatching { java.time.LocalDateTime.parse(it) }.isSuccess }
+            ?: return "datetime fehlt oder ist ungültig (yyyy-MM-ddTHH:mm)."
+        val fromStation = args.s("fromStation")
+        val toStation = args.s("toStation")
+        val from = args.s("from")?.let { resolvePoint(it) ?: return "Unbekannter Startpunkt $it." }
+        val to = args.s("to")?.let { resolvePoint(it) ?: return "Unbekanntes Ziel $it." }
+        if ((from == null && fromStation == null) || (to == null && toStation == null)) return "Start und Ziel fehlen (from/to oder fromStation/toStation)."
+        transitCalls++
+        val fromName = from?.name ?: fromStation!!
+        val toName = to?.name ?: toStation!!
+        say("Suche Verbindung ${fromName.take(30)} → ${toName.take(30)} …")
+        val req = de.wanderlogplus.shared.sync.TransitRequest(
+            from = from?.let { de.wanderlogplus.shared.sync.TransitPoint(it.lat, it.lng, it.name) },
+            to = to?.let { de.wanderlogplus.shared.sync.TransitPoint(it.lat, it.lng, it.name) },
+            fromStation = fromStation, toStation = toStation, datetime = datetime,
+            searchType = if (args.s("searchType") == "arrive") "arrive" else "depart",
+        )
+        return try {
+            ChatWaysText.transit(w.transit(req), fromName, toName)
+        } catch (e: de.wanderlogplus.server.TransitNotConfigured) {
+            "Fahrplanauskunft ist auf dem Server nicht eingerichtet."
+        } catch (e: de.wanderlogplus.server.NoRoute) {
+            "Keine Verbindung gefunden (evtl. gleicher Bahnhof: dann ist es ein Fußweg)."
+        } catch (e: de.wanderlogplus.server.NoStation) {
+            "Kein Bahnhof in der Nähe gefunden."
+        } catch (e: de.wanderlogplus.server.TransitUnavailable) {
+            "Fahrplanauskunft gerade nicht verfügbar (${e.code}). Sag das dem Nutzer."
+        } catch (e: de.wanderlogplus.server.BadInput) {
+            "Ungültige Anfrage."
+        }
+    }
+
+    private fun route(args: JsonObject): String {
+        val w = ways ?: return "Routen sind nicht eingerichtet."
+        val from = args.s("from")?.let { resolvePoint(it) } ?: return "Unbekannter oder fehlender Startpunkt."
+        val to = args.s("to")?.let { resolvePoint(it) } ?: return "Unbekanntes oder fehlendes Ziel."
+        val mode = when (args.s("mode")?.uppercase()) {
+            "DRIVE" -> de.wanderlogplus.shared.sync.TravelMode.DRIVE
+            "BICYCLE" -> de.wanderlogplus.shared.sync.TravelMode.BICYCLE
+            else -> de.wanderlogplus.shared.sync.TravelMode.WALK
+        }
+        val label = when (mode) {
+            de.wanderlogplus.shared.sync.TravelMode.DRIVE -> "Auto"
+            de.wanderlogplus.shared.sync.TravelMode.BICYCLE -> "Rad"
+            else -> "Zu Fuß"
+        }
+        say("Berechne Weg ${from.name.take(30)} → ${to.name.take(30)} …")
+        val crow = distanceText(distanceKm(from.lat, from.lng, to.lat, to.lng))
+        return try {
+            "${from.name} → ${to.name}: " + ChatWaysText.route(w.route(de.wanderlogplus.shared.sync.RouteRequest(from.lat, from.lng, to.lat, to.lng, mode)), label)
+        } catch (e: de.wanderlogplus.server.RoutesNotConfigured) {
+            "Routen sind auf dem Server nicht eingerichtet; Luftlinie $crow."
+        } catch (e: de.wanderlogplus.server.NoRoute) {
+            "Keine Route ($label) gefunden; Luftlinie $crow."
+        } catch (e: de.wanderlogplus.server.RoutesUnavailable) {
+            "Routen gerade nicht verfügbar; Luftlinie $crow."
+        } catch (e: de.wanderlogplus.server.BadInput) {
+            "Ungültige Anfrage."
         }
     }
 
@@ -694,6 +778,8 @@ class ChatTools(
     companion object {
         const val MAX_ROWS = 25
         const val DEFAULT_KM = 15.0
+        const val MAX_TRANSIT = 3
+        const val POINT_HELP = "id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext' oder 'lat,lng'"
         const val MAX_LOCATE_KM = 60.0
         const val SAME_PLACE_KM = 0.15
         const val MAX_CARDS = 10
@@ -724,6 +810,7 @@ class ChatAgent(
     private val model: ToolChatModel,
     private val web: WebSearch?,
     private val geocoder: Geocoder? = null,
+    private val ways: ChatWays? = null,
     private val today: () -> String = { LocalDate.now().toString() },
 ) {
 
@@ -731,7 +818,7 @@ class ChatAgent(
     fun answer(history: List<ChatMessage>, trip: ChatTrip, say: (String) -> Unit = {}): ChatAnswer {
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
-        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), geocoder, say)
+        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), geocoder, ways, say)
         val messages = mutableListOf(system(systemPrompt(trip, context)))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
@@ -773,6 +860,18 @@ class ChatAgent(
               Bei „in der Nähe“, „nicht weit“, „auf dem Weg“ suchst du mit near (Bezugspunkt: Unterkunft, ein Programmpunkt oder Koordinaten)
               und maxKm (in der Nähe ≈ bis 15 km, zu Fuß ≈ 2 km). Nenne bei Empfehlungen die Entfernung; schlage nichts weit Entferntes vor,
               ohne das zu sagen. Für andere Tage nutzt du get_day.
+            """.trimIndent(),
+        ).append('\n')
+        if (ways != null) {
+            append(
+                """
+                - Für Fragen nach Verbindungen (Zug/Bus, „wann fährt der letzte Zug“, „wie komme ich zurück“) nutzt du transit,
+                  für Fußwege und Autofahrten route. Nenne Abfahrt, Umstiege, Ankunft und Dauer. Rate keine Fahrzeiten.
+                """.trimIndent(),
+            ).append('\n')
+        }
+        append(
+            """
             - Jeden hinterlegten Ort, den du empfiehlst, zeigst du zusätzlich mit show_place_cards (beste zuerst, höchstens 8). Erfinde keine ids.
             - Unter den Karten kann der Nutzer selbst „Einplanen“ bzw. „Zu Orten“ tippen. Passt ein Ort zu einem bestimmten Tag oder
               hinter einen Programmpunkt, gib das als date/after mit. Du änderst selbst nichts; sag nie, du hättest etwas eingeplant.
