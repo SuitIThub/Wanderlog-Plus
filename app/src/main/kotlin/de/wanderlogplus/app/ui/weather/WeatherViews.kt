@@ -147,22 +147,59 @@ fun DayWeatherCard(
                     }
                 }
             }
-            if (outdoor.isNotEmpty() && WeatherText.isRainy(d)) {
-                Surface(shape = RoundedCornerShape(10.dp), color = scheme.tertiaryContainer, contentColor = scheme.onTertiaryContainer, modifier = Modifier.fillMaxWidth().testTag("day-rain-hint")) {
-                    Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Umbrella, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Regen erwartet – " + outdoor.joinToString(", ") + (if (outdoor.size == 1) " ist" else " sind") + " eher etwas für gutes Wetter.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (onReplan != null) {
-                            TextButton(onClick = onReplan, modifier = Modifier.testTag("day-rain-replan")) { Text("Umplanen") }
-                        }
-                    }
-                }
+            RainHint(d, outdoor, onReplan)
+        }
+    }
+}
+
+/** "Regen erwartet – … eher etwas für gutes Wetter" with "Umplanen"; nothing on a dry day or without outdoor places. */
+@Composable
+fun RainHint(d: DayWeather, outdoor: List<String>, onReplan: (() -> Unit)?, modifier: Modifier = Modifier) {
+    if (outdoor.isEmpty() || !WeatherText.isRainy(d)) return
+    val scheme = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(10.dp), color = scheme.tertiaryContainer, contentColor = scheme.onTertiaryContainer, modifier = modifier.fillMaxWidth().testTag("day-rain-hint")) {
+        Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Umbrella, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Regen erwartet – " + outdoor.joinToString(", ") + (if (outdoor.size == 1) " ist" else " sind") + " eher etwas für gutes Wetter.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (onReplan != null) {
+                TextButton(onClick = onReplan, modifier = Modifier.testTag("day-rain-replan")) { Text("Umplanen") }
             }
+        }
+    }
+}
+
+/** Compact weather for a dashboard tile: icon, temperatures, rain and – for tomorrow – one short line. */
+@Composable
+fun WeatherTileContent(today: DayWeather?, tomorrow: DayWeather?) {
+    val scheme = MaterialTheme.colorScheme
+    if (today != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (today.isForecast) {
+                Icon(weatherIcon(today.code), contentDescription = WeatherText.label(today.code), tint = iconTint(today.code), modifier = Modifier.size(30.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Column {
+                Text(WeatherText.temps(today) ?: "–", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOfNotNull(if (today.isForecast) WeatherText.label(today.code) else "Typisch", WeatherText.rain(today)).joinToString(" · "),
+                    style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 2,
+                )
+            }
+        }
+    }
+    if (tomorrow != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("tomorrow-weather")) {
+            Text("Morgen ", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+            if (tomorrow.isForecast) Icon(weatherIcon(tomorrow.code), contentDescription = WeatherText.label(tomorrow.code), tint = iconTint(tomorrow.code), modifier = Modifier.size(14.dp))
+            Text(
+                " " + listOfNotNull(WeatherText.temps(tomorrow), tomorrow.rainChance?.let { "$it %" }).joinToString(" · "),
+                style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1,
+            )
         }
     }
 }

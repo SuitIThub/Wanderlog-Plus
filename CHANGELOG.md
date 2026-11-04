@@ -3,6 +3,16 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.27.0
+
+- **Heute als Dashboard:** Die Heute-Seite besteht jetzt aus kompakten Widgets, die nur erscheinen, wenn sie etwas zu zeigen haben.
+  - **Tagesablauf:** eine große Karte für das, was gerade dran ist (oder als Nächstes kommt) – mit „bis ca.“, Öffnungsstatus („offen bis 18:00“, „schließt in 25 Min.“, „geschlossen – öffnet 10:00“), Weg, Tickets, „Reservierung offen“ und Route-Button, darunter „Danach: … · los in 20 Min.“. Darunter der ganze Tag in einzeiligen Zeilen (✓ erledigt, ~ geschätzte Zeiten, Wege, Öffnungszeiten), Züge und Flüge mittendrin, am Ende die Unterkunft mit Entfernung.
+  - **Nächste Fahrt:** der nächste Zug oder Flug in den nächsten 36 Stunden mit Countdown und Tickets (steht die Fahrt gerade an, zeigt sie die große Karte).
+  - **Wetter | Unterkunft** als Kacheln nebeneinander (Wetter antippen: Stunden), Regen-Hinweis darunter.
+  - **Fristen:** offene Reservierungen und Stornofristen.
+  - **Jetzt geöffnet:** klein ganz unten.
+- Vor der Reise: Countdown, die erste Fahrt, sobald sie näher rückt, das Wetter zum Start und die Fristen.
+
 ## 0.26.2
 
 - **Teilweise Rückzahlung:** Unter jedem Ausgleichsvorschlag gibt es „Teilbetrag“ (Formular mit dem noch offenen Betrag als Hinweis) und „Komplett bezahlt“ (trägt den vollen Betrag sofort ein). „Zahlung eintragen“ im Abschnitt Ausgleich geht auch ohne Vorschlag.

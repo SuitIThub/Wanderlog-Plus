@@ -5,7 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -13,59 +15,64 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.Row
-import de.wanderlogplus.app.ui.design.isWideLayout
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.links.ExternalLink
 import de.wanderlogplus.app.links.LinkKind
 import de.wanderlogplus.app.ui.EmptyState
 import de.wanderlogplus.app.ui.HeroTitle
-import de.wanderlogplus.app.ui.categoryLabel
-import de.wanderlogplus.app.ui.categorySymbol
 import de.wanderlogplus.app.ui.dayKicker
 import de.wanderlogplus.app.ui.dayLabel
-import de.wanderlogplus.app.ui.design.BadgeSpec
-import de.wanderlogplus.app.ui.design.BadgeTone
-import de.wanderlogplus.app.ui.design.DayTimeline
-import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.HeroHeader
-import de.wanderlogplus.app.ui.design.PhotoCard
-import de.wanderlogplus.app.ui.design.PhotoCardStyle
-import de.wanderlogplus.app.ui.design.SectionLabel
-import de.wanderlogplus.app.ui.design.heroGradient
+import de.wanderlogplus.app.ui.design.LocalOpenChat
 import de.wanderlogplus.app.ui.design.dayHeroImage
-import de.wanderlogplus.app.ui.design.heroImageUrl
-import de.wanderlogplus.app.ui.ratingLabel
+import de.wanderlogplus.app.ui.design.heroGradient
+import de.wanderlogplus.app.ui.design.isWideLayout
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.stayLinks
+import de.wanderlogplus.app.ui.weather.DayWeatherCard
+import de.wanderlogplus.app.ui.weather.LocalTripWeather
+import de.wanderlogplus.app.ui.weather.RainHint
+import de.wanderlogplus.app.ui.weather.WeatherTileContent
+import de.wanderlogplus.app.ui.weather.outdoorPlacesOn
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Attachment
+import de.wanderlogplus.shared.model.Place
+import de.wanderlogplus.shared.model.Stay
+import de.wanderlogplus.shared.query.DayNow
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.TodayQueries
 import de.wanderlogplus.shared.query.TodayState
 import de.wanderlogplus.shared.query.isOpenAt
 import de.wanderlogplus.shared.query.sortSuggestions
+import de.wanderlogplus.shared.sync.DayWeather
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 private const val MAX_OPEN_NOW = 5
 private val HH_MM = DateTimeFormatter.ofPattern("HH:mm")
+
+/** During the trip only reservations for the next days are listed. */
+private const val RESERVATION_DAYS_DURING = 14L
 
 /** [now] is injected so tests can pin "today"; production passes the device's local time. */
 @Composable
@@ -76,13 +83,13 @@ fun TodayScreen(
     onOpenTrip: () -> Unit,
     onSyncNow: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Tapped ticket chip under a trip of today. */
+    /** Tapped ticket chip of the next train or flight. */
     onOpenAttachment: (Attachment) -> Unit = {},
-    /** Null hides the stay link buttons. */
+    /** Null hides the stay link buttons and the route button. */
     onOpenLink: ((ExternalLink) -> Unit)? = null,
     /** Whether a file is stored locally (by hash); unavailable tickets are marked. */
     available: (hash: String) -> Boolean = { true },
-    /** Opens a place (from "Offene Reservierungen"); null: the cards are not tappable. */
+    /** Opens a place (from "Fristen"); null: the rows are not tappable. */
     onOpenPlace: ((savedPlaceId: String) -> Unit)? = null,
 ) {
     val trip = snapshot.trip
@@ -93,7 +100,7 @@ fun TodayScreen(
     }
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
-        is TodayState.Before -> Before(snapshot, state, now, onOpenPlace, modifier)
+        is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, onOpenPlace, modifier)
         TodayState.After -> Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
@@ -102,11 +109,23 @@ fun TodayScreen(
     }
 }
 
+/** Before the trip: countdown, then the first departure (once close), the weather of the first day and the deadlines. */
 @Composable
-private fun Before(snapshot: TripSnapshot, state: TodayState.Before, now: LocalDateTime, onOpenPlace: ((String) -> Unit)?, modifier: Modifier) {
+private fun Before(
+    snapshot: TripSnapshot,
+    state: TodayState.Before,
+    now: LocalDateTime,
+    onOpenAttachment: (Attachment) -> Unit,
+    available: (String) -> Boolean,
+    onOpenPlace: ((String) -> Unit)?,
+    modifier: Modifier,
+) {
     val accent = MaterialTheme.colorScheme.primary
+    val today = now.toLocalDate().toString()
+    val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
+    val deadlines = remember(snapshot, today) { deadlineRows(snapshot, today, null) }
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        Box(Modifier.fillMaxWidth().height(170.dp).background(heroGradient(accent))) {
+        Box(Modifier.fillMaxWidth().height(150.dp).background(heroGradient(accent))) {
             Column(Modifier.align(Alignment.BottomStart).padding(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
                 Text(
                     if (state.daysUntilStart == 1L) "1 Tag" else "${state.daysUntilStart} Tage",
@@ -124,36 +143,23 @@ private fun Before(snapshot: TripSnapshot, state: TodayState.Before, now: LocalD
                 )
             }
         }
-        // Within the forecast range: the weather of the first trip day.
-        snapshot.trip?.startDate?.let { start -> de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(start) }?.takeIf { it.isForecast }?.let { w ->
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("Wetter zum Start")
-                de.wanderlogplus.app.ui.weather.DayWeatherCard(w, Modifier.testTag("start-weather"), title = w.place.takeIf { it.isNotBlank() })
-            }
-        }
-        if (state.deadlines.isNotEmpty()) {
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SectionLabel("Anstehende Fristen")
-                state.deadlines.forEachIndexed { i, d ->
-                    val place = snapshot.places[d.stay.placeId]
-                    PhotoCard(
-                        title = place?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft",
-                        subtitle = dayLabel(d.date),
-                        imageUrl = place?.heroImageUrl(),
-                        placeholderSymbol = "🏨",
-                        accent = regionColor(snapshot.regions.firstOrNull { it.id == d.stay.regionId }?.color),
-                        badges = listOf(BadgeSpec("Stornofrist", BadgeTone.Warning)),
-                        modifier = Modifier.testTag("deadline-$i"),
-                    )
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            move?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available) }
+            // Within the forecast range: the weather of the first trip day.
+            snapshot.trip?.startDate?.let { start -> LocalTripWeather.current?.forDate(start) }?.takeIf { it.isForecast }?.let { w ->
+                Widget("Wetter zum Start", "start-weather", accent = accent) {
+                    DayWeatherCard(w, title = w.place.takeIf { it.isNotBlank() })
                 }
             }
-        }
-        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OpenReservations(snapshot, now.toLocalDate().toString(), null, onOpenPlace)
+            if (deadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace)
         }
     }
 }
 
+/**
+ * During the trip, a dashboard of widgets that only appear with content: the day (now, next and the compact plan),
+ * the next train or flight, weather and stay side by side, deadlines and what is open now.
+ */
 @Composable
 private fun During(
     snapshot: TripSnapshot,
@@ -173,13 +179,38 @@ private fun During(
     val dayTitle = view.day?.title?.takeIf { it.isNotBlank() }
     val stay = view.stay
     val stayPlace = stay?.let { snapshot.places[it.placeId] }
-    val items = remember(snapshot, view.day) { view.day?.let { snapshot.dayItemsFor(it.id) }.orEmpty() }
     val heroImage = remember(snapshot, date) { dayHeroImage(snapshot, date) }
+    val nowMin = now.hour * 60 + now.minute
+    val dayNow = remember(snapshot, view.day, state.movements, stayPlace, nowMin) {
+        val items = view.day?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+        DayNow.layout(items, snapshot.places, snapshot.savedPlaces, state.movements, stayPlace, nowMin)
+    }
+    val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
+    val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date, RESERVATION_DAYS_DURING) }
     val openNow = remember(snapshot, date, now) {
         val dow = now.dayOfWeek.value % 7 // 0 = Sunday
         val time = now.format(HH_MM)
+        val planned = view.day?.let { d -> snapshot.dayItemsFor(d.id).mapNotNull { it.placeId }.toSet() }.orEmpty()
         val all = snapshot.queries()?.suggestionsFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
-        sortSuggestions(all.filter { isOpenAt(it.place?.openingPeriods.orEmpty(), dow, time) != false }).take(MAX_OPEN_NOW)
+        sortSuggestions(all.filter { it.saved.placeId !in planned && isOpenAt(it.place?.openingPeriods.orEmpty(), dow, time) != false }).take(MAX_OPEN_NOW)
+    }
+    val weather = LocalTripWeather.current
+    val todayWeather = weather?.forDate(date)
+    val tomorrowWeather = weather?.forDate(now.toLocalDate().plusDays(1).toString())
+    val outdoor = remember(snapshot, date) { outdoorPlacesOn(snapshot, date) }
+    val openChat = LocalOpenChat.current
+
+    val program: @Composable () -> Unit = {
+        NowNextWidget(snapshot, date, dayNow, now, stayPlace, accent, onOpenDay, onOpenLink, onOpenAttachment = onOpenAttachment, available = available)
+    }
+    // The day card already shows a trip that is now or next (with its tickets): no second widget for it.
+    val focusMove = ((dayNow.current ?: dayNow.next) as? de.wanderlogplus.shared.query.DayStep.Move)?.movement
+    val side: @Composable () -> Unit = {
+        move?.takeIf { it.movement != focusMove }?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available) }
+        WeatherAndStay(date, todayWeather, tomorrowWeather, stay, stayPlace, accent, onOpenLink)
+        todayWeather?.let { RainHint(it, outdoor, openChat) }
+        if (deadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace)
+        if (openNow.isNotEmpty()) OpenNowWidget(openNow, accent)
     }
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
@@ -189,113 +220,68 @@ private fun During(
                 kicker = dayKicker(date, snapshot.trip?.startDate, snapshot.trip?.endDate),
                 imageUrl = heroImage,
                 accent = accent,
+                height = 120.dp,
                 chips = if (dayTitle != null && region != null) listOf(region.name) else emptyList(),
             )
         }
-
-        val weatherBlock: @Composable () -> Unit = {
-            val all = de.wanderlogplus.app.ui.weather.LocalTripWeather.current
-            val today = all?.forDate(date)
-            val tomorrow = all?.forDate(now.toLocalDate().plusDays(1).toString())
-            if (today != null || tomorrow != null) {
-                SectionLabel("Wetter", color = accent)
-                val outdoor = remember(snapshot, date) { de.wanderlogplus.app.ui.weather.outdoorPlacesOn(snapshot, date) }
-                today?.let {
-                    de.wanderlogplus.app.ui.weather.DayWeatherCard(
-                        it, Modifier.testTag("today-weather"), title = "Heute", outdoor = outdoor,
-                        onReplan = de.wanderlogplus.app.ui.design.LocalOpenChat.current,
-                    )
-                }
-                tomorrow?.let { de.wanderlogplus.app.ui.weather.DayWeatherCard(it, Modifier.testTag("tomorrow-weather"), title = "Morgen", iconSize = 24.dp) }
-            }
-        }
-        val stayBlock: @Composable () -> Unit = {
-            if (stay != null) {
-                SectionLabel("Unterkunft", color = accent)
-                val hint = when (date) {
-                    stay.checkIn -> "Check-in heute"
-                    stay.checkOut -> "Check-out heute"
-                    else -> "Check-out ${dayLabel(stay.checkOut)}"
-                }
-                PhotoCard(
-                    title = stayPlace?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft",
-                    subtitle = hint,
-                    imageUrl = stayPlace?.heroImageUrl(),
-                    placeholderSymbol = "🏨",
-                    accent = accent,
-                    trailing = if (stayPlace != null && onOpenLink != null) {
-                        { StayActions(stayLinks(stayPlace), onOpenLink) }
-                    } else null,
-                    modifier = Modifier.testTag("today-stay"),
-                )
-            }
-        }
-        val openBlock: @Composable () -> Unit = {
-            if (openNow.isNotEmpty()) {
-                SectionLabel("Jetzt geöffnet", color = accent)
-                Column(Modifier.testTag("open-now-list"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    openNow.forEach { s ->
-                        PhotoCard(
-                            title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
-                            subtitle = listOfNotNull(
-                                categoryLabel(s.saved.category),
-                                s.place?.rating?.let { ratingLabel(it) },
-                            ).joinToString(" · "),
-                            imageUrl = s.place?.heroImageUrl(),
-                            placeholderSymbol = categorySymbol(s.saved.category),
-                            accent = accent,
-                            style = PhotoCardStyle.Compact,
-                            modifier = Modifier.testTag("open-now-${s.saved.id}"),
-                        )
-                    }
-                }
-            }
-        }
-        val timeline: @Composable () -> Unit = {
-            SectionLabel("Tagesablauf", color = accent)
-            DayTimeline(
-                snapshot = snapshot,
-                date = date,
-                items = items,
-                movements = state.movements,
-                stay = stay,
-                accent = accent,
-                onOpenItem = { onOpenDay(date) },
-                now = now,
-                onOpenAttachment = onOpenAttachment,
-                available = available,
-                itemTagPrefix = "today-item-",
-                emptyProgram = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        EmptyHint("Für heute ist noch nichts geplant")
-                        FilledTonalButton(onClick = { onOpenDay(date) }) { Text("Tag öffnen") }
-                    }
-                },
-                modifier = Modifier.testTag("today-program"),
-            )
-        }
         if (isWideLayout()) {
-            // Unfolded: the day's timeline on the left, stay and "Jetzt geöffnet" on the right.
-            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Column(Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(8.dp)) { timeline() }
-                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    weatherBlock(); stayBlock(); OpenReservations(snapshot, date, RESERVATION_DAYS_DURING, onOpenPlace, accent); openBlock()
-                }
+            // Unfolded: the day on the left, the other widgets on the right.
+            Row(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(Modifier.weight(0.58f), verticalArrangement = Arrangement.spacedBy(12.dp)) { program() }
+                Column(Modifier.weight(0.42f), verticalArrangement = Arrangement.spacedBy(12.dp)) { side() }
             }
         } else {
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Weather and stay first, then the timeline, then what is open now.
-                weatherBlock()
-                stayBlock()
-                timeline()
-                OpenReservations(snapshot, date, RESERVATION_DAYS_DURING, onOpenPlace, accent)
-                openBlock()
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                program()
+                side()
             }
         }
     }
 }
 
-/** Small round navigation/transit buttons for the stay card (tags `link-<kind>` inside `today-stay-links`). */
+/** Weather and stay as two tiles side by side (one takes the full width when the other has nothing). */
+@Composable
+private fun WeatherAndStay(
+    date: String,
+    today: DayWeather?,
+    tomorrow: DayWeather?,
+    stay: Stay?,
+    stayPlace: Place?,
+    accent: Color,
+    onOpenLink: ((ExternalLink) -> Unit)?,
+) {
+    var expanded by rememberSaveable(date) { mutableStateOf(false) }
+    val hasWeather = today != null || tomorrow != null
+    if (!hasWeather && stay == null) return
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (hasWeather) {
+                Widget(
+                    "Wetter", "today-weather", Modifier.weight(1f).fillMaxHeight(), accent,
+                    onClick = today?.takeIf { it.hours.isNotEmpty() }?.let { { expanded = !expanded } },
+                ) { WeatherTileContent(today, tomorrow) }
+            }
+            if (stay != null) {
+                Widget("Unterkunft", "today-stay", Modifier.weight(1f).fillMaxHeight(), accent) {
+                    Text(
+                        stayPlace?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft",
+                        style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                    val hint = when (date) {
+                        stay.checkIn -> "Check-in heute"
+                        stay.checkOut -> "Check-out heute"
+                        else -> "Check-out ${dayLabel(stay.checkOut)}"
+                    }
+                    Text(hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (stayPlace != null && onOpenLink != null) StayActions(stayLinks(stayPlace), onOpenLink)
+                }
+            }
+        }
+        if (expanded && today != null) DayWeatherCard(today, Modifier.testTag("today-weather-detail"), title = "Heute")
+    }
+}
+
+/** Small round navigation/transit buttons for the stay tile (tags `link-<kind>` inside `today-stay-links`). */
 @Composable
 private fun StayActions(links: List<ExternalLink>, onOpen: (ExternalLink) -> Unit) {
     if (links.isEmpty()) return
@@ -303,7 +289,7 @@ private fun StayActions(links: List<ExternalLink>, onOpen: (ExternalLink) -> Uni
         links.forEach { l ->
             Surface(
                 onClick = { onOpen(l) },
-                modifier = Modifier.size(40.dp).testTag("link-${l.kind}"),
+                modifier = Modifier.size(36.dp).testTag("link-${l.kind}"),
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -312,7 +298,7 @@ private fun StayActions(links: List<ExternalLink>, onOpen: (ExternalLink) -> Uni
                     Icon(
                         if (l.kind == LinkKind.TRANSIT) Icons.Filled.DirectionsTransit else Icons.Filled.Navigation,
                         contentDescription = l.label,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -320,48 +306,11 @@ private fun StayActions(links: List<ExternalLink>, onOpen: (ExternalLink) -> Uni
     }
 }
 
-/** Plain titled section; still used by the not yet redesigned detail screens. */
 @Composable
 internal fun Section(title: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         androidx.compose.material3.HorizontalDivider(Modifier.padding(bottom = 8.dp))
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 4.dp))
         content()
-    }
-}
-
-/** During the trip only reservations for the next days are listed. */
-private const val RESERVATION_DAYS_DURING = 14L
-
-/** Planned places that still need a reservation (from [today], at most [withinDays] ahead when set). */
-@Composable
-private fun OpenReservations(
-    snapshot: TripSnapshot,
-    today: String,
-    withinDays: Long?,
-    onOpenPlace: ((String) -> Unit)?,
-    color: Color = MaterialTheme.colorScheme.primary,
-) {
-    val open = remember(snapshot, today) {
-        val all = de.wanderlogplus.shared.query.Reservations.open(snapshot.savedPlaces, snapshot.days, snapshot.dayItems, today)
-        if (withinDays == null) all else {
-            val last = java.time.LocalDate.parse(today).plusDays(withinDays).toString()
-            all.filter { it.date <= last }
-        }
-    }
-    if (open.isEmpty()) return
-    SectionLabel("Offene Reservierungen", color = color)
-    open.forEachIndexed { i, r ->
-        val place = snapshot.places[r.saved.placeId]
-        PhotoCard(
-            title = place?.name?.takeIf { it.isNotBlank() } ?: "Ort",
-            subtitle = "Eingeplant " + dayLabel(r.date) + " · " + r.reason,
-            imageUrl = place?.heroImageUrl(),
-            placeholderSymbol = categorySymbol(r.saved.category),
-            accent = regionColor(snapshot.regions.firstOrNull { it.id == r.saved.regionId }?.color),
-            badges = listOf(BadgeSpec("Reservierung", BadgeTone.Warning)),
-            onClick = onOpenPlace?.let { open -> { open(r.saved.id) } },
-            modifier = Modifier.testTag("reservation-$i"),
-        )
     }
 }

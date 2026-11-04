@@ -78,10 +78,9 @@ class TodayScreenTest {
         show("2027-05-01T12:00")
         rule.onNodeWithTag("countdown").assertTextEquals("7 Tage")
         rule.onNodeWithText("bis Japan").assertIsDisplayed()
-        rule.onNodeWithText("Anstehende Fristen", ignoreCase = true).assertIsDisplayed()
-        rule.onNode(hasText("Mi, 05.05.") and hasAnyAncestor(hasTestTag("deadline-0"))).assertExists()
-        rule.onNode(hasText("Hotel Sakura") and hasAnyAncestor(hasTestTag("deadline-0"))).assertExists()
-        rule.onNode(hasText("Stornofrist") and hasAnyAncestor(hasTestTag("deadline-0"))).assertExists()
+        rule.onNodeWithText("Fristen", ignoreCase = true).assertIsDisplayed()
+        rule.onNode(hasText("Hotel Sakura") and hasAnyAncestor(hasTestTag("deadline-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Stornofrist bis Mi, 05.05.") and hasAnyAncestor(hasTestTag("deadline-0")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun countdownSingularForOneDay() {
@@ -97,13 +96,15 @@ class TodayScreenTest {
         rule.onNodeWithText("Kyoto").assertIsDisplayed()
         rule.onNodeWithText("So · 9. Mai · Tag 2", ignoreCase = true).assertIsDisplayed()
         rule.onNodeWithText("Tagesablauf", ignoreCase = true).assertIsDisplayed()
-        rule.onNode(hasText("Kyoto → Osaka") and hasAnyAncestor(hasTestTag("movement-0"))).assertExists()
-        rule.onNode(hasText("08:15 · JR") and hasAnyAncestor(hasTestTag("movement-0"))).assertExists()
-        rule.onNode(hasText("Museum Gamma") and hasAnyAncestor(hasTestTag("today-program"))).assertExists()
+        rule.onNode(hasText("Zug Kyoto → Osaka") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("08:15 · JR") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        // 12:00: the museum (10:00, about an hour) is over, nothing comes next.
+        rule.onNode(hasText("Museum Gamma") and hasAnyAncestor(hasTestTag("today-program")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Tag geschafft") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
         rule.onNodeWithText("Unterkunft", ignoreCase = true).assertExists()
-        rule.onNode(hasText("Hotel Sakura") and hasAnyAncestor(hasTestTag("today-stay"))).assertExists()
-        rule.onNode(hasText("Check-out Mi, 12.05.") and hasAnyAncestor(hasTestTag("today-stay"))).assertExists()
-        rule.onNode(hasText("Hotel Sakura") and hasAnyAncestor(hasTestTag("timeline-night"))).assertExists()
+        rule.onNode(hasText("Hotel Sakura") and hasAnyAncestor(hasTestTag("today-stay")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Check-out Mi, 12.05.") and hasAnyAncestor(hasTestTag("today-stay")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Nacht: Hotel Sakura") and hasAnyAncestor(hasTestTag("timeline-night")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun timelineOrdersMovesThenPlaces() {
@@ -119,33 +120,51 @@ class TodayScreenTest {
         seed(EntityType.PLACE, "pa", Place("pa", name = "Frühstück Alpha"))
         seed(EntityType.DAY_ITEM, "i0", DayItem("i0", "d1", "a-", DayItemKind.PLACE, "pa"))
         show("2027-05-09T12:00")
-        rule.onNode(hasText("Tokio → Kansai") and hasAnyAncestor(hasTestTag("movement-0"))).assertExists()
-        rule.onNode(hasText("07:00 – 08:05 · NH 7") and hasAnyAncestor(hasTestTag("movement-0"))).assertExists()
+        rule.onNode(hasText("Flug Tokio → Kansai") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("07:00 – 08:05 · NH 7") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
         val tops = listOf("movement-0", "movement-1", "today-item-i0", "today-item-i1", "timeline-night").map {
             rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top
         }
         assertEquals(tops.sorted(), tops)
         assertEquals(tops.distinct(), tops)
-        // Moves keep their departure time as marker, program items are numbered, the stay closes the day.
-        rule.onNode(hasText("07:00") and hasAnyAncestor(hasTestTag("today-program"))).assertExists()
-        rule.onNode(hasText("1") and hasAnyAncestor(hasTestTag("today-program"))).assertExists()
-        rule.onNode(hasText("2") and hasAnyAncestor(hasTestTag("today-program"))).assertExists()
-        rule.onNode(hasText("Nacht") and hasAnyAncestor(hasTestTag("today-program"))).assertExists()
+        // Times on the left: planned, estimated with "~"; the stay closes the day.
+        rule.onNode(hasText("07:00") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("~09:00") and hasAnyAncestor(hasTestTag("today-item-i0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("10:00") and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
     }
 
-    @Test fun moveWithCoordinatesShowsRouteMap() {
+    @Test fun nowCardShowsTheCurrentPlaceWhatComesNextAndAnOpenReservation() {
         seedTrip()
-        seed(EntityType.PLACE, "bk", Place("bk", name = "Bahnhof Kyoto", lat = 34.98, lng = 135.75))
-        seed(EntityType.PLACE, "bo", Place("bo", name = "Bahnhof Osaka", lat = 34.70, lng = 135.49))
-        seed(
-            EntityType.TRAIN, "tr1",
-            Train(
-                "tr1", "JR", depart = Endpoint("Kyoto", placeId = "bk", date = "2027-05-09", time = "08:15"),
-                arrive = Endpoint("Osaka", placeId = "bo"),
-            ),
-        )
+        seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", lat = 35.0, lng = 135.77, minMinutes = 120, maxMinutes = 120))
+        seed(EntityType.PLACE, "pd", Place("pd", name = "Teehaus Delta", lat = 35.003, lng = 135.772))
+        seed(EntityType.SAVED_PLACE, "sd", SavedPlace("sd", "pd", "r1", tags = listOf("Nur mit Reservierung")))
+        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", time = "13:00"))
+        show("2027-05-09T11:00")
+        rule.onNode(hasText("JETZT · bis ca. 12:00") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Museum Gamma") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Danach: Teehaus Delta · 13:00", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun nextPlaceWarnsAboutAMissingReservation() {
+        seedTrip()
+        seed(EntityType.PLACE, "pd", Place("pd", name = "Teehaus Delta"))
+        seed(EntityType.SAVED_PLACE, "sd", SavedPlace("sd", "pd", "r1", tags = listOf("Nur mit Reservierung")))
+        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", time = "13:00"))
         show("2027-05-09T12:00")
-        rule.onNode(hasTestTag("route-fallback") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("ALS NÄCHSTES · 13:00", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasTestTag("now-reservation"), useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun tomorrowsFlightGetsItsOwnWidgetWithACountdown() {
+        seedTrip()
+        seed(
+            EntityType.FLIGHT, "f2",
+            Flight("f2", airlineCode = "NH", number = "8", depart = Endpoint("Osaka", "KIX", date = "2027-05-10", time = "08:00"), arrive = Endpoint("Tokio", "HND", date = "2027-05-10", time = "09:10")),
+        )
+        show("2027-05-09T20:00")
+        rule.onNode(hasText("Osaka → Tokio") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("morgen · 08:00 – 09:10 · NH 8") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("in 12 Std.") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun emptyProgramShowsHint() {
@@ -159,15 +178,18 @@ class TodayScreenTest {
     @Test fun openPlaceGetsOpenBadge() {
         seedTrip()
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", openingPeriods = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))))
-        show("2027-05-09T12:00")
-        rule.onNode(hasText("offen") and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
+        show("2027-05-09T09:00")
+        rule.onNode(hasText("offen bis 18:00", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
+        // The next place is the big card: with its opening state.
+        rule.onNode(hasText("offen bis 18:00") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun closedPlaceHasNoOpenBadge() {
         seedTrip()
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", openingPeriods = listOf(OpeningPeriod(0, "13:00", 0, "18:00"))))
-        show("2027-05-09T12:00")
-        rule.onNode(hasText("offen") and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertDoesNotExist()
+        show("2027-05-09T09:00")
+        rule.onNode(hasText("offen bis", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertDoesNotExist()
+        rule.onNode(hasText("geschlossen – öffnet 13:00", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun checkInHintOnArrivalDay() {
