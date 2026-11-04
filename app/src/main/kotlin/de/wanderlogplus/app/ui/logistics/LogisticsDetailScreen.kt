@@ -158,6 +158,8 @@ fun LogisticsDetailScreen(
                 }
             }
 
+            de.wanderlogplus.app.ui.budget.CostsSection(snapshot, id, today ?: java.time.LocalDate.now().toString(), view.accent)
+
             SectionLabel("Anhänge", color = view.accent)
             if (attachments == null) {
                 EmptyHint("Anhänge sind hier nicht verfügbar", Modifier.padding(top = 6.dp))

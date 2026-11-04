@@ -30,6 +30,8 @@ data class TripSnapshot(
     val notes: List<Note>,
     val conflicts: List<Conflict>,
     val attachments: List<Attachment> = emptyList(),
+    /** Costs and settlement payments of the budget. */
+    val expenses: List<Expense> = emptyList(),
 ) {
     /** Files of an entity (tickets, PDFs …), without the gallery photos. */
     fun attachmentsFor(type: EntityType, id: String): List<Attachment> =
@@ -70,6 +72,7 @@ data class TripSnapshot(
                 notes = decoded(EntityType.NOTE) { EntityCodec.decode<Note>(it) },
                 conflicts = conflictsOf(live, places),
                 attachments = decoded(EntityType.ATTACHMENT) { EntityCodec.decode<Attachment>(it) },
+                expenses = decoded(EntityType.EXPENSE) { EntityCodec.decode<Expense>(it) },
             )
         }
 

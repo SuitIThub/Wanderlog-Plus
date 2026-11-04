@@ -242,6 +242,11 @@ fun PlaceDetailScreen(
             PlaceMapCard(points, accent, onOpenMap, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
         }
 
+        de.wanderlogplus.app.ui.budget.CostsSection(
+            snapshot, saved.id, today ?: java.time.LocalDate.now().toString(), accent,
+            Modifier.padding(horizontal = 16.dp),
+        )
+
         PrimaryScrollableTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp), edgePadding = 8.dp) {
             ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
             ScreenTab("Einschätzung", tab == TAB_ASSESS, "tab-assessment") { tab = TAB_ASSESS }

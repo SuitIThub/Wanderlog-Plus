@@ -84,7 +84,8 @@ object WanderlogMapper {
             out += ImportedEntity(type, sourceId, fields, master, createOnly)
         }
 
-        val trip = Trip(EntityCodec.importedId(EntityType.TRIP, "trip:${plan.key}"), plan.title, plan.startDate, plan.endDate, plan.key)
+        val travelers = plan.contributors.map { Traveler(travelerId(it.id), it.name?.takeIf { n -> n.isNotBlank() } ?: it.username ?: "Person") }
+        val trip = Trip(EntityCodec.importedId(EntityType.TRIP, "trip:${plan.key}"), plan.title, plan.startDate, plan.endDate, plan.key, travelers)
         add(EntityType.TRIP, "trip:${plan.key}", EntityCodec.fields(trip))
 
         // Regions
@@ -259,7 +260,11 @@ object WanderlogMapper {
 
         // Expenses
         val emittedIds = out.mapTo(HashSet()) { it.id }
-        plan.itinerary.budget?.expenses?.forEach { e ->
+        val budget = plan.itinerary.budget
+        fun rateFor(currency: String) = if (currency.equals("EUR", ignoreCase = true)) 1.0 else null
+        budget?.expenses?.forEach { e ->
+            val people = e.splitWith?.takeIf { it.type == "individuals" }?.users?.mapNotNull { it.id }?.map(::travelerId)
+                ?: travelers.map { it.id }
             val x = Expense(
                 id = "",
                 amount = e.amount.amount,
@@ -272,10 +277,39 @@ object WanderlogMapper {
                         .map { EntityCodec.importedId(it, "block:$bid") }
                         .firstOrNull { it in emittedIds }
                 },
+                paidBy = e.paidByUserId?.let(::travelerId),
+                shares = people.distinct().map { ExpenseShare(it) },
+                status = statusFrom(e.description),
+                rate = rateFor(e.amount.currencyCode),
+                rateDate = budget.currencyRateDate,
             )
             add(EntityType.EXPENSE, "expense:${e.id}", EntityCodec.fields(x))
+        }
+        budget?.payments?.forEach { p ->
+            val x = Expense(
+                id = "",
+                amount = p.amount.amount,
+                currency = p.amount.currencyCode,
+                description = "Ausgleich",
+                date = p.paidAt?.take(10),
+                kind = Expense.KIND_TRANSFER,
+                paidBy = p.fromUser?.id?.let(::travelerId),
+                toTraveler = p.toUser?.id?.let(::travelerId),
+                rate = rateFor(p.amount.currencyCode),
+                rateDate = budget.currencyRateDate,
+            )
+            add(EntityType.EXPENSE, "payment:${p.id}", EntityCodec.fields(x))
         }
 
         return ImportSnapshot(out)
     }
+}
+
+/** Traveler id for a Wanderlog user. */
+internal fun travelerId(userId: Long): String = "wl:$userId"
+
+/** "nicht bezahlt"/"unbezahlt" in the description: still open with the vendor; else paid. */
+internal fun statusFrom(description: String): PaymentStatus {
+    val d = description.lowercase()
+    return if ("nicht bezahlt" in d || "unbezahlt" in d || "not paid" in d || "unpaid" in d) PaymentStatus.OPEN else PaymentStatus.PAID
 }

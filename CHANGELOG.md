@@ -3,6 +3,16 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.26.0
+
+- **Budget (neuer Tab):** Alle Kosten der Reise mit Gesamtsumme, Summen nach Kategorie, was beim Anbieter noch offen ist, und pro Person „bezahlt / Anteil / Saldo“. „Ausgleich“ schlägt vor, wer wem wie viel zahlt; „Als bezahlt eintragen“ hält die Zahlung fest. Liste aller Kosten mit Filter nach Kategorie und Person.
+- **Kosten eintragen:** Betrag und Währung (mit Kurs zu Euro), Kategorie, Datum, wozu sie gehören, wer bezahlt hat und die Aufteilung – gleich, nach Prozent oder nach Beträgen – mit dem, was jede Person schon zurückgezahlt hat, und dem Status beim Anbieter (offen, angezahlt, bezahlt). Die Aufteilung wird geprüft (100 % bzw. voller Betrag).
+- **Kosten an Unterkunft, Flug, Zug und Ort:** Jede Detailseite zeigt ihre Kosten mit Summe; „Kosten hinzufügen“ füllt Bezug, Kategorie und Datum vor.
+- **Kurse:** Für Fremdwährungen schlägt die App den EZB-Kurs vor; wechselt eine Kosten auf „bezahlt“, wird der Kurs dieses Tages einmal übernommen. Ein von Hand eingetragener Kurs bleibt.
+- **Personen:** Die Mitreisenden lassen sich im Budget verwalten (hinzufügen, umbenennen; wer an Kosten beteiligt ist, bleibt).
+- **Aus Wanderlog übernommen:** Mitreisende, wer bezahlt hat, die Aufteilung, die Ausgleichszahlungen und „nicht bezahlt“ aus der Beschreibung als Status. Neue Kosten in Wanderlog kommen weiter dazu, Änderungen in der App haben Vorrang.
+- Benötigt das Server-Update (Import und Kurse).
+
 ## 0.25.0
 
 - **Wetter:** Für jeden Reisetag das Wetter an der Unterkunft – die Vorhersage des japanischen Wetterdienstes (JMA, 5-km-Modell für die nächsten Tage) über Open-Meteo, weiter voraus andere Modelle als Tendenz und ohne Vorhersage das Mittel der letzten 10 Jahre („Typisches Wetter“). Zu sehen im Tag (antippen für die Stunden), auf der Heute-Seite (heute und morgen, vor der Reise der erste Tag) und als Symbol mit Temperatur in der Tagesliste.

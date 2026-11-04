@@ -65,8 +65,8 @@ class RealDataClientTest {
                 SyncApi(createClient { }, "", tokenA).triggerImport()
                 sync(a)
                 sync(b)
-                assertEquals(533, a.store.all().size)
-                assertEquals(533, b.store.all().size)
+                assertEquals(536, a.store.all().size)
+                assertEquals(536, b.store.all().size)
 
                 val snapA = a.snapshot()
                 val days = snapA.queries()!!.days()
