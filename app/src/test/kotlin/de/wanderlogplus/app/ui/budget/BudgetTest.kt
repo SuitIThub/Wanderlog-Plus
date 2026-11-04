@@ -76,12 +76,36 @@ class BudgetTest {
         rule.onNode(hasText("≈ 18,00 €") and hasAnyAncestor(hasTestTag("cost-e2")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Offen") and hasAnyAncestor(hasTestTag("cost-e1")), useUnmergedTree = true).assertExists()
 
+        // "Komplett bezahlt" books the whole amount at once.
         rule.onNodeWithTag("settle-0-book").tap()
-        rule.onNodeWithTag("expense-save").tap()
         val (before, t) = rec.saved.single()
         assertNull(before)
         assertEquals(Expense.KIND_TRANSFER, t.kind)
         assertEquals(Triple("s", "c", 191.0), Triple(t.paidBy, t.toTraveler, t.amount))
+    }
+
+    @Test fun partialRepaymentOpensTheFormWithWhatIsStillOwed() {
+        val rec = Recorder()
+        rule.setContent { WanderlogPlusTheme { BudgetScreen(snapshot(listOf(hotel, ramen)), "2027-05-10", rec) } }
+        rule.onNodeWithTag("settle-0-part").tap()
+        rule.onNode(hasText("Offen: 191,00 €"), useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("expense-save").assertIsNotEnabled() // no amount yet
+        rule.onNodeWithTag("expense-amount").performTextInput("50")
+        rule.onNodeWithTag("expense-save").tap()
+        val t = rec.saved.single().second
+        assertEquals(Triple("s", "c", 50.0), Triple(t.paidBy, t.toTraveler, t.amount))
+        assertEquals(Expense.KIND_TRANSFER, t.kind)
+    }
+
+    @Test fun aPaymentCanBeEnteredWithoutASuggestion() {
+        val rec = Recorder()
+        rule.setContent { WanderlogPlusTheme { BudgetScreen(snapshot(), "2027-05-10", rec) } }
+        rule.onNode(hasText("Alles ausgeglichen.")).assertExists()
+        rule.onNodeWithTag("transfer-add").tap()
+        rule.onNodeWithTag("expense-amount").performTextInput("20")
+        rule.onNodeWithTag("expense-save").tap()
+        val t = rec.saved.single().second
+        assertEquals(Triple("s", "c", 20.0), Triple(t.paidBy, t.toTraveler, t.amount))
     }
 
     @Test fun formSplitsByPercentAndChecksTheSum() {
