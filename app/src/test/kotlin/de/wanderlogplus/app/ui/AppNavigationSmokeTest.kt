@@ -79,6 +79,9 @@ class AppNavigationSmokeTest {
                     placesViewModelFactory = factory { PlacesViewModel({ flow }, edit, scope) },
                     moreViewModelFactory = factory { MoreViewModel({ flow }, edit, scope) },
                     importViewModelFactory = factory { ImportViewModel({ null }, onImported = {}) },
+                    vaultScanViewModelFactory = factory {
+                        de.wanderlogplus.app.ui.vault.VaultScanViewModel({ MutableStateFlow(null) }, { MutableStateFlow(0) }, { MutableStateFlow(0) }, {}, {})
+                    },
                     settingsInfo = SettingsInfo("https://s.example", "token1234", "dev-1"),
                     clock = { LocalDateTime.parse("2027-04-02T10:00") },
                     attachmentsViewModelFactory = factory {
@@ -232,5 +235,14 @@ class AppNavigationSmokeTest {
         rule.waitForIdle()
         shows("reels-screen")
         shows("reel-link")
+    }
+
+    @Test fun vaultScanScreenOpensFromMehr() {
+        launch()
+        tab("mehr")
+        rule.onNodeWithText("Sensitiv-Scan").tap()
+        rule.waitForIdle()
+        shows("vault-scan-screen")
+        shows("vault-scan-start")
     }
 }

@@ -56,6 +56,23 @@ class SyncSchedulerTest {
         assertEquals(androidx.work.ExistingWorkPolicy.REPLACE, SyncScheduler.nowPolicy(emptyList()))
     }
 
+    @Test fun requestVaultUploadsEnqueuesSingleWifiOnlyWork() {
+        scheduler.requestVaultUploads()
+        scheduler.requestVaultUploads()
+        val active = infos("vault-uploads").filter { it.state == WorkInfo.State.ENQUEUED }
+        assertEquals(1, active.size)
+        assertEquals(NetworkType.UNMETERED, active.single().constraints.requiredNetworkType)
+    }
+
+    @Test fun scheduleVaultScanIsDailyBatteryAwareAndOfflineCapable() {
+        scheduler.scheduleVaultScan()
+        scheduler.scheduleVaultScan()
+        val info = infos("vault-scan-auto").single()
+        assertEquals(TimeUnit.DAYS.toMillis(1), info.periodicityInfo?.repeatIntervalMillis)
+        assertEquals(NetworkType.NOT_REQUIRED, info.constraints.requiredNetworkType)
+        assertTrue(info.constraints.requiresBatteryNotLow())
+    }
+
     @Test fun schedulePeriodicIsFifteenMinutesWithNetworkConstraint() {
         scheduler.schedulePeriodic()
         scheduler.schedulePeriodic()

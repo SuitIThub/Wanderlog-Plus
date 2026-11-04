@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import de.wanderlogplus.app.data.AppDatabase
 import de.wanderlogplus.app.data.MIGRATION_1_2
+import de.wanderlogplus.app.data.MIGRATION_2_3
+import de.wanderlogplus.app.data.MIGRATION_3_4
 import de.wanderlogplus.app.data.PendingUploadEntity
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.files.AttachmentFiles
@@ -55,7 +57,7 @@ class AppContainer(context: Context) {
 
     val db: AppDatabase by lazy {
         Room.databaseBuilder(appContext, AppDatabase::class.java, AppProfile.databaseName(appContext))
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
     }
     val store: RoomEntityStore by lazy { RoomEntityStore(db) }
@@ -99,6 +101,11 @@ class AppContainer(context: Context) {
             uploads = db.pendingUploads(),
             attachments = { TripSnapshot.from(store.all()).attachments },
         )
+    }
+
+    /** On-device media scan (Mehr → Scan); every server call inside is best effort. */
+    val vaultScanner: de.wanderlogplus.app.vault.VaultScanner by lazy {
+        de.wanderlogplus.app.vault.VaultScanner(appContext, db.vault(), api = { syncApi() })
     }
 
     /**

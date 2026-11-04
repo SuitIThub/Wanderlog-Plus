@@ -22,6 +22,9 @@ import de.wanderlogplus.shared.sync.TransitRequest
 import de.wanderlogplus.shared.sync.TransitResult
 import de.wanderlogplus.shared.sync.TransitStationNear
 import de.wanderlogplus.shared.sync.TransitStations
+import de.wanderlogplus.shared.sync.VaultImageInfo
+import de.wanderlogplus.shared.sync.VaultScanStatus
+import de.wanderlogplus.shared.sync.VaultScanUpdate
 import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
@@ -290,6 +293,40 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             setBody(
                 MultiPartFormDataContent(
                     formData {
+                        append(
+                            "file",
+                            InputProvider(file.length()) { file.inputStream().asInput() },
+                            Headers.build {
+                                append(HttpHeaders.ContentType, mimeType)
+                                append(HttpHeaders.ContentDisposition, ContentDisposition.File.withParameter(ContentDisposition.Parameters.Name, "file").withParameter(ContentDisposition.Parameters.FileName, fileName).toString())
+                            },
+                        )
+                    },
+                ),
+            )
+        }
+    }
+
+    /** Reports vault scan progress (best effort; callers swallow failures when the server is offline). */
+    suspend fun postVaultScan(update: VaultScanUpdate): VaultScanStatus = call {
+        client.post("$base/api/vault/scan") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(update)
+        }
+    }
+
+    /** Uploads one flagged image to the vault; [score] is the classifier value (0..1). */
+    suspend fun uploadVaultImage(file: File, fileName: String, mimeType: String, score: Double): VaultImageInfo = call {
+        client.post("$base/api/vault/images") {
+            auth()
+            timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
+            setBody(
+                MultiPartFormDataContent(
+                    formData {
+                        append("score", score.toString())
+                        append("fileName", fileName)
+                        append("mimeType", mimeType)
                         append(
                             "file",
                             InputProvider(file.length()) { file.inputStream().asInput() },

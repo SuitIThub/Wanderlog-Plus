@@ -20,6 +20,9 @@ class SyncScheduler(context: Context) {
 
     private val connected = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
+    /** WiFi (unmetered): vault uploads move original photos of up to ~25 MB each, mobile data stays untouched. */
+    private val unmetered = Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build()
+
     fun schedulePeriodic() {
         val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
             .setConstraints(connected)
@@ -76,6 +79,47 @@ class SyncScheduler(context: Context) {
         work.enqueueUniqueWork(FILES, soonPolicy(states), request)
     }
 
+    /** One vault scan ("Scan"); no network constraint: scanning works offline, uploads are best effort. */
+    fun requestVaultScan() {
+        val states = try {
+            work.getWorkInfosForUniqueWork(VAULT_SCAN).get().map { it.state }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val request = OneTimeWorkRequestBuilder<de.wanderlogplus.app.vault.VaultScanWorker>().build()
+        work.enqueueUniqueWork(VAULT_SCAN, nowPolicy(states), request)
+    }
+
+    /**
+     * One pass over the vault upload queue (no scan). Chained by the upload worker itself while items remain,
+     * so a big backlog is drained across fresh ~10-minute windows instead of dying mid-upload. Uses [soonPolicy]:
+     * the worker calls this while it is still RUNNING, so KEEP/REPLACE would drop or kill the follow-up request.
+     */
+    fun requestVaultUploads() {
+        val states = try {
+            work.getWorkInfosForUniqueWork(VAULT_UPLOADS).get().map { it.state }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val request = OneTimeWorkRequestBuilder<de.wanderlogplus.app.vault.VaultUploadWorker>()
+            .setConstraints(unmetered)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+            .build()
+        work.enqueueUniqueWork(VAULT_UPLOADS, soonPolicy(states), request)
+    }
+
+    /**
+     * The automatic daily vault scan (started from the Application, not by the user). Own unique name on purpose:
+     * unique-work REPLACE of the one-time request above must never cancel this periodic registration.
+     */
+    fun scheduleVaultScan() {
+        val request = PeriodicWorkRequestBuilder<de.wanderlogplus.app.vault.VaultScanWorker>(1, TimeUnit.DAYS)
+            .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
+            .build()
+        work.enqueueUniquePeriodicWork(VAULT_SCAN_AUTO, ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
     /** Daily check for upcoming cancellation deadlines; independent of any server. */
     fun scheduleReminders() {
         val request = PeriodicWorkRequestBuilder<DeadlineWorker>(1, TimeUnit.DAYS).build()
@@ -96,6 +140,9 @@ class SyncScheduler(context: Context) {
         const val NOW = "sync-now"
         const val FILES = "files"
         const val REMINDERS = "reminders"
+        const val VAULT_SCAN = "vault-scan"
+        const val VAULT_SCAN_AUTO = "vault-scan-auto"
+        const val VAULT_UPLOADS = "vault-uploads"
         const val BACKOFF_SECONDS = 30L
     }
 }

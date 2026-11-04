@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.SyncProblem
@@ -39,6 +40,8 @@ fun MoreScreen(
     conflictCount: Int,
     onOpen: (route: String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Shows "Scan" (only with a vault-scan ViewModel wired in). */
+    vaultScan: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth().padding(16.dp).testTag("more-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SurfaceCard {
@@ -54,6 +57,11 @@ fun MoreScreen(
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Konflikte", Icons.Filled.SyncProblem, badge = if (conflictCount > 0) BadgeSpec("$conflictCount", BadgeTone.Warning) else null) {
                 onOpen(CONFLICTS_ROUTE)
+            }
+        }
+        if (false) {
+            SurfaceCard {
+                MoreRow("Scan", Icons.Filled.ImageSearch) { onOpen(de.wanderlogplus.app.ui.vault.VAULT_ROUTE) }
             }
         }
         SurfaceCard {

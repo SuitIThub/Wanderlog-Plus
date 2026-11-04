@@ -84,6 +84,11 @@ class MainActivity : ComponentActivity() {
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /** On grant the first vault scan starts right away (the daily schedule already exists from the Application). */
+    private val mediaPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) (application as WanderlogPlusApp).container.syncScheduler.requestVaultScan()
+    }
+
     /** Asks for POST_NOTIFICATIONS (API 33+) only once, so a refusal is never nagged about. */
     private fun requestNotificationPermissionOnce() {
         if (Build.VERSION.SDK_INT < 33) return
@@ -92,6 +97,21 @@ class MainActivity : ComponentActivity() {
         if (prefs.getBoolean("permissionAsked", false)) return
         prefs.edit().putBoolean("permissionAsked", true).apply()
         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    /**
+     * Asks once for the media access the vault scan needs (the background worker itself cannot show the dialog).
+     * The photo picker used elsewhere needs no permission, so nothing else in the app ever asks.
+     */
+    private fun requestMediaPermissionOnce() {
+        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) return
+        // Android 14 partial access ("selected photos") is enough for the scanner.
+        if (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED) return
+        val prefs = getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(this, "vault"), MODE_PRIVATE)
+        if (prefs.getBoolean("permissionAsked", false)) return
+        prefs.edit().putBoolean("permissionAsked", true).apply()
+        mediaPermission.launch(permission)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -134,6 +154,8 @@ class MainActivity : ComponentActivity() {
                 }
                 // Not on the very first launch before Setup: ask once a server is configured.
                 LaunchedEffect(remindersEnabled, hasServer) { if (remindersEnabled && hasServer == true) requestNotificationPermissionOnce() }
+                // Same gate for the vault scan: without media access it silently no-ops, so ask once up front.
+                LaunchedEffect(hasServer) { if (hasServer == true) requestMediaPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
                 LaunchedEffect(Unit) { container.syncRunner.refresh() }
                 if (loadFailed) {
@@ -164,6 +186,7 @@ class MainActivity : ComponentActivity() {
                         pendingSetup = pending,
                         onPendingSetupConsumed = { pendingSetup.value = null },
                         reelsViewModelFactory = remember { reelsFactory(container) },
+                        vaultScanViewModelFactory = remember { vaultScanFactory(container) },
                         pendingReelJob = reelJob,
                         onPendingReelConsumed = { pendingReel.value = null },
                         hasServer = hasServer,
@@ -271,6 +294,18 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             MoreViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope) as T
+    }
+
+    private fun vaultScanFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T =
+            de.wanderlogplus.app.ui.vault.VaultScanViewModel(
+                scanState = { container.db.vault().observeScanState() },
+                foundCount = { container.db.vault().observeFoundCount() },
+                pendingCount = { container.db.vault().observePendingCount() },
+                startScan = container.syncScheduler::requestVaultScan,
+                resumeUploads = container.syncScheduler::requestVaultUploads,
+            ) as T
     }
 
     private fun attachmentsFactory(container: AppContainer) = object : ViewModelProvider.Factory {

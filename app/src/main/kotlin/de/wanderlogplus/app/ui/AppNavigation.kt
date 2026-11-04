@@ -145,7 +145,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
+            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
 }
@@ -197,6 +197,8 @@ fun AppNavigation(
     onPendingSetupConsumed: () -> Unit = {},
     /** Reel analyses (Mehr → Reels); null hides the screens. */
     reelsViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Media scan (Mehr → Scan); null hides the row. */
+    vaultScanViewModelFactory: ViewModelProvider.Factory? = null,
     /** A reel job started from the share sheet: shown once, then [onPendingReelConsumed]. */
     pendingReelJob: String? = null,
     onPendingReelConsumed: () -> Unit = {},
@@ -802,7 +804,27 @@ fun AppNavigation(
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
                     SyncedScreen(syncStatus, onRefresh) {
-                        MoreScreen(snap?.conflicts?.size ?: 0, onOpen = { nav.navigate(it) })
+                        MoreScreen(snap?.conflicts?.size ?: 0, onOpen = { nav.navigate(it) }, vaultScan = vaultScanViewModelFactory != null)
+                    }
+                }
+                if (vaultScanViewModelFactory != null) {
+                    composable(de.wanderlogplus.app.ui.vault.VAULT_ROUTE) {
+                        val vm: de.wanderlogplus.app.ui.vault.VaultScanViewModel = viewModel(factory = vaultScanViewModelFactory)
+                        val scanState by vm.state.collectAsState()
+                        val found by vm.found.collectAsState()
+                        val pending by vm.pending.collectAsState()
+                        SyncedScreen(syncStatus, onRefresh) {
+                            de.wanderlogplus.app.ui.vault.VaultScanScreen(
+                                state = scanState,
+                                found = found,
+                                pending = pending,
+                                onResume = vm::resume,
+                                webUrl = settingsInfo.serverUrl?.let { url ->
+                                    settingsInfo.token?.let { token -> "${url.trimEnd('/')}/vault?token=$token" }
+                                },
+                                onStart = vm::start,
+                            )
+                        }
                     }
                 }
                 composable(NOTES_ROUTE) { entry ->

@@ -79,6 +79,8 @@ class Services(
     val ai: AiJobs = AiJobs(store, null, ToolReelMedia(), config.dataDir.resolve("ai-work")),
     val transit: TransitService = TransitService(store, null, null),
     val tokens: TokenService = TokenService(config, store),
+    /** Sensitive-media vault: per-user namespace, addressed by random ids (see [vaultApi]/[vaultWeb]). */
+    val vault: VaultStore = VaultStore.forConfig(config),
 )
 
 @Serializable
@@ -180,6 +182,7 @@ fun Application.module(services: Services) {
     }
     routing {
         get("/api/health") { call.respond(Health("ok", PROTOCOL_VERSION, services.store.epoch, System.currentTimeMillis())) }
+        vaultWeb(services)
         adminApi(services) {
             get("/tokens") { call.respond(de.wanderlogplus.shared.sync.AccessTokens(withContext(Dispatchers.IO) { services.tokens.list() })) }
             post("/tokens") {
@@ -194,6 +197,7 @@ fun Application.module(services: Services) {
         }
         protectedApi {
             get("/api/whoami") { call.respond(WhoAmI(call.author())) }
+            vaultApi(services)
             post("/api/sync/push") {
                 val req = call.receive<PushRequest>()
                 val author = call.author()
