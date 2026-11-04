@@ -3,6 +3,7 @@
  "tripPlan": {
   "id": 1,
   "key": "mini",
+  "contributors": [{"id": 1, "username": "anna1", "name": "Anna"}, {"id": 2, "username": "ben2", "name": ""}],
   "title": "Mini Trip",
   "startDate": "2027-05-08",
   "endDate": "2027-05-12",
@@ -721,9 +722,11 @@
        "currencyCode": "EUR"
       },
       "category": "hotel",
-      "description": "Hotel T",
+      "description": "Hotel T / nicht Bezahlt",
       "date": "2027-05-01",
       "blockId": 101,
+      "paidByUserId": 1,
+      "splitWith": {"type": "individuals", "users": [{"type": "registered", "id": 1}, {"type": "registered", "id": 2}]},
       "associatedDate": "2027-05-09"
      },
      {
@@ -739,7 +742,8 @@
       "associatedDate": "2027-05-08"
      }
     ],
-    "payments": []
+    "payments": [{"id": 7, "amount": {"amount": 50.0, "currencyCode": "EUR"}, "fromUser": {"type": "registered", "id": 2}, "toUser": {"type": "registered", "id": 1}, "paidAt": "2027-04-01T08:25:21Z"}],
+    "currencyRateDate": "2027-04-01"
    }
   }
  },

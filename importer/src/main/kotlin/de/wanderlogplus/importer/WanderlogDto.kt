@@ -22,6 +22,27 @@ data class WlTripPlan(
     val startDate: String,
     val endDate: String,
     val itinerary: WlItinerary,
+    /** The people of the trip (only id and name are used). */
+    val contributors: List<WlUser> = emptyList(),
+)
+
+@Serializable
+data class WlUser(val id: Long, val name: String? = null, val username: String? = null)
+
+/** A user reference in the budget ("registered" users carry an id). */
+@Serializable
+data class WlUserRef(val type: String = "", val id: Long? = null)
+
+@Serializable
+data class WlSplit(val type: String = "", val users: List<WlUserRef>? = null)
+
+@Serializable
+data class WlPayment(
+    val id: Long,
+    val amount: WlAmount,
+    val fromUser: WlUserRef? = null,
+    val toUser: WlUserRef? = null,
+    val paidAt: String? = null,
 )
 
 @Serializable
@@ -118,7 +139,11 @@ data class WlHotel(
 data class WlGuests(val adultCount: Int? = null, val roomCount: Int? = null)
 
 @Serializable
-data class WlBudget(val expenses: List<WlExpense> = emptyList())
+data class WlBudget(
+    val expenses: List<WlExpense> = emptyList(),
+    val payments: List<WlPayment> = emptyList(),
+    val currencyRateDate: String? = null,
+)
 
 @Serializable
 data class WlAmount(val amount: Double, val currencyCode: String)
@@ -131,6 +156,8 @@ data class WlExpense(
     val description: String = "",
     val associatedDate: String? = null,
     val blockId: Long? = null,
+    val paidByUserId: Long? = null,
+    val splitWith: WlSplit? = null,
 )
 
 @Serializable

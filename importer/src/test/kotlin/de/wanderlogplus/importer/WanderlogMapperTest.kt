@@ -1,6 +1,10 @@
 package de.wanderlogplus.importer
 
 import de.wanderlogplus.shared.model.EntityCodec
+import de.wanderlogplus.shared.model.Expense
+import de.wanderlogplus.shared.model.PaymentStatus
+import de.wanderlogplus.shared.model.Traveler
+import de.wanderlogplus.shared.model.Trip
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,6 +24,9 @@ class WanderlogMapperTest {
     private fun ImportSnapshot.of(type: EntityType) = entities.filter { it.type == type }
     private fun ImportedEntity.str(name: String): String? = (fields[name] as? JsonPrimitive)?.contentOrNull
     private fun id(type: EntityType, source: String) = EntityCodec.importedId(type, source)
+    private fun ImportedEntity.record() = de.wanderlogplus.shared.sync.EntityRecord(
+        type, id, fields.mapValues { (_, v) -> de.wanderlogplus.shared.sync.FieldValue(v, "0") },
+    )
 
     private fun ImportSnapshot.region(name: String) = of(EntityType.REGION).first { it.str("name") == name }
 
@@ -122,6 +129,29 @@ class WanderlogMapperTest {
     }
 
     @Test
+    fun `budget with travelers, payer, split, status and payments`() {
+        val s = snapshot()
+        val trip = EntityCodec.decode<Trip>(s.of(EntityType.TRIP).single().record())
+        assertEquals(listOf(Traveler("wl:1", "Anna"), Traveler("wl:2", "ben2")), trip.travelers)
+        val byId = s.of(EntityType.EXPENSE).associateBy { it.sourceId }
+        val hotel = EntityCodec.decode<Expense>(byId.getValue("expense:1").record())
+        assertEquals("wl:1", hotel.paidBy)
+        assertEquals(listOf("wl:1", "wl:2"), hotel.shares.map { it.travelerId })
+        assertEquals(PaymentStatus.OPEN, hotel.status)
+        assertEquals(1.0, hotel.rate)
+        assertEquals("2027-04-01", hotel.rateDate)
+        // Without a split in the export, everyone shares; no payer known.
+        val flight = EntityCodec.decode<Expense>(byId.getValue("expense:2").record())
+        assertEquals(PaymentStatus.PAID, flight.status)
+        assertEquals(listOf("wl:1", "wl:2"), flight.shares.map { it.travelerId })
+        val pay = EntityCodec.decode<Expense>(byId.getValue("payment:7").record())
+        assertEquals(Expense.KIND_TRANSFER, pay.kind)
+        assertEquals("wl:2" to "wl:1", pay.paidBy to pay.toTraveler)
+        assertEquals("2027-04-01", pay.date)
+        assertEquals(50.0, pay.amount)
+    }
+
+    @Test
     fun `ids are stable`() {
         assertEquals(snapshot(), snapshot())
         val s = snapshot()
@@ -146,5 +176,13 @@ class WanderlogMapperTest {
         assertEquals(6, s.of(EntityType.FLIGHT).size)
         assertEquals(10, s.of(EntityType.TRAIN).size)
         assertEquals(12, s.of(EntityType.DAY).size)
+        val expenses = s.of(EntityType.EXPENSE).map { EntityCodec.decode<Expense>(it.record()) }
+        assertEquals(12, expenses.count { !it.isTransfer })
+        assertEquals(3, expenses.count { it.isTransfer })
+        assertEquals(1, expenses.count { it.status == PaymentStatus.OPEN })
+        // The three payments settle Selina's half of the flights: the balance is the rest of the lodging etc.
+        val sum = de.wanderlogplus.shared.query.BudgetMath.summary(expenses, EntityCodec.decode<Trip>(s.of(EntityType.TRIP).single().record()).travelers)
+        assertEquals(2, sum.people.size)
+        assertEquals(0.0, sum.people.sumOf { it.balance }, 0.01)
     }
 }
