@@ -140,6 +140,22 @@ data class Day(
     val regionOverrideId: String? = null,
     /** Show travel legs (time, distance, map) between the program's places. */
     val showLegs: Boolean = false,
+    /** Earlier versions of the program (before a chat plan was applied or a version restored), newest last. */
+    val history: List<DayVersion> = emptyList(),
+)
+
+/** A saved state of a day's program: which items, in which order, at which times. */
+@Serializable
+data class DayVersion(val at: Long, val label: String, val items: List<DayVersionItem> = emptyList())
+
+/** One program item of a [DayVersion]; its other fields stay on the (possibly deleted) item itself. */
+@Serializable
+data class DayVersionItem(
+    val id: String,
+    val sortKey: String,
+    val time: String? = null,
+    val kind: DayItemKind = DayItemKind.PLACE,
+    val placeId: String? = null,
 )
 
 enum class DayItemKind { PLACE, NOTE }

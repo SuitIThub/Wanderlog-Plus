@@ -17,6 +17,8 @@ import de.wanderlogplus.shared.model.Trip
 import de.wanderlogplus.shared.query.TripQueries
 import de.wanderlogplus.shared.query.isOpenOn
 import de.wanderlogplus.shared.sync.ChatCard
+import de.wanderlogplus.shared.sync.ChatPlan
+import de.wanderlogplus.shared.sync.ChatPlanStep
 import de.wanderlogplus.shared.sync.ChatContext
 import de.wanderlogplus.shared.sync.ChatMessage
 import de.wanderlogplus.shared.sync.ChatScreens
@@ -314,7 +316,7 @@ object ChatContextText {
                     s?.dossier?.verdict?.takeIf { it.isNotBlank() }?.let { append(" – ").append(it.take(160)) }
                     i.legMode?.let { append(" (Anreise: ").append(it.name).append(")") }
                 } else {
-                    append("Notiz: ").append(i.text.take(300))
+                    append("Notiz [id=").append(i.id).append("]: ").append(i.text.take(300))
                 }
                 append('\n')
             }
@@ -481,6 +483,26 @@ class ChatTools(
                 putJsonObject("queries") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "1-3 kurze Suchanfragen") }
             })
         }
+        add(tool("show_day_plan", "Zeigt einen vollständigen Ablaufvorschlag für einen Tag als Plan-Karte; der Nutzer übernimmt ihn per Button. Wird automatisch geprüft (Ergebnis kommt zurück); ein erneuter Aufruf für denselben Tag ersetzt die Karte.") {
+            putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
+            putJsonObject("steps") {
+                put("type", "array")
+                put("description", "in Reihenfolge des neuen Ablaufs; jeder bisherige Programmpunkt als keep oder remove")
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("action") { put("type", "string"); putJsonArray("enum") { add(JsonPrimitive("keep")); add(JsonPrimitive("add")); add(JsonPrimitive("remove")) } }
+                        putJsonObject("id") { put("type", "string"); put("description", "keep/remove: id des Programmpunkts; add: id eines hinterlegten Orts") }
+                        putJsonObject("place") { put("type", "string"); put("description", "add ohne id: Name und Ort eines Webfunds zum Nachschlagen der Lage") }
+                        putJsonObject("title") { put("type", "string"); put("description", "Anzeigename für place") }
+                        putJsonObject("category") { put("type", "string"); putJsonArray("enum") { PlaceCategory.entries.forEach { add(JsonPrimitive(it.name)) } } }
+                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm, optional") }
+                        putJsonObject("reason") { put("type", "string"); put("description", "kurzer Grund, ein paar Wörter") }
+                    }
+                    putJsonArray("required") { add(JsonPrimitive("action")) }
+                }
+            }
+        })
         add(tool("show_place_cards", "Zeigt hinterlegte Orte als antippbare Karten unter der Antwort (Reihenfolge = Empfehlung). Die Karten haben einen Button „Einplanen“; date/after belegen ihn vor.") {
             putJsonObject("ids") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "ids ohne Planungsvorschlag") }
             putJsonObject("items") {
@@ -543,6 +565,7 @@ class ChatTools(
             "transit" -> transit(args)
             "check_day" -> checkDay(args)
             "route" -> route(args)
+            "show_day_plan" -> showDayPlan(args)
             "show_place_cards" -> showPlaces(args)
             "show_web_cards" -> showWeb(args)
             else -> "Unbekanntes Werkzeug."
@@ -753,6 +776,110 @@ class ChatTools(
         return v.takeIf { t.dayItems.any { it.dayId == day.id && it.kind == DayItemKind.PLACE && it.placeId == placeId } }
     }
 
+    /** The program item [ref] points at on [dayId]: an item id, a saved place id or a place id. */
+    private fun itemFor(dayId: String, ref: String): DayItem? {
+        val items = t.dayItems.filter { it.dayId == dayId }
+        items.firstOrNull { it.id == ref }?.let { return it }
+        val placeId = t.savedById[ref]?.placeId ?: ref
+        return items.firstOrNull { it.kind == DayItemKind.PLACE && it.placeId == placeId }
+    }
+
+    private fun showDayPlan(args: JsonObject): String {
+        val date = planDate(args.s("date")) ?: return "date fehlt oder ist kein Reisetag."
+        val day = t.queries?.dayFor(date)
+        val program = day?.let { d -> t.dayItems.filter { it.dayId == d.id }.sortedBy { it.sortKey } }.orEmpty()
+        val raw = (args["steps"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        if (raw.isEmpty()) return "steps fehlen."
+        say("Stelle den Plan zusammen …")
+        val steps = mutableListOf<ChatPlanStep>()
+        val used = mutableSetOf<String>()
+        val notes = mutableListOf<String>()
+        fun itemTitle(i: DayItem) = if (i.kind == DayItemKind.PLACE) t.places[i.placeId]?.name ?: "Ort" else "Notiz: " + i.text.lineSequence().firstOrNull().orEmpty().take(40)
+        raw.forEach { o ->
+            val time = o.s("time")?.takeIf { ChatDayCheck.mins(it) != null }
+            val reason = o.s("reason")?.take(80)
+            when (o.s("action")?.lowercase()) {
+                "keep", "remove" -> {
+                    val item = o.s("id")?.let { ref -> day?.let { itemFor(it.id, ref) } } ?: run { notes += "unbekannter Programmpunkt ${o.s("id")}"; return@forEach }
+                    if (!used.add(item.id)) return@forEach
+                    val keep = o.s("action") == "keep"
+                    steps += ChatPlanStep(
+                        if (keep) ChatPlanStep.KEEP else ChatPlanStep.REMOVE, itemTitle(item), itemId = item.id,
+                        time = time.takeIf { keep && it != item.time }, oldTime = item.time, reason = reason,
+                    )
+                }
+                "add" -> {
+                    val id = o.s("id")
+                    val saved = id?.let { t.savedById[it] }
+                    when {
+                        saved != null -> {
+                            if (program.any { it.kind == DayItemKind.PLACE && it.placeId == saved.placeId }) { notes += "${t.places[saved.placeId]?.name} ist schon im Programm (keep nutzen)"; return@forEach }
+                            if (!used.add("s:" + saved.id)) return@forEach
+                            steps += ChatPlanStep(ChatPlanStep.ADD, t.places[saved.placeId]?.name ?: "Ort", savedPlaceId = saved.id, time = time, reason = reason)
+                        }
+                        o.s("place") != null -> {
+                            val title = o.s("title") ?: o.s("place")!!
+                            val probe = ChatCard(ChatCard.KIND_WEB, title)
+                            val found = locate(o.s("place")!!, probe, o.s("category"), date) ?: run { notes += "Lage von ${o.s("place")} nicht gefunden"; return@forEach }
+                            val known = found.savedPlaceId
+                            if (known != null) {
+                                if (program.any { it.kind == DayItemKind.PLACE && it.placeId == t.savedById[known]?.placeId }) return@forEach
+                                steps += ChatPlanStep(ChatPlanStep.ADD, t.places[t.savedById[known]?.placeId]?.name ?: title, savedPlaceId = known, time = time, reason = reason)
+                            } else {
+                                steps += ChatPlanStep(
+                                    ChatPlanStep.ADD, title, lat = found.lat, lng = found.lng, address = found.address,
+                                    category = found.category ?: PlaceCategory.SIGHT.name, time = time, reason = reason,
+                                )
+                            }
+                        }
+                        else -> notes += "add ohne gültige id oder place"
+                    }
+                }
+                else -> notes += "unbekannte action"
+            }
+        }
+        // Items the plan forgot stay where they were: after the step of the item before them.
+        program.forEachIndexed { idx, item ->
+            if (item.id in used) return@forEachIndexed
+            val own = item.time?.let { ChatDayCheck.mins(it) }
+            val at = if (own != null) {
+                // A fixed time decides: before the first step planned later.
+                fun timeOf(st: ChatPlanStep) = (st.time ?: st.oldTime)?.let { ChatDayCheck.mins(it) }
+                steps.indexOfFirst { st -> st.action != ChatPlanStep.REMOVE && (timeOf(st) ?: -1) > own }.takeIf { it >= 0 } ?: steps.size
+            } else {
+                val before = program.take(idx).lastOrNull { b -> steps.any { it.itemId == b.id } }
+                before?.let { b -> steps.indexOfFirst { it.itemId == b.id } + 1 } ?: 0
+            }
+            steps.add(at, ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, oldTime = item.time))
+            used += item.id
+        }
+        if (steps.none { it.action != ChatPlanStep.REMOVE }) return "Der Plan ist leer."
+        val stops = steps.filter { it.action != ChatPlanStep.REMOVE }.mapNotNull { st ->
+            val item = st.itemId?.let { id -> program.firstOrNull { it.id == id } }
+            when {
+                item != null && item.kind != DayItemKind.PLACE -> null
+                item != null -> PlanStop(st.title, item.placeId, time = st.time ?: item.time, legMode = item.legMode, legMinutes = item.legTransit?.routes?.firstOrNull()?.durationMinutes)
+                st.savedPlaceId != null -> PlanStop(st.title, t.savedById[st.savedPlaceId]?.placeId, time = st.time)
+                else -> PlanStop(st.title, lat = st.lat, lng = st.lng, time = st.time, category = st.category?.let { c -> PlaceCategory.entries.firstOrNull { it.name == c } })
+            }
+        }
+        val check = ChatDayCheck(t).check(date, stops)
+        val problems = check.substringAfter("Probleme:\n", "").trim().takeIf { it.isNotEmpty() }
+        cards.removeAll { it.kind == ChatCard.KIND_PLAN && it.plan?.date == date }
+        if (cards.size >= MAX_CARDS) cards.removeAt(cards.lastIndex)
+        cards += ChatCard(
+            ChatCard.KIND_PLAN, "Plan für " + germanDate(date),
+            subtitle = "${steps.count { it.action == ChatPlanStep.ADD }} neu · ${steps.count { it.action == ChatPlanStep.REMOVE }} entfällt",
+            plan = ChatPlan(date, steps, check = problems ?: "Keine Probleme gefunden."),
+        )
+        return buildString {
+            append("Plan-Karte gezeigt.")
+            if (notes.isNotEmpty()) append(" Hinweise: ").append(notes.joinToString("; ")).append('.')
+            append("\nPrüfung:\n").append(check)
+            if (problems != null) append("Wenn sich die Probleme lösen lassen, zeig einen verbesserten Plan (gleicher Tag ersetzt die Karte); sonst erkläre sie.")
+        }
+    }
+
     private fun showPlaces(args: JsonObject): String {
         val wanted = args.list("ids").map { Triple(it, null as String?, null as String?) } +
             (args["items"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o -> o.s("id")?.let { Triple(it, o.s("date"), o.s("after")) } }
@@ -902,6 +1029,10 @@ class ChatAgent(
               Bei „in der Nähe“, „nicht weit“, „auf dem Weg“ suchst du mit near (Bezugspunkt: Unterkunft, ein Programmpunkt oder Koordinaten)
               und maxKm (in der Nähe ≈ bis 15 km, zu Fuß ≈ 2 km). Nenne bei Empfehlungen die Entfernung; schlage nichts weit Entferntes vor,
               ohne das zu sagen. Für andere Tage nutzt du get_day.
+            - Wünscht sich der Nutzer einen Tagesablauf („plan mir den Tag“, „füll die Lücke“, „bau den Tag regenfest um“), stellst du ihn
+              aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
+              als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
+              steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
             - Fragt der Nutzer, ob ein Tag passt („schaffen wir das?“, „Plan-Check“), nutzt du check_day und erklärst die Probleme
               mit konkreten Lösungen (früher los, Reihenfolge tauschen, etwas streichen). Die Zeiten dort sind Schätzungen; sag das.
             """.trimIndent(),

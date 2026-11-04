@@ -110,6 +110,8 @@ fun DayDetailScreen(
     onOpenPlace: ((placeId: String) -> Unit)? = null,
     /** Opens photo [index] of the day's gallery full screen; null: photos are only shown. */
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
+    /** Restores a saved version of the program ("Verlauf"); null hides it. */
+    onRestoreVersion: ((date: String, at: Long) -> Unit)? = null,
     /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
     onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
 ) {
@@ -196,6 +198,8 @@ fun DayDetailScreen(
                     onOpenMap = onOpenMap?.let { open -> { open(date) } },
                     onTransitDetails = onTransitDetails?.let { open -> { id -> open(date, id) } },
                     onOpenPlace = onOpenPlace,
+                    history = day?.history.orEmpty(),
+                    onRestoreVersion = onRestoreVersion?.let { restore -> { at: Long -> restore(date, at) } },
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,

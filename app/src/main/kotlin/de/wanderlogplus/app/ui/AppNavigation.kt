@@ -331,6 +331,7 @@ fun AppNavigation(
                     }
                 },
                 onAddStayAt = vm::addStayAt,
+                onRestoreVersion = { d, at -> vm.restoreVersion(d, at) },
             )
         }
 
@@ -1084,5 +1085,15 @@ private fun chatActions(vm: TripViewModel, snapshot: () -> TripSnapshot?, notify
             note = card.url?.let { "Gefunden im Reise-Chat: $it" }.orEmpty(),
         )
         notify("Zu Orten hinzugefügt" + (region?.let { " (${it.name})" } ?: ""))
+    }
+
+    override fun applyPlan(date: String, ops: List<de.wanderlogplus.client.PlanOp>, remove: Set<String>, at: Long) {
+        vm.applyPlan(date, ops, remove, at)
+        notify("Plan für " + dayCardLabel(date) + " übernommen – im Verlauf des Tages wiederherstellbar")
+    }
+
+    override fun restorePlan(date: String, at: Long) {
+        vm.restoreVersion(date, at)
+        notify("Programm von " + dayCardLabel(date) + " zurückgesetzt")
     }
 }

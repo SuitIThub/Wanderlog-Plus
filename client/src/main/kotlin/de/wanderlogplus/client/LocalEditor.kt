@@ -2,12 +2,17 @@ package de.wanderlogplus.client
 
 import de.wanderlogplus.shared.model.DayItem
 import de.wanderlogplus.shared.model.DayItemKind
+import de.wanderlogplus.shared.model.DayVersion
+import de.wanderlogplus.shared.model.DayVersionItem
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Ids
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.*
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 
 interface Transactor {
@@ -423,4 +428,143 @@ class LocalEditor(
         }
         onChange()
     }
+
+    /**
+     * Applies a plan to the program of [date] in one transaction: [ops] in order (existing items kept, maybe at a new
+     * time; saved places or found places added), [remove] deleted; items in neither stay, after the plan. The program
+     * before is saved first as a version labelled [label] (at [now], epoch ms). Returns that version's time.
+     */
+    fun applyDayPlan(snapshot: TripSnapshot, date: String, ops: List<PlanOp>, remove: Set<String>, label: String, now: Long): Long {
+        val trip = requireNotNull(snapshot.trip) { "No trip" }
+        val queries = snapshot.queries()
+        val existing = queries?.dayFor(date)
+        val dayId = existing?.id ?: Ids.dayId(trip.id, date)
+        val current = existing?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+        val currentIds = current.map { it.id }.toSet()
+        tx.run {
+            if (existing == null) writeNew(EntityType.DAY, dayId, mapOf("date" to JsonPrimitive(date)))
+            saveVersion(dayId, existing?.history.orEmpty(), current, label, now)
+            val order = mutableListOf<Pair<String, String?>>() // item id, time to set (null: unchanged)
+            val inDay = current.filter { it.kind == DayItemKind.PLACE && it.id !in remove }.mapNotNull { it.placeId }.toMutableSet()
+            ops.forEach { op ->
+                when (op) {
+                    is PlanOp.Keep -> if (op.itemId in currentIds && op.itemId !in remove && order.none { it.first == op.itemId }) order += op.itemId to op.time
+                    is PlanOp.AddSaved -> {
+                        val saved = snapshot.savedPlaces.firstOrNull { it.id == op.savedPlaceId } ?: return@forEach
+                        if (!inDay.add(saved.placeId)) return@forEach
+                        val itemId = Ids.newId()
+                        writeNew(EntityType.DAY_ITEM, itemId, mapOf("dayId" to JsonPrimitive(dayId), "kind" to JsonPrimitive(DayItemKind.PLACE.name), "placeId" to JsonPrimitive(saved.placeId)))
+                        write(EntityType.SAVED_PLACE, saved.id, mapOf("status" to JsonPrimitive(PlaceStatus.PLANNED.name)))
+                        order += itemId to op.time
+                    }
+                    is PlanOp.AddFound -> {
+                        require(op.name.isNotBlank()) { "A place needs a name" }
+                        val placeId = Ids.newId()
+                        writeNew(
+                            EntityType.PLACE, placeId,
+                            buildMap {
+                                put("name", JsonPrimitive(op.name.trim()))
+                                put("lat", JsonPrimitive(op.lat))
+                                put("lng", JsonPrimitive(op.lng))
+                                op.address?.takeIf { it.isNotBlank() }?.let { put("address", JsonPrimitive(it)) }
+                            },
+                        )
+                        writeNew(
+                            EntityType.SAVED_PLACE, Ids.newId(),
+                            buildMap {
+                                put("placeId", JsonPrimitive(placeId))
+                                queries?.regionFor(date)?.let { put("regionId", JsonPrimitive(it)) }
+                                put("category", JsonPrimitive(op.category.name))
+                                put("status", JsonPrimitive(PlaceStatus.PLANNED.name))
+                                if (op.note.isNotBlank()) put("note", JsonPrimitive(op.note))
+                            },
+                        )
+                        val itemId = Ids.newId()
+                        writeNew(EntityType.DAY_ITEM, itemId, mapOf("dayId" to JsonPrimitive(dayId), "kind" to JsonPrimitive(DayItemKind.PLACE.name), "placeId" to JsonPrimitive(placeId)))
+                        order += itemId to op.time
+                    }
+                }
+            }
+            current.filter { it.id !in remove && order.none { o -> o.first == it.id } }.forEach { order += it.id to null }
+            val keys = SortKey.sequence(order.size)
+            order.forEachIndexed { i, (id, time) ->
+                write(EntityType.DAY_ITEM, id, buildMap {
+                    put("sortKey", JsonPrimitive(keys[i]))
+                    if (time != null) put("time", if (time.isBlank()) JsonNull else JsonPrimitive(time))
+                })
+            }
+            val removed = current.filter { it.id in remove }
+            removed.forEach { write(EntityType.DAY_ITEM, it.id, mapOf("deleted" to JsonPrimitive(true))) }
+            resetUnplanned(snapshot, removed, stillThere = order.map { it.first }.toSet())
+        }
+        onChange()
+        return now
+    }
+
+    /**
+     * Restores the program of [date] to its version saved at [at]: items added since are removed, removed ones come
+     * back with their order and times. The program before is saved as a version too, so this can be undone.
+     */
+    fun restoreDayVersion(snapshot: TripSnapshot, date: String, at: Long, now: Long) {
+        val day = requireNotNull(snapshot.queries()?.dayFor(date)) { "No day" }
+        val version = requireNotNull(day.history.firstOrNull { it.at == at }) { "Unknown version" }
+        val current = snapshot.dayItemsFor(day.id)
+        val keep = version.items.map { it.id }.toSet()
+        tx.run {
+            saveVersion(day.id, day.history, current, "Vor dem Wiederherstellen", now)
+            val removed = current.filter { it.id !in keep }
+            removed.forEach { write(EntityType.DAY_ITEM, it.id, mapOf("deleted" to JsonPrimitive(true))) }
+            version.items.forEach { v ->
+                write(
+                    EntityType.DAY_ITEM, v.id,
+                    mapOf(
+                        "deleted" to JsonPrimitive(false),
+                        "sortKey" to JsonPrimitive(v.sortKey),
+                        "time" to (v.time?.let { JsonPrimitive(it) } ?: JsonNull),
+                    ),
+                )
+                if (v.kind == DayItemKind.PLACE && v.placeId != null) {
+                    snapshot.savedPlaces.filter { it.placeId == v.placeId && it.status == PlaceStatus.IDEA }
+                        .forEach { write(EntityType.SAVED_PLACE, it.id, mapOf("status" to JsonPrimitive(PlaceStatus.PLANNED.name))) }
+                }
+            }
+            resetUnplanned(snapshot, removed, stillThere = keep)
+        }
+        onChange()
+    }
+
+    private fun saveVersion(dayId: String, history: List<DayVersion>, items: List<DayItem>, label: String, now: Long) {
+        val version = DayVersion(now, label, items.map { DayVersionItem(it.id, it.sortKey, it.time, it.kind, it.placeId) })
+        val list = (history.filter { it.at != now } + version).takeLast(MAX_DAY_VERSIONS)
+        write(EntityType.DAY, dayId, mapOf("history" to Json.encodeToJsonElement(ListSerializer(DayVersion.serializer()), list)))
+    }
+
+    /** Saved places of [removed] items that are in no other program item any more go back to "Idee". */
+    private fun resetUnplanned(snapshot: TripSnapshot, removed: List<DayItem>, stillThere: Set<String>) {
+        val removedIds = removed.map { it.id }.toSet()
+        removed.filter { it.kind == DayItemKind.PLACE && it.placeId != null }.forEach { item ->
+            val elsewhere = snapshot.dayItems.any { it.id !in removedIds && it.kind == DayItemKind.PLACE && it.placeId == item.placeId }
+            if (elsewhere) return@forEach
+            snapshot.savedPlaces.filter { it.placeId == item.placeId && it.status == PlaceStatus.PLANNED }
+                .forEach { write(EntityType.SAVED_PLACE, it.id, mapOf("status" to JsonPrimitive(PlaceStatus.IDEA.name))) }
+        }
+    }
 }
+
+/** One step of [LocalEditor.applyDayPlan]; [time] "HH:mm" to set, "" to clear, null to leave as is. */
+sealed interface PlanOp {
+    data class Keep(val itemId: String, val time: String? = null) : PlanOp
+    data class AddSaved(val savedPlaceId: String, val time: String? = null) : PlanOp
+    data class AddFound(
+        val name: String,
+        val lat: Double,
+        val lng: Double,
+        val address: String?,
+        val category: PlaceCategory,
+        val time: String? = null,
+        val note: String = "",
+    ) : PlanOp
+}
+
+/** Versions kept per day. */
+const val MAX_DAY_VERSIONS = 10
