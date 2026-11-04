@@ -142,7 +142,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     /** Routes nested below this tab's root (the tab stays highlighted there). */
     val nestedRoutes: Set<String>
         get() = when (this) {
-            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE)
+            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
@@ -302,6 +302,12 @@ fun AppNavigation(
                 onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
                 onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
                 onTransitDetails = transitApi?.let { { d, id -> nav.navigate(de.wanderlogplus.app.ui.transit.transitRoute(d, id)) } },
+                onOpenPlace = placesViewModelFactory?.let {
+                    { placeId ->
+                        uiScope.launch { vm.savedPlaceFor(placeId)?.let { id -> nav.navigate(tripPlaceRoute(id)) } }
+                        Unit
+                    }
+                },
                 onAddStayAt = vm::addStayAt,
             )
         }
@@ -393,7 +399,8 @@ fun AppNavigation(
                             }
                             TodayScreen(
                                 s, now,
-                                onOpenDay = { nav.navigate(dayRoute(it)) },
+                                // A day opened from Heute belongs to the Reise tab: the Heute tab then really leads back.
+                                onOpenDay = { d -> nav.navigateToTab(Tab.REISE); nav.navigate(dayRoute(d)) },
                                 onOpenTrip = { nav.navigateToTab(Tab.REISE) },
                                 onSyncNow = onRefresh,
                                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
@@ -433,6 +440,18 @@ fun AppNavigation(
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { DayDetailFor(vm, it, date, onBack = { nav.popBackStack() }) }
+                    }
+                }
+                if (placesViewModelFactory != null) {
+                    // A place opened from a day stays in the Reise tab (back leads to the day).
+                    composable(TRIP_PLACE_ROUTE) { entry ->
+                        val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory)
+                        val snap by vm.snapshot.collectAsState()
+                        ErrorSnack(vm.error, vm::consumeError, snackbar)
+                        val id = entry.arguments?.getString("savedPlaceId").orEmpty()
+                        SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                            snap?.let { PlaceDetailFor(vm, it, id, onBack = { nav.popBackStack() }) }
+                        }
                     }
                 }
                 composable(DAY_MAP_ROUTE) { entry ->
@@ -925,6 +944,11 @@ private fun ErrorSnack(errorFlow: StateFlow<String?>, consume: () -> Unit, snack
 
 private fun NavController.entryOrNull(route: String) =
     try { getBackStackEntry(route) } catch (_: IllegalArgumentException) { null }
+
+/** Place detail opened from a day's program (Reise tab). */
+const val TRIP_PLACE_ROUTE = "trip/place/{savedPlaceId}"
+
+fun tripPlaceRoute(savedPlaceId: String) = "trip/place/${android.net.Uri.encode(savedPlaceId)}"
 
 private fun NavController.navigateToTab(tab: Tab) = navigate(tab.route) {
     popUpTo(Tab.HEUTE.route) { saveState = true }

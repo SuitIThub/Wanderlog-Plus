@@ -44,6 +44,30 @@ class TripViewModel(
 
     fun consumeError() { _error.value = null }
 
+    /**
+     * The saved place of a program place, created (status "geplant", nearest region) when the place is in no
+     * collection yet, so its detail can open. Null when that failed.
+     */
+    suspend fun savedPlaceFor(placeId: String): String? {
+        _snapshot.value?.savedPlaces?.firstOrNull { it.placeId == placeId }?.id?.let { return it }
+        var id: String? = null
+        return try {
+            edit { e, s ->
+                id = s.savedPlaces.firstOrNull { it.placeId == placeId }?.id ?: run {
+                    val p = s.places[placeId]
+                    val region = p?.let { de.wanderlogplus.app.ui.places.nearestRegion(s, it.lat, it.lng) }
+                    e.addSavedPlace(placeId, region)
+                }
+            }
+            id
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _error.value = e.javaClass.simpleName
+            null
+        }
+    }
+
     private fun write(action: (LocalEditor, TripSnapshot) -> Unit): Job = writeScope.launch {
         try {
             edit(action)

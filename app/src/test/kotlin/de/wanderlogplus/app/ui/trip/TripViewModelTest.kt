@@ -57,6 +57,24 @@ class TripViewModelTest {
         assertEquals(1, TripSnapshot.from(store.all()).days.size)
     }
 
+    @Test fun aProgramPlaceWithoutSavedPlaceGetsOneOnceAndOpens() {
+        seed(EntityType.REGION, "r1", Region("r1", "Kyoto"))
+        seed(EntityType.PLACE, "ph", Place("ph", name = "Hotel", lat = 35.0, lng = 135.76))
+        seed(EntityType.PLACE, "pk", Place("pk", name = "Kiyomizu", lat = 34.99, lng = 135.78))
+        seed(EntityType.SAVED_PLACE, "sk", SavedPlace("sk", "pk", "r1"))
+        seed(EntityType.PLACE, "pa", Place("pa", name = "Anker", lat = 35.01, lng = 135.77))
+        seed(EntityType.SAVED_PLACE, "sa", SavedPlace("sa", "pa", "r1"))
+        val vm = vm()
+        assertEquals("sk", runBlocking { vm.savedPlaceFor("pk") }) // existing one, nothing written
+        val created = runBlocking { vm.savedPlaceFor("ph") }!!
+        val again = runBlocking { vm.savedPlaceFor("ph") }
+        assertEquals(created, again) // no second one
+        val sp = TripSnapshot.from(store.all()).savedPlaces.single { it.id == created }
+        assertEquals("ph", sp.placeId)
+        assertEquals(PlaceStatus.PLANNED, sp.status)
+        assertEquals("r1", sp.regionId) // nearest region
+    }
+
     @Test fun quickMovesUpStayConsistent() {
         seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
         seed(EntityType.DAY, "d1", Day("d1", "2027-05-09"))

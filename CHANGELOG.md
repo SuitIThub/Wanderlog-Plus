@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.18.1
+
+- Ein Tag, der aus „Heute“ geöffnet wurde (Kopf oder Ziel antippen), gehört jetzt zum Reise-Tab: Der Tab „Heute“ führt wieder zurück.
+- In der Tagesansicht öffnet ein Tipp auf einen Ort dessen Details; zurück geht es zum Tag. Orte, die nur im Programm stehen, werden dabei als „geplant“ in der nächsten Region gespeichert.
+
 ## 0.18.0
 
 - **Zugänge verwalten** (Einstellungen → Server → „Zugänge verwalten (Admin)“): Mit dem Admin-Token des Servers (`WLP_ADMIN_TOKEN`) siehst du alle Zugänge, legst neue an und widerrufst sie. Jeder Zugang hat einen QR-Code, mit dem sich ein weiteres Gerät direkt einrichtet. Den Admin-Token gibst du einmal ein oder scannst ihn; er bleibt auf dem Gerät und wird nie zum Synchronisieren benutzt.
