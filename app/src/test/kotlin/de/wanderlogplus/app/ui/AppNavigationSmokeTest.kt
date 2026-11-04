@@ -103,6 +103,31 @@ class AppNavigationSmokeTest {
     private fun shows(t: String) = tag(t).assertExists()
     private fun tab(route: String) { tag("nav-$route").tap(); rule.waitForIdle() }
 
+    @Test fun dayOpenedFromHeuteLeavesHeuteAndTheTabGoesBack() {
+        launch()
+        shows("today-header")
+        tag("today-header").tap()
+        rule.waitForIdle()
+        shows("program-list")
+        tab("heute")
+        shows("today-header")
+        // Reise still remembers the day opened from Heute.
+        tab("reise")
+        shows("program-list")
+    }
+
+    @Test fun placeOfTheDayProgramOpensItsDetail() {
+        launch()
+        tab("reise")
+        tag("trip-list").performScrollToNode(hasTestTag("day-2027-04-02"))
+        tag("day-2027-04-02").tap()
+        shows("program-list")
+        tag("program-row-i-2").tap()
+        rule.waitForIdle()
+        shows("place-detail")
+        rule.onNodeWithText("Alter Bergtempel").assertExists()
+    }
+
     @Test fun allFiveTabs() {
         launch()
         shows("today-header")

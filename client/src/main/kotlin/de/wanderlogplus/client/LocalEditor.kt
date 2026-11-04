@@ -43,6 +43,21 @@ class LocalEditor(
     private fun writeNew(type: EntityType, id: String, values: Map<String, JsonElement>) =
         write(type, id, values + ("deleted" to JsonPrimitive(false)))
 
+    /** A saved place (status "geplant") for an existing [placeId], e.g. a place of a day that is in no collection yet. Returns its id. */
+    fun addSavedPlace(placeId: String, regionId: String?, category: de.wanderlogplus.shared.model.PlaceCategory = de.wanderlogplus.shared.model.PlaceCategory.SIGHT): String {
+        val id = de.wanderlogplus.shared.model.Ids.newId()
+        writeNew(
+            EntityType.SAVED_PLACE, id,
+            mapOf(
+                "placeId" to JsonPrimitive(placeId),
+                "regionId" to (regionId?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull),
+                "category" to JsonPrimitive(category.name),
+                "status" to JsonPrimitive(de.wanderlogplus.shared.model.PlaceStatus.PLANNED.name),
+            ),
+        )
+        return id
+    }
+
     fun set(type: EntityType, id: String, values: Map<String, JsonElement>) {
         val bad = values.keys.firstOrNull(::isReserved)
         require(bad == null) { "Field '$bad' is reserved and cannot be written by a device" }

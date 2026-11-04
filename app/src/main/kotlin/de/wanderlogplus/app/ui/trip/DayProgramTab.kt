@@ -67,6 +67,8 @@ internal fun DayProgramTab(
     onOpenMap: (() -> Unit)? = null,
     /** Opens "Verbindung abfragen" for the way to this item; null hides the button. */
     onTransitDetails: ((itemId: String) -> Unit)? = null,
+    /** Opens the detail of a program place; null: places are not tappable. */
+    onOpenPlace: ((placeId: String) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         val places = items.count { it.kind == DayItemKind.PLACE }
@@ -97,7 +99,7 @@ internal fun DayProgramTab(
             movements = movements,
             stay = stay,
             accent = accent,
-            onOpenItem = null,
+            onOpenItem = onOpenPlace?.let { open -> { item: DayItem -> item.placeId?.takeIf { item.kind == DayItemKind.PLACE }?.let(open) } },
             onOpenAttachment = { a -> attachments?.onOpen?.invoke(a) },
             available = attachments?.available ?: { true },
             itemTagPrefix = "program-row-",
