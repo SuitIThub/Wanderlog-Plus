@@ -4,6 +4,8 @@ import de.wanderlogplus.app.ui.dayCardLabel
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.sync.ChatContext
 import de.wanderlogplus.shared.sync.ChatScreens
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 const val CHAT_ROUTE = "chat"
 
@@ -39,5 +41,29 @@ fun chatContextFor(route: String?, args: Map<String, String?>, snapshot: TripSna
         r.startsWith("logistik") -> ChatContext(ChatScreens.LOGISTICS, label = "Logistik")
         r.startsWith("mehr") -> ChatContext(ChatScreens.MORE)
         else -> ChatContext(ChatScreens.OTHER)
+    }
+}
+
+/** The detail a two-pane screen shows beside its list: [route] pattern and [args] as if it were open on its own. */
+data class ChatPane(val owner: String, val route: String, val args: Map<String, String?>)
+
+/** Holds the [ChatPane] of the screen on display, so the chat opens with the detail's context, not the list's. */
+class ChatPaneHolder {
+    var pane: ChatPane? by androidx.compose.runtime.mutableStateOf(null)
+
+    /** The pane of [current] (the nav route on display), or null. */
+    fun paneFor(current: String?): ChatPane? = pane?.takeIf { it.owner == current }
+}
+
+val LocalChatPane = androidx.compose.runtime.staticCompositionLocalOf<ChatPaneHolder?> { null }
+
+/** Reports, while composed, that the screen [owner] shows the detail [route] with [args] in its detail pane. */
+@androidx.compose.runtime.Composable
+fun ReportChatPane(owner: String, route: String, args: Map<String, String?>) {
+    val holder = LocalChatPane.current ?: return
+    val pane = ChatPane(owner, route, args)
+    androidx.compose.runtime.DisposableEffect(holder, pane) {
+        holder.pane = pane
+        onDispose { if (holder.pane == pane) holder.pane = null }
     }
 }

@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.22.1
+
+- **Reise-Chat kennt mehr Kontext:** alle Unterkünfte mit Adresse, den ganzen Reiseplan (Übernachtung, Programm, Fahrten je Tag) und Entfernungen. Auf einem Tag sieht er Unterkunft, Programm und offene Vorschläge samt Entfernung zur Unterkunft; „in der Nähe“ sucht er im Umkreis statt in der ganzen Region (Server-Update nötig).
+- Im Querformat mit zwei Spalten öffnet der Chat mit dem Tag bzw. Ort, der gerade rechts angezeigt wird, und es gibt nur noch ein Chat-Symbol.
+
 ## 0.21.0
 
 - **Reise-Chat** mit KI: über das Chat-Symbol oben (im Bildkopf von Heute, Tag, Region, Ort und Buchung, auf den Tab-Startseiten in einer schmalen Leiste) öffnet sich der Chat. Frag nach Vorschlägen oder nenne Wünsche („Regentag“, „gutes Essen, nicht touristisch“): Er sucht in euren hinterlegten Orten, beachtet Region und Öffnungstage des Tages und zeigt seine Empfehlungen als Karten, die die Ortsdetails öffnen.
