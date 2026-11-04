@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
     private fun requestNotificationPermissionOnce() {
         if (Build.VERSION.SDK_INT < 33) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-        val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
+        val prefs = getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(this, "reminders"), MODE_PRIVATE)
         if (prefs.getBoolean("permissionAsked", false)) return
         prefs.edit().putBoolean("permissionAsked", true).apply()
         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -182,6 +182,8 @@ class MainActivity : ComponentActivity() {
                         onReloadMapImages = routeMaps::clearCache,
                         appVersion = updates.version,
                         transitApi = { container.syncApi() },
+                        debugMode = de.wanderlogplus.app.AppProfile.isDebug(this@MainActivity),
+                        onDebugMode = { on -> de.wanderlogplus.app.AppProfile.switchTo(this@MainActivity, on) },
                         onCheckUpdates = updates::checkNow,
                         onResetSync = {
                             scope.launch {
@@ -190,6 +192,9 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                     )
+                    if (de.wanderlogplus.app.AppProfile.isDebug(this@MainActivity)) {
+                        de.wanderlogplus.app.ui.more.DebugMarker(server?.url)
+                    }
                     de.wanderlogplus.app.update.UpdateDialog(
                         state = updateState,
                         currentVersion = updates.version,
@@ -295,7 +300,7 @@ class PrefsUpdatePrefs(context: android.content.Context) : de.wanderlogplus.app.
 }
 
 class PrefsImportedJobs(context: android.content.Context) : de.wanderlogplus.app.ui.reels.ImportedJobs {
-    private val prefs = context.getSharedPreferences("reels", android.content.Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(context, "reels"), android.content.Context.MODE_PRIVATE)
     override fun contains(id: String) = id in prefs.getStringSet("imported", emptySet()).orEmpty()
     override fun add(id: String) {
         val set = prefs.getStringSet("imported", emptySet()).orEmpty() + id

@@ -14,7 +14,12 @@ import java.security.SecureRandom
 
 data class ServerSettings(val url: String, val token: String)
 
-private val Context.serverDataStore by preferencesDataStore(name = "server_settings")
+private val Context.serverDataStoreMain by preferencesDataStore(name = "server_settings")
+private val Context.serverDataStoreDebug by preferencesDataStore(name = "server_settings-debug")
+
+/** The settings of the active profile (normal or debug, see [de.wanderlogplus.app.AppProfile]). */
+private val Context.serverDataStore
+    get() = if (de.wanderlogplus.app.AppProfile.isDebug(this)) serverDataStoreDebug else serverDataStoreMain
 
 /**
  * Server URL/token live in an app-private DataStore; the sync cursor state ([SyncStateStore]) lives in
@@ -22,7 +27,7 @@ private val Context.serverDataStore by preferencesDataStore(name = "server_setti
  */
 class SettingsStore(context: Context) : SyncStateStore {
     private val appContext = context.applicationContext ?: context
-    private val prefs = appContext.getSharedPreferences("sync_state", Context.MODE_PRIVATE)
+    private val prefs = appContext.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(appContext, "sync_state"), Context.MODE_PRIVATE)
 
     private val urlKey = stringPreferencesKey("server_url")
     private val tokenKey = stringPreferencesKey("server_token")
@@ -62,6 +67,12 @@ class SettingsStore(context: Context) : SyncStateStore {
             it[aiCriteriaKey] = c.criteria.joinToString(",")
             it[aiExtraKey] = c.extraPrompt
         }
+    }
+
+    /** Tests: empties the settings and sync state of the active profile. */
+    internal suspend fun clearForTests() {
+        appContext.serverDataStore.edit { it.clear() }
+        prefs.edit().clear().commit()
     }
 
     suspend fun saveServer(s: ServerSettings) {
