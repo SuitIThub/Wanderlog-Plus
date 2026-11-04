@@ -55,6 +55,7 @@ fun main() {
         ),
         transit = transit,
         weather = weather,
+        rates = RatesService(store, OpenMeteoHttp()),
         chats = ChatService(
             store,
             openRouter?.let { model ->

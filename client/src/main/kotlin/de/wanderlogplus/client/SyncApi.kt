@@ -193,6 +193,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Euros per unit of [from] on [date] (null: the latest rate); BAD_GATEWAY code `rates_unavailable` when unreachable. */
+    suspend fun rate(from: String, date: String? = null): de.wanderlogplus.shared.sync.RateInfo = call {
+        client.get("$base/api/rates") {
+            auth()
+            parameter("from", from)
+            date?.let { parameter("date", it) }
+        }
+    }
+
     /** The weather of the trip days from today on (`GET /api/weather`); an empty list when the server has none. */
     suspend fun weather(): de.wanderlogplus.shared.sync.TripWeather = call { client.get("$base/api/weather") { auth() } }
 

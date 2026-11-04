@@ -126,3 +126,7 @@ object WeatherText {
 
     private fun mm(v: Double) = if (v < 10) String.format(Locale.GERMAN, "%.1f mm", v) else "${v.roundToInt()} mm"
 }
+
+/** `GET /api/rates?from=JPY&date=…`: euros per unit of [from] on [date] (the business day the rate is from). */
+@Serializable
+data class RateInfo(val from: String, val to: String = "EUR", val rate: Double, val date: String)

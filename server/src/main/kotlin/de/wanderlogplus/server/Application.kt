@@ -85,6 +85,8 @@ class Services(
     val chats: ChatService = ChatService(store, null),
     /** Weather per trip day (Open-Meteo, JMA models); without HTTP it answers an empty list. */
     val weather: WeatherService = WeatherService(store, null),
+    /** Euro exchange rates for the budget (ECB via Frankfurter). */
+    val rates: RatesService = RatesService(store, null),
 )
 
 @Serializable
@@ -159,6 +161,7 @@ fun Application.module(services: Services) {
         exception<NoStation> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_station")) }
         exception<TransitNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("transit_not_configured")) }
         exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
+        exception<RatesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("rates_unavailable")) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
         exception<ChatBusy> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("chat_busy")) }
@@ -254,6 +257,11 @@ fun Application.module(services: Services) {
                 val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
                 val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
+            }
+            get("/api/rates") {
+                val from = call.request.queryParameters["from"] ?: throw BadInput()
+                val date = call.request.queryParameters["date"]
+                call.respond(withContext(Dispatchers.IO) { services.rates.rate(from, date) })
             }
             get("/api/weather") {
                 val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
