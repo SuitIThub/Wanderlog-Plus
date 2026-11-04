@@ -193,6 +193,9 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** The weather of the trip days from today on (`GET /api/weather`); an empty list when the server has none. */
+    suspend fun weather(): de.wanderlogplus.shared.sync.TripWeather = call { client.get("$base/api/weather") { auth() } }
+
     /** Railway stations near a point, nearest first. */
     suspend fun transitStations(lat: Double, lng: Double): List<TransitStationNear> = call<TransitStations> {
         client.get("$base/api/transit/stations") {

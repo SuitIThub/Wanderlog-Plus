@@ -122,6 +122,13 @@ private fun Before(snapshot: TripSnapshot, state: TodayState.Before, modifier: M
                 )
             }
         }
+        // Within the forecast range: the weather of the first trip day.
+        snapshot.trip?.startDate?.let { start -> de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(start) }?.takeIf { it.isForecast }?.let { w ->
+            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionLabel("Wetter zum Start")
+                de.wanderlogplus.app.ui.weather.DayWeatherCard(w, Modifier.testTag("start-weather"), title = w.place.takeIf { it.isNotBlank() })
+            }
+        }
         if (state.deadlines.isNotEmpty()) {
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SectionLabel("Anstehende Fristen")
@@ -180,6 +187,22 @@ private fun During(
             )
         }
 
+        val weatherBlock: @Composable () -> Unit = {
+            val all = de.wanderlogplus.app.ui.weather.LocalTripWeather.current
+            val today = all?.forDate(date)
+            val tomorrow = all?.forDate(now.toLocalDate().plusDays(1).toString())
+            if (today != null || tomorrow != null) {
+                SectionLabel("Wetter", color = accent)
+                val outdoor = remember(snapshot, date) { de.wanderlogplus.app.ui.weather.outdoorPlacesOn(snapshot, date) }
+                today?.let {
+                    de.wanderlogplus.app.ui.weather.DayWeatherCard(
+                        it, Modifier.testTag("today-weather"), title = "Heute", outdoor = outdoor,
+                        onReplan = de.wanderlogplus.app.ui.design.LocalOpenChat.current,
+                    )
+                }
+                tomorrow?.let { de.wanderlogplus.app.ui.weather.DayWeatherCard(it, Modifier.testTag("tomorrow-weather"), title = "Morgen", iconSize = 24.dp) }
+            }
+        }
         val stayBlock: @Composable () -> Unit = {
             if (stay != null) {
                 SectionLabel("Unterkunft", color = accent)
@@ -249,11 +272,12 @@ private fun During(
             // Unfolded: the day's timeline on the left, stay and "Jetzt geöffnet" on the right.
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 Column(Modifier.weight(0.6f), verticalArrangement = Arrangement.spacedBy(8.dp)) { timeline() }
-                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) { stayBlock(); openBlock() }
+                Column(Modifier.weight(0.4f), verticalArrangement = Arrangement.spacedBy(8.dp)) { weatherBlock(); stayBlock(); openBlock() }
             }
         } else {
             Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Stay first, then the timeline, then what is open now.
+                // Weather and stay first, then the timeline, then what is open now.
+                weatherBlock()
                 stayBlock()
                 timeline()
                 openBlock()

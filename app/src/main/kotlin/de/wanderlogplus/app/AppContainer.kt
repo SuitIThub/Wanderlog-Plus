@@ -92,6 +92,9 @@ class AppContainer(context: Context) {
     suspend fun syncApi(): SyncApi? = withContext(Dispatchers.IO) { currentApi() }
 
     /** Ways between a day's places (cached on disk, so legs seen once work offline). */
+    val weather: de.wanderlogplus.app.weather.WeatherRepository by lazy {
+        de.wanderlogplus.app.weather.WeatherRepository(api = { syncApi() }, file = File(appContext.filesDir, AppProfile.scoped(appContext, "weather.json")))
+    }
     val legs: LegRepository by lazy { LegRepository(api = { syncApi() }, dir = File(appContext.filesDir, AppProfile.scoped(appContext, "legs"))) }
 
     val fileSyncRunner: FileSyncRunner by lazy {
