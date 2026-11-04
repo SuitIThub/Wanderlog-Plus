@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.trip
 
+import de.wanderlogplus.shared.sync.EntityType
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,6 +68,7 @@ internal fun dayOfWeekSunday0(date: String): Int? =
 private const val TAB_PROGRAM = 0
 private const val TAB_SUGGESTIONS = 1
 private const val TAB_NOTES = 2
+private const val TAB_PHOTOS = 3
 
 /**
  * Day detail: hero header (✎ opens "Tag bearbeiten" for title and region) above the tabs Programm (timeline with ⋮
@@ -105,6 +108,8 @@ fun DayDetailScreen(
     onTransitDetails: ((date: String, itemId: String) -> Unit)? = null,
     /** Opens the detail of a program place (by Place id); null: not tappable. */
     onOpenPlace: ((placeId: String) -> Unit)? = null,
+    /** Opens photo [index] of the day's gallery full screen; null: photos are only shown. */
+    onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
     /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
     onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
 ) {
@@ -168,6 +173,8 @@ fun DayDetailScreen(
                 tab = TAB_SUGGESTIONS
             }
             ScreenTab("Notizen & Anhänge", tab == TAB_NOTES, "tab-notes", maxLines = 2) { tab = TAB_NOTES }
+            val photoCount = day?.let { snapshot.photosFor(EntityType.DAY, it.id).size } ?: 0
+            ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos", maxLines = 2) { tab = TAB_PHOTOS }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
@@ -210,6 +217,14 @@ fun DayDetailScreen(
                         }
                     },
                 )
+                TAB_PHOTOS -> androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp)) {
+                    de.wanderlogplus.app.ui.attachments.PhotoGrid(
+                        day?.let { snapshot.photosFor(EntityType.DAY, it.id) }.orEmpty(),
+                        attachments?.files,
+                        onAdd = attachments?.onAddPhotosToDay?.let { add -> { add(date) } },
+                        onOpen = { i -> day?.let { onOpenPhoto?.invoke(EntityType.DAY, it.id, i) } },
+                    )
+                }
                 else -> DayNotesTab(
                     snapshot = snapshot,
                     date = date,

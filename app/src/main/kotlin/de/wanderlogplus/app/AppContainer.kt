@@ -147,16 +147,28 @@ class AppContainer(context: Context) {
         input: InputStream,
         fileName: String,
         mimeType: String,
+        kind: String = "file",
     ): String {
         val imported = withContext(Dispatchers.IO) { attachmentFiles.importStream(input) }
         val resolvedTarget = targetId()
-        val id = edit { e, _ -> e.addAttachment(targetType, resolvedTarget, imported.hash, fileName, mimeType, imported.size) }
+        val id = edit { e, _ -> e.addAttachment(targetType, resolvedTarget, imported.hash, fileName, mimeType, imported.size, kind) }
         // Queued only once the record exists, so a failed target or edit leaves no orphan upload.
         withContext(Dispatchers.IO) {
             db.pendingUploads().insert(PendingUploadEntity(imported.hash, fileName, mimeType, System.currentTimeMillis()))
         }
         syncScheduler.requestFiles()
         return id
+    }
+
+    /**
+     * A gallery photo: shrunk to [de.wanderlogplus.app.files.PHOTO_MAX_SIDE] as JPEG (upright, without EXIF such as the
+     * location) before it is stored and uploaded; an undecodable image is kept as it is.
+     */
+    suspend fun addPhoto(targetType: EntityType, targetId: suspend () -> String, input: InputStream, fileName: String): String {
+        val original = withContext(Dispatchers.IO) { input.readBytes() }
+        val shrunk = withContext(Dispatchers.Default) { de.wanderlogplus.app.files.shrinkPhoto(original) }
+        val name = if (shrunk != null) fileName.substringBeforeLast('.', fileName) + ".jpg" else fileName
+        return addAttachment(targetType, targetId, java.io.ByteArrayInputStream(shrunk ?: original), name, if (shrunk != null) "image/jpeg" else "image/*", kind = de.wanderlogplus.client.PHOTO)
     }
 
     /** The id of the Day for [date]; the Day (empty title) is created when missing. One edit, so no duplicates. */

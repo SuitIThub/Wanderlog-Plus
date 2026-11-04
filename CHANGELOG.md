@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.19.0
+
+- **Fotogalerie** für jeden Ort und jeden Tag: neuer Tab „Fotos“ mit Vorschaubildern, „Fotos hinzufügen“ wählt mehrere Bilder auf einmal aus der Galerie. Ein Tipp öffnet die Vollbildansicht zum Durchwischen, dort lässt sich ein Foto auch löschen.
+- Fotos werden vor dem Hochladen auf höchstens 2560 Pixel verkleinert und aufrecht gedreht; Metadaten wie der Aufnahmeort werden dabei entfernt. Sie synchronisieren wie Anhänge und sind danach auf allen Geräten da, auch offline.
+- Fotos und Anhänge (Tickets, PDFs) bleiben getrennt.
+
 ## 0.18.1
 
 - Ein Tag, der aus „Heute“ geöffnet wurde (Kopf oder Ziel antippen), gehört jetzt zum Reise-Tab: Der Tab „Heute“ führt wieder zurück.

@@ -31,8 +31,13 @@ data class TripSnapshot(
     val conflicts: List<Conflict>,
     val attachments: List<Attachment> = emptyList(),
 ) {
+    /** Files of an entity (tickets, PDFs …), without the gallery photos. */
     fun attachmentsFor(type: EntityType, id: String): List<Attachment> =
-        attachments.filter { it.targetType == type && it.targetId == id }.sortedWith(compareBy({ it.fileName }, { it.id }))
+        attachments.filter { it.targetType == type && it.targetId == id && it.kind != PHOTO }.sortedWith(compareBy({ it.fileName }, { it.id }))
+
+    /** The gallery of an entity (place or day), oldest first (ids sort by creation time). */
+    fun photosFor(type: EntityType, id: String): List<Attachment> =
+        attachments.filter { it.targetType == type && it.targetId == id && it.kind == PHOTO }.sortedBy { it.id }
 
     val isEmpty: Boolean get() = trip == null
 
@@ -92,3 +97,6 @@ data class TripSnapshot(
         }
     }
 }
+
+/** [Attachment.kind] of gallery photos. */
+const val PHOTO = "photo"

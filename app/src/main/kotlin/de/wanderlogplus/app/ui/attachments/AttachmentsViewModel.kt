@@ -37,6 +37,8 @@ class AttachmentsViewModel(
     private val ensureDay: suspend (date: String) -> String,
     /** Process-wide scope: leaving a screen must not cancel an import. */
     private val writeScope: CoroutineScope,
+    /** Adds a gallery photo (shrunk); null: no photos. */
+    private val addPhoto: (suspend (EntityType, suspend () -> String, InputStream, String) -> String)? = null,
 ) : ViewModel() {
     /** Fixed German user message of the last failure (never file names or data); null when fine. */
     private val _message = MutableStateFlow<String?>(null)
@@ -60,6 +62,33 @@ class AttachmentsViewModel(
             _message.value = MSG_TOO_LARGE
         } catch (e: Exception) {
             _message.value = MSG_ADD_FAILED
+        }
+    }
+
+    /** Adds several gallery photos one after another; says how many made it. */
+    fun addPhotos(target: AttachmentTarget, sources: List<AttachmentSource>): Job = writeScope.launch(Dispatchers.IO) {
+        val add = addPhoto ?: return@launch
+        var ok = 0
+        for (source in sources) {
+            try {
+                val input = source.open() ?: continue
+                input.use {
+                    when (target) {
+                        is AttachmentTarget.Entity -> add(target.type, { target.id }, it, source.fileName())
+                        is AttachmentTarget.Day -> add(EntityType.DAY, { ensureDay(target.date) }, it, source.fileName())
+                    }
+                }
+                ok++
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // counted below
+            }
+        }
+        _message.value = when {
+            ok == sources.size -> if (ok == 1) "1 Foto hinzugefügt" else "$ok Fotos hinzugefügt"
+            ok == 0 -> "Fotos konnten nicht hinzugefügt werden"
+            else -> "$ok von ${sources.size} Fotos hinzugefügt"
         }
     }
 
