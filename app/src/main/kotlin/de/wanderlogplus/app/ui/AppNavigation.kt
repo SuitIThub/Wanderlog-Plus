@@ -249,11 +249,14 @@ fun AppNavigation(
     val snackbar = remember { SnackbarHostState() }
     val chatVm: de.wanderlogplus.app.ui.chat.ChatViewModel? = chatViewModelFactory?.let { viewModel(factory = it) }
     val chatToday = rememberMinuteNow(clock).toLocalDate().toString()
+    val chatPane = remember { de.wanderlogplus.app.ui.chat.ChatPaneHolder() }
     val openChat: (() -> Unit)? = chatVm?.takeIf { current != SETUP_ROUTE && current != de.wanderlogplus.app.ui.chat.CHAT_ROUTE }?.let { vm ->
         {
+            // A two-pane screen: the detail beside the list is what the user looks at.
+            val pane = chatPane.paneFor(current)
             val args = backStack?.arguments
-            val map = listOf("date", "savedPlaceId", "regionKey").associateWith { args?.getString(it) }
-            vm.openFrom(de.wanderlogplus.app.ui.chat.chatContextFor(current, map, snapshot, chatToday))
+            val map = pane?.args ?: listOf("date", "savedPlaceId", "regionKey").associateWith { args?.getString(it) }
+            vm.openFrom(de.wanderlogplus.app.ui.chat.chatContextFor(pane?.route ?: current, map, snapshot, chatToday))
             nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
         }
     }
@@ -395,7 +398,10 @@ fun AppNavigation(
         if (openChat != null && current in CHAT_BAR_ROUTES) {
             de.wanderlogplus.app.ui.chat.ChatTopBar(Tab.entries.firstOrNull { it.route == current }?.label.orEmpty(), openChat)
         }
-        androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat,
+            de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
+        ) {
         NavHost(
             nav,
             startDestination = if (hasServer) Tab.HEUTE.route else SETUP_ROUTE,
@@ -462,7 +468,15 @@ fun AppNavigation(
                                 val date = selectedDay ?: defaultDayFor(s, today)
                                 TwoPane(
                                     list = { TripScreen(s, onOpenDay = { selectedDay = it }, today = today, selected = date) },
-                                    detail = { if (date != null) DayDetailFor(vm, s, date, onBack = null) },
+                                    detail = {
+                                        if (date != null) {
+                                            de.wanderlogplus.app.ui.chat.ReportChatPane(Tab.REISE.route, "trip/day/{date}", mapOf("date" to date))
+                                            // The top bar's chat button already opens the chat for this day.
+                                            androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.design.LocalOpenChat provides null) {
+                                                DayDetailFor(vm, s, date, onBack = null)
+                                            }
+                                        }
+                                    },
                                 )
                             }
                             else -> TripScreen(s, onOpenDay = { nav.navigate(dayRoute(it)) }, today = rememberMinuteNow(clock).toLocalDate().toString())
@@ -638,7 +652,10 @@ fun AppNavigation(
                                     detail = {
                                         val id = selectedPlace
                                         if (id == null) EmptyHint("Ort in der Liste antippen", Modifier.padding(24.dp))
-                                        else PlaceDetailFor(vm, it, id, onBack = null)
+                                        else {
+                                            de.wanderlogplus.app.ui.chat.ReportChatPane(REGION_ROUTE, PLACE_ROUTE, mapOf("savedPlaceId" to id))
+                                            PlaceDetailFor(vm, it, id, onBack = null)
+                                        }
                                     },
                                 )
                             } else {
@@ -687,7 +704,9 @@ fun AppNavigation(
                                     },
                                     detail = {
                                         if (sel == null) EmptyHint("Fahrt oder Unterkunft in der Liste antippen", Modifier.padding(24.dp))
-                                        else LogisticsDetailFor(vm, s, logisticsTypeOf(sel[0]), sel[1], onBack = null, afterDelete = { selected = null })
+                                        else androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.design.LocalOpenChat provides null) {
+                                            LogisticsDetailFor(vm, s, logisticsTypeOf(sel[0]), sel[1], onBack = null, afterDelete = { selected = null })
+                                        }
                                     },
                                 )
                             }

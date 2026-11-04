@@ -3,7 +3,9 @@ package de.wanderlogplus.app.sync
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
@@ -41,13 +43,25 @@ class SyncSchedulerTest {
     }
 
     @Test fun requestNowReplacesWaitingWork() {
+        // A request waiting (as in backoff after a failure): delayed, so the test WorkManager keeps it ENQUEUED.
+        val waiting = OneTimeWorkRequestBuilder<SyncWorker>().setInitialDelay(1, TimeUnit.HOURS).build()
+        WorkManager.getInstance(context).enqueueUniqueWork("sync-now", ExistingWorkPolicy.KEEP, waiting).result.get()
+        assertEquals(WorkInfo.State.ENQUEUED, infos("sync-now").single().state)
         scheduler.requestNow()
-        val first = infos("sync-now").single().id
+        val all = infos("sync-now")
+        assertTrue(all.filter { it.id == waiting.id }.all { it.state == WorkInfo.State.CANCELLED })
+        val fresh = all.filter { it.id != waiting.id }
+        assertEquals(1, fresh.size)
+        assertTrue(fresh.single().state != WorkInfo.State.CANCELLED)
+    }
+
+    @Test fun requestNowKeepsAStartedSync() {
+        // Without delay or constraints the test WorkManager starts the work at once (RUNNING): a second tap keeps it.
         scheduler.requestNow()
-        // Not running (e.g. waiting in backoff): the new request replaces it, so exactly one is waiting.
-        val active = infos("sync-now").filter { it.state == WorkInfo.State.ENQUEUED }
-        assertEquals(1, active.size)
-        assertTrue(active.single().id != first)
+        val first = infos("sync-now").single()
+        assertEquals(WorkInfo.State.RUNNING, first.state)
+        scheduler.requestNow()
+        assertEquals(listOf(first.id), infos("sync-now").filter { it.state != WorkInfo.State.CANCELLED }.map { it.id })
     }
 
     @Test fun nowPolicyKeepsRunningSyncAndReplacesOtherwise() {

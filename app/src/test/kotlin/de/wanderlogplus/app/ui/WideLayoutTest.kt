@@ -64,6 +64,24 @@ class WideLayoutTest {
 
     private var mapReloads = 0
 
+    /** Chat stand-in: no server answers, only the context matters here. */
+    private val chatVm by lazy {
+        de.wanderlogplus.app.ui.chat.ChatViewModel(
+            object : de.wanderlogplus.app.ui.chat.ChatBackend {
+                override suspend fun list() = emptyList<de.wanderlogplus.shared.sync.ChatSummary>()
+                override suspend fun create() = error("offline")
+                override suspend fun get(id: String) = error("offline")
+                override suspend fun send(id: String, req: de.wanderlogplus.shared.sync.ChatSendRequest) = error("offline")
+                override suspend fun retry(id: String) = error("offline")
+                override suspend fun delete(id: String) = Unit
+            },
+            object : de.wanderlogplus.app.ui.chat.LastChat {
+                override suspend fun get(): String? = null
+                override suspend fun set(id: String?) = Unit
+            },
+        )
+    }
+
     private fun launch(hasServer: Boolean = true) {
         val files = AttachmentFiles(tmp.newFolder("att"))
         val imported = files.importStream("not really a jpeg".byteInputStream())
@@ -87,6 +105,7 @@ class WideLayoutTest {
                     },
                     attachmentFiles = files,
                     onReloadMapImages = { mapReloads++ },
+                    chatViewModelFactory = factory { chatVm },
                 )
             }
         }
@@ -120,6 +139,20 @@ class WideLayoutTest {
         // In the list card and as the detail's title beside it.
         assertEquals(2, rule.onAllNodesWithText("Ausflug ans Wasser", substring = true).fetchSemanticsNodes().size)
         shows("trip-list") // still beside it, nothing navigated away
+    }
+
+    @Test fun chatFromTheTwoPaneTripGetsTheSelectedDay() {
+        launch()
+        tapRail("reise")
+        tag("trip-list").performScrollToNode(hasTestTag("day-2027-04-03"))
+        tag("day-2027-04-03").tap()
+        rule.waitForIdle()
+        // One chat button (the bar's), not a second one in the day's header beside it.
+        assertEquals(0, rule.onAllNodesWithTag("hero-chat").fetchSemanticsNodes().size)
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        assertEquals("2027-04-03", chatVm.context.value?.date)
+        assertEquals(de.wanderlogplus.shared.sync.ChatScreens.DAY, chatVm.context.value?.screen)
     }
 
     @Test fun logisticsListAndDetail() {
