@@ -4,12 +4,15 @@ import de.wanderlogplus.shared.model.Day
 import de.wanderlogplus.shared.model.DayItem
 import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.model.EntityCodec
+import de.wanderlogplus.shared.model.Endpoint
+import de.wanderlogplus.shared.model.Flight
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.model.Region
 import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.model.Stay
+import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.Trip
 import de.wanderlogplus.shared.query.TripQueries
 import de.wanderlogplus.shared.query.isOpenOn
@@ -46,9 +49,12 @@ class ChatTrip(
     val stays: List<Stay>,
     val days: List<Day>,
     val dayItems: List<DayItem>,
+    val flights: List<Flight> = emptyList(),
+    val trains: List<Train> = emptyList(),
 ) {
     val regionsById = regions.associateBy { it.id }
     val savedById = saved.associateBy { it.id }
+    private val savedByPlace = saved.groupBy { it.placeId }
     private val dayById = days.associateBy { it.id }
     val queries: TripQueries? = trip?.let { TripQueries(it, stays, days, regions, saved, dayItems) }
 
@@ -62,6 +68,47 @@ class ChatTrip(
     /** [regionId] plus the regions that are day trips from it. */
     fun regionWithDayTrips(regionId: String): Set<String> = regions.filter { it.dayTripFromRegionId == regionId }.map { it.id }.toSet() + regionId
 
+    /** The saved place for [placeId] (the not-dropped one first), if the place is a suggestion. */
+    fun savedFor(placeId: String?): SavedPlace? = placeId?.let { savedByPlace[it] }?.sortedBy { it.status == PlaceStatus.DROPPED }?.firstOrNull()
+
+    /** Coordinates of a place; null when it has none (0/0 is "unknown"). */
+    fun point(placeId: String?, name: String? = null): Anchor? = placeId?.let { places[it] }
+        ?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) }
+        ?.let { Anchor(name ?: it.name.ifBlank { "Ort" }, it.lat, it.lng) }
+
+    fun stayName(s: Stay): String = places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft"
+
+    private fun dated(s: Stay) = s.checkIn.isNotBlank() && s.checkOut.isNotBlank()
+
+    /** The stay slept in the night after [date]. */
+    fun nightStay(date: String): Stay? = stays.filter { dated(it) && it.checkIn <= date && date < it.checkOut }.minByOrNull { it.checkIn }
+
+    /** The stay checked out of on [date] (slept in the night before). */
+    fun morningStay(date: String): Stay? = stays.firstOrNull { dated(it) && it.checkOut == date && it.checkIn < date }
+
+    /** Where distances on [date] are measured from: that night's stay, else the one left that morning. */
+    fun dayAnchor(date: String): Anchor? =
+        listOfNotNull(nightStay(date), morningStay(date)).firstNotNullOfOrNull { s -> point(s.placeId, "Unterkunft " + stayName(s)) }
+
+    /** The first stay of [regionId] (or of the region it is a day trip from). */
+    fun regionStay(regionId: String): Stay? {
+        val r = regionsById[regionId]
+        return stays.filter { it.regionId == regionId }.minByOrNull { it.checkIn }
+            ?: r?.dayTripFromRegionId?.let { from -> stays.filter { it.regionId == from }.minByOrNull { it.checkIn } }
+    }
+
+    /** Flights and trains departing or arriving on [date], as German lines. */
+    fun movementsOn(date: String): List<String> {
+        fun ep(e: Endpoint) = listOfNotNull(e.name.ifBlank { null } ?: e.code, e.time).joinToString(" ")
+        val f = flights.filter { it.depart.date == date || it.arrive.date == date }.sortedBy { it.depart.time.orEmpty() }.map {
+            "Flug " + listOfNotNull(it.airline ?: it.airlineCode, it.number).joinToString(" ") + ": " + ep(it.depart) + " → " + ep(it.arrive)
+        }
+        val tr = trains.filter { it.depart.date == date || it.arrive.date == date }.sortedBy { it.depart.time.orEmpty() }.map {
+            "Zug" + (it.carrier?.let { c -> " $c" } ?: "") + ": " + ep(it.depart) + " → " + ep(it.arrive)
+        }
+        return f + tr
+    }
+
     companion object {
         fun from(store: EntityStore): ChatTrip {
             fun <T> live(type: EntityType, decode: (EntityRecord) -> T): List<T> =
@@ -74,6 +121,8 @@ class ChatTrip(
                 stays = live(EntityType.STAY) { EntityCodec.decode<Stay>(it) },
                 days = live(EntityType.DAY) { EntityCodec.decode<Day>(it) },
                 dayItems = live(EntityType.DAY_ITEM) { EntityCodec.decode<DayItem>(it) },
+                flights = live(EntityType.FLIGHT) { EntityCodec.decode<Flight>(it) },
+                trains = live(EntityType.TRAIN) { EntityCodec.decode<Train>(it) },
             )
         }
     }
@@ -86,9 +135,20 @@ internal fun germanDate(date: String): String = try {
     date
 }
 
+private fun shortDate(date: String): String = try {
+    val d = LocalDate.parse(date)
+    d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.GERMAN).take(2) + " " + "%02d.%02d.".format(d.dayOfMonth, d.monthValue)
+} catch (e: Exception) {
+    date
+}
+
+/** "850 m" or "4,2 km" (as the crow flies). */
+internal fun distanceText(km: Double): String =
+    if (km < 1) "${(km * 1000).toInt() / 10 * 10} m" else String.format(Locale.GERMAN, if (km < 20) "%.1f km" else "%.0f km", km)
+
 /** Turns where the chat was opened into German prompt text. */
 object ChatContextText {
-    /** Trip dates and regions with their date ranges (and ids, for the tools). */
+    /** Trip, regions, stays and the plan of every day: what the trip screens show, compact. */
     fun overview(t: ChatTrip): String = buildString {
         val trip = t.trip
         if (trip != null) append("Reise: ").append(trip.title.ifBlank { "Japanreise" }).append(", ").append(trip.startDate).append(" bis ").append(trip.endDate).append('\n')
@@ -111,39 +171,114 @@ object ChatContextText {
             if (own.isNotEmpty()) append(": ").append(own.joinToString(", ") { if (it.second == it.third) it.second else "${it.second} bis ${it.third}" })
             append(", ").append(t.saved.count { it.regionId == r.id && it.status != PlaceStatus.DROPPED }).append(" Vorschläge\n")
         }
+        val stays = t.stays.filter { it.placeId.isNotBlank() }.sortedBy { it.checkIn }
+        if (stays.isNotEmpty()) {
+            append("Unterkünfte:\n")
+            stays.forEach { s -> append("- ").append(stay(s, t)).append('\n') }
+        }
+        if (days.isNotEmpty()) {
+            append("Reiseplan (Tag: Region, Übernachtung, Titel, Programm, Fahrten):\n")
+            days.forEach { d ->
+                append("- ").append(shortDate(d.date)).append(" (").append(d.date).append("): ")
+                append(listOfNotNull(
+                    t.regionName(d.regionId),
+                    t.nightStay(d.date)?.let { "Nacht: " + t.stayName(it) },
+                    d.day?.title?.takeIf { it.isNotBlank() }?.let { "„$it“" },
+                    programItems(d.day, t).takeIf { it.isNotEmpty() }?.joinToString(", ") { i ->
+                        if (i.kind == DayItemKind.PLACE) t.places[i.placeId]?.name ?: "Ort" else "Notiz"
+                    },
+                    t.movementsOn(d.date).takeIf { it.isNotEmpty() }?.joinToString("; "),
+                ).joinToString(" · ").ifEmpty { "noch nichts geplant" })
+                append('\n')
+            }
+        }
     }
 
-    /** What the user is looking at right now. */
+    private fun stay(s: Stay, t: ChatTrip): String = buildString {
+        val p = t.places[s.placeId]
+        append(t.stayName(s))
+        t.regionName(s.regionId)?.let { append(" (").append(it).append(")") }
+        if (s.checkIn.isNotBlank()) append(", ").append(s.checkIn).append(" bis ").append(s.checkOut)
+        p?.address?.takeIf { it.isNotBlank() }?.let { append(", ").append(it) }
+        t.point(s.placeId)?.let { append(", Koordinaten ").append(coords(it)) }
+    }
+
+    private fun coords(a: Anchor) = String.format(Locale.ROOT, "%.5f,%.5f", a.lat, a.lng)
+
+    private fun programItems(day: Day?, t: ChatTrip): List<DayItem> =
+        day?.let { d -> t.dayItems.filter { it.dayId == d.id }.sortedBy { it.sortKey } }.orEmpty()
+
+    /** Where the chat was opened from: the point distances are measured from. */
+    fun anchor(c: ChatContext, t: ChatTrip, today: String): Anchor? = when (c.screen) {
+        ChatScreens.DAY, ChatScreens.TODAY -> t.dayAnchor(c.date ?: today)
+        ChatScreens.PLACE -> c.savedPlaceId?.let { t.savedById[it] }?.let { t.point(it.placeId) }
+        ChatScreens.REGION -> c.regionId?.let { t.regionStay(it) }?.let { s -> t.point(s.placeId, "Unterkunft " + t.stayName(s)) }
+        else -> null
+    }
+
+    /** What the user is looking at right now, with what that screen shows. */
     fun current(c: ChatContext, t: ChatTrip, today: String): String = buildString {
         append("Heutiges Datum: ").append(germanDate(today)).append('\n')
+        val anchor = anchor(c, t, today)
         when (c.screen) {
             ChatScreens.DAY, ChatScreens.TODAY -> {
                 val date = c.date ?: today
                 append(if (c.screen == ChatScreens.TODAY) "Der Nutzer ist auf der Heute-Ansicht. " else "Der Nutzer schaut sich einen Reisetag an. ")
                 append(day(date, t))
+                val open = t.queries?.suggestionsFor(date).orEmpty()
+                if (open.isNotEmpty()) {
+                    append("Offene Vorschläge für diesen Tag (Region und Tagesausflüge, Reiter „Vorschläge“; ").append(open.size).append(" insgesamt):\n")
+                    sortByDistance(open, t, anchor).take(MAX_CONTEXT_ROWS).forEach { append("- ").append(row(it, t, anchor)).append('\n') }
+                }
             }
             ChatScreens.REGION -> {
                 val r = c.regionId?.let { t.regionsById[it] }
                 if (r == null) {
                     append("Der Nutzer schaut sich Orte ohne Region an.\n")
+                    t.saved.filter { it.regionId == null && it.status != PlaceStatus.DROPPED }.take(MAX_CONTEXT_ROWS)
+                        .forEach { append("- ").append(row(it, t, null)).append('\n') }
                 } else {
-                    append("Der Nutzer schaut sich die Region ").append(r.name).append(" (").append(r.id).append(") an; ")
-                    append(t.saved.count { it.regionId == r.id }).append(" hinterlegte Vorschläge.\n")
+                    append("Der Nutzer schaut sich die Region ").append(r.name).append(" (").append(r.id).append(") an.\n")
+                    t.stays.filter { it.regionId == r.id }.forEach { append("Unterkunft: ").append(stay(it, t)).append('\n') }
+                    val list = t.saved.filter { it.regionId == r.id && it.status != PlaceStatus.DROPPED }
+                    append("Hinterlegte Orte der Region (").append(list.size).append("):\n")
+                    list.sortedWith(compareBy<SavedPlace> { ChatTools.worthRank(it.worth) }.thenByDescending { t.places[it.placeId]?.rating ?: 0.0 })
+                        .take(MAX_CONTEXT_ROWS).forEach { append("- ").append(row(it, t, anchor)).append('\n') }
                 }
             }
             ChatScreens.PLACE -> {
                 val s = c.savedPlaceId?.let { t.savedById[it] }
                 if (s != null) {
-                    append("Der Nutzer schaut sich diesen hinterlegten Ort an:\n").append(placeDetail(s, t)).append('\n')
+                    append("Der Nutzer schaut sich diesen hinterlegten Ort an:\n").append(placeDetail(s, t))
+                    val here = t.point(s.placeId)
+                    if (here != null) {
+                        val stays = t.stays.filter { it.regionId == s.regionId || it.regionId == t.regionsById[s.regionId]?.dayTripFromRegionId }
+                        stays.forEach { st ->
+                            t.point(st.placeId)?.let { p -> append("Entfernung zur Unterkunft ").append(t.stayName(st)).append(": ").append(distanceText(distanceKm(here.lat, here.lng, p.lat, p.lng))).append('\n') }
+                        }
+                        val near = t.saved.filter { it.id != s.id && it.status != PlaceStatus.DROPPED }
+                            .mapNotNull { o -> t.point(o.placeId)?.let { p -> o to distanceKm(here.lat, here.lng, p.lat, p.lng) } }
+                            .filter { it.second <= NEARBY_KM }.sortedBy { it.second }.take(8)
+                        if (near.isNotEmpty()) {
+                            append("Hinterlegte Orte in der Nähe:\n")
+                            near.forEach { (o, _) -> append("- ").append(row(o, t, here)).append('\n') }
+                        }
+                    }
                 }
             }
-            ChatScreens.TRIP -> append("Der Nutzer ist in der Reiseübersicht (alle Tage).\n")
+            ChatScreens.TRIP -> append("Der Nutzer ist in der Reiseübersicht (alle Tage, siehe Reiseplan).\n")
             ChatScreens.PLACES -> append("Der Nutzer ist in der Ortsübersicht (alle Regionen).\n")
-            ChatScreens.LOGISTICS -> append("Der Nutzer ist bei der Logistik (Flüge, Züge, Unterkünfte).\n")
+            ChatScreens.LOGISTICS -> {
+                append("Der Nutzer ist bei der Logistik (Flüge, Züge, Unterkünfte).\n")
+                val dates = (t.flights.flatMap { listOfNotNull(it.depart.date) } + t.trains.flatMap { listOfNotNull(it.depart.date) }).distinct().sorted()
+                dates.forEach { d -> t.movementsOn(d).forEach { append("- ").append(d).append(' ').append(it).append('\n') } }
+            }
             else -> Unit
         }
+        anchor?.let { append("Bezugspunkt für Entfernungen: ").append(it.name).append(" (").append(coords(it)).append(")\n") }
     }
 
+    /** A day as the day screen shows it: region, stays, title, note, program (with places and distances), trips. */
     fun day(date: String, t: ChatTrip): String = buildString {
         val q = t.queries
         val regionId = q?.regionFor(date)
@@ -152,9 +287,15 @@ object ChatContextText {
         regionId?.let { append(", Region ").append(t.regionName(it) ?: it).append(" (").append(it).append(")") }
         if (q != null && q.days().firstOrNull { it.date == date }?.isTravelDay == true) append(", Reisetag (Ortswechsel)")
         append('\n')
+        val morning = t.morningStay(date)
+        val night = t.nightStay(date)
+        if (morning != null && morning.id != night?.id) append("Auschecken: ").append(stay(morning, t)).append('\n')
+        if (night != null) append("Übernachtung: ").append(stay(night, t)).append('\n')
+        t.movementsOn(date).forEach { append("Fahrt: ").append(it).append('\n') }
         dayEntity?.title?.takeIf { it.isNotBlank() }?.let { append("Titel: ").append(it).append('\n') }
-        dayEntity?.note?.takeIf { it.isNotBlank() }?.let { append("Notiz: ").append(it.take(500)).append('\n') }
-        val items = dayEntity?.let { d -> t.dayItems.filter { it.dayId == d.id }.sortedBy { it.sortKey } }.orEmpty()
+        dayEntity?.note?.takeIf { it.isNotBlank() }?.let { append("Notiz: ").append(it.take(800)).append('\n') }
+        val anchor = t.dayAnchor(date)
+        val items = programItems(dayEntity, t)
         if (items.isEmpty()) {
             append("Programm: noch nichts geplant\n")
         } else {
@@ -162,7 +303,19 @@ object ChatContextText {
             items.forEach { i ->
                 append("- ")
                 i.time?.let { append(it).append(' ') }
-                append(if (i.kind == DayItemKind.PLACE) t.places[i.placeId]?.name ?: "Ort" else "Notiz: " + i.text.take(200))
+                if (i.kind == DayItemKind.PLACE) {
+                    val p = t.places[i.placeId]
+                    append(p?.name ?: "Ort")
+                    val s = t.savedFor(i.placeId)
+                    append(" [id=").append(s?.id ?: i.placeId).append("]")
+                    p?.address?.takeIf { it.isNotBlank() }?.let { append(", ").append(it) }
+                    val pt = t.point(i.placeId)
+                    if (pt != null && anchor != null) append(", ").append(distanceText(distanceKm(anchor.lat, anchor.lng, pt.lat, pt.lng))).append(" von der Unterkunft")
+                    s?.dossier?.verdict?.takeIf { it.isNotBlank() }?.let { append(" – ").append(it.take(160)) }
+                    i.legMode?.let { append(" (Anreise: ").append(it.name).append(")") }
+                } else {
+                    append("Notiz: ").append(i.text.take(300))
+                }
                 append('\n')
             }
         }
@@ -173,10 +326,18 @@ object ChatContextText {
         append("Name: ").append(p?.name ?: "?").append(" (id ").append(s.id).append(")\n")
         append("Region: ").append(t.regionName(s.regionId) ?: "keine").append(", Kategorie: ").append(s.category.name).append(", Status: ").append(s.status.name).append('\n')
         p?.address?.let { append("Adresse: ").append(it).append('\n') }
+        t.point(s.placeId)?.let { append("Koordinaten: ").append(coords(it)).append('\n') }
+        p?.categories?.takeIf { it.isNotEmpty() }?.let { append("Art: ").append(it.joinToString(", ")).append('\n') }
         p?.description?.takeIf { it.isNotBlank() }?.let { append("Beschreibung: ").append(it.take(600)).append('\n') }
         p?.rating?.let { append("Bewertung: ").append(it).append(p.numRatings?.let { n -> " ($n)" } ?: "").append('\n') }
+        p?.priceLevel?.let { append("Preisniveau: ").append("¥".repeat(it.coerceIn(1, 4))).append('\n') }
         p?.let { openDays(it) }?.let { append("Geöffnet an: ").append(it).append('\n') }
+        p?.openingPeriods?.takeIf { it.isNotEmpty() }?.let { periods ->
+            val names = listOf("So", "Mo", "Di", "Mi", "Do", "Fr", "Sa")
+            append("Öffnungszeiten: ").append(periods.joinToString(", ") { "${names.getOrElse(it.openDay) { "?" }} ${it.openTime}–${it.closeTime.orEmpty()}" }).append('\n')
+        }
         p?.minMinutes?.let { append("Typische Dauer: ").append(it).append(p.maxMinutes?.let { m -> "–$m" } ?: "").append(" Min.\n") }
+        p?.website?.takeIf { it.isNotBlank() }?.let { append("Website: ").append(it).append('\n') }
         if (s.note.isNotBlank()) append("Notiz der Reisenden: ").append(s.note.take(500)).append('\n')
         if (s.tags.isNotEmpty()) append("Tags: ").append(s.tags.joinToString(", ")).append('\n')
         s.worth?.let { append("Einschätzung: ").append(it.name).append(s.worthReason.takeIf { r -> r.isNotBlank() }?.let { r -> " – $r" } ?: "").append('\n') }
@@ -193,6 +354,28 @@ object ChatContextText {
         t.plannedDates[s.placeId]?.takeIf { it.isNotEmpty() }?.let { append("Eingeplant am: ").append(it.joinToString(", ")).append('\n') }
     }
 
+    /** One compact line per saved place; with the distance to [from] when both have coordinates. */
+    fun row(s: SavedPlace, t: ChatTrip, from: Anchor?): String {
+        val p = t.places[s.placeId]
+        val km = from?.let { a -> t.point(s.placeId)?.let { distanceKm(a.lat, a.lng, it.lat, it.lng) } }
+        return listOfNotNull(
+            "id=${s.id}",
+            p?.name ?: "?",
+            t.regionName(s.regionId),
+            s.category.name,
+            km?.let { distanceText(it) + " entfernt" },
+            s.worth?.name,
+            p?.rating?.let { "★$it" },
+            s.tags.takeIf { it.isNotEmpty() }?.joinToString(" "),
+            t.plannedDates[s.placeId]?.takeIf { it.isNotEmpty() }?.let { "eingeplant ${it.joinToString(",")}" },
+            (s.dossier?.verdict?.takeIf { it.isNotBlank() } ?: s.worthReason.takeIf { it.isNotBlank() } ?: p?.description)?.take(160),
+        ).joinToString(" | ")
+    }
+
+    private fun sortByDistance(list: List<SavedPlace>, t: ChatTrip, from: Anchor?): List<SavedPlace> =
+        if (from == null) list.sortedBy { ChatTools.worthRank(it.worth) }
+        else list.sortedWith(compareBy<SavedPlace> { s -> t.point(s.placeId)?.let { distanceKm(from.lat, from.lng, it.lat, it.lng) } ?: Double.MAX_VALUE }.thenBy { ChatTools.worthRank(it.worth) })
+
     /** "Mo, Di, …" from the opening periods; null when unknown. */
     fun openDays(p: Place): String? {
         if (p.openingPeriods.isEmpty()) return null
@@ -200,6 +383,16 @@ object ChatContextText {
         val open = (0..6).filter { isOpenOn(p.openingPeriods, it) == true }
         return if (open.size == 7) "täglich" else open.joinToString(", ") { names[it] }.ifEmpty { "unbekannt" }
     }
+
+    const val MAX_CONTEXT_ROWS = 30
+    const val NEARBY_KM = 15.0
+}
+
+private fun shortDateOf(date: String): String = try {
+    val d = LocalDate.parse(date)
+    "%02d.%02d.".format(d.dayOfMonth, d.monthValue)
+} catch (e: Exception) {
+    date
 }
 
 /** Day of week with 0 = Sunday, as in [isOpenOn]. */
@@ -209,7 +402,13 @@ private fun sunday0(d: LocalDate): Int = if (d.dayOfWeek == DayOfWeek.SUNDAY) 0 
  * The chat's tools over the trip and the web. One instance per answer: it collects the cards to show and
  * remembers the web pages found, so web cards can only link to real search results.
  */
-class ChatTools(private val t: ChatTrip, private val web: WebSearch?, private val say: (String) -> Unit) {
+class ChatTools(
+    private val t: ChatTrip,
+    private val web: WebSearch?,
+    /** Where the chat was opened (the day's stay, the place): rows show their distance to it. */
+    private val anchor: Anchor? = null,
+    private val say: (String) -> Unit,
+) {
     private val json = Json { ignoreUnknownKeys = true }
     val cards = mutableListOf<ChatCard>()
     private val seenUrls = LinkedHashMap<String, WebSource>()
@@ -218,17 +417,25 @@ class ChatTools(private val t: ChatTrip, private val web: WebSearch?, private va
         add(
             tool(
                 "search_saved_places",
-                "Durchsucht die hinterlegten Vorschläge (gespeicherte Orte) der Reisenden. Liefert kompakte Zeilen mit id, Name, Region, Kategorie, Einschätzung, Fazit.",
+                "Durchsucht die hinterlegten Vorschläge (gespeicherte Orte) der Reisenden. Liefert kompakte Zeilen mit id, Name, Region, Kategorie, Entfernung (Luftlinie), Einschätzung, Fazit.",
             ) {
                 putJsonObject("query") { put("type", "string"); put("description", "Suchbegriffe (Name, Art, Stichworte), optional") }
                 putJsonObject("regionId") { put("type", "string"); put("description", "nur diese Region (inklusive ihrer Tagesausflüge), optional") }
                 putJsonObject("category") { put("type", "string"); putJsonArray("enum") { PlaceCategory.entries.forEach { add(JsonPrimitive(it.name)) } } }
                 putJsonObject("openOn") { put("type", "string"); put("description", "Datum yyyy-MM-dd: nur Orte, die an diesem Wochentag nicht sicher geschlossen sind") }
                 putJsonObject("includePlanned") { put("type", "boolean"); put("description", "auch schon eingeplante/besuchte Orte zeigen (Standard: nein)") }
+                putJsonObject("near") {
+                    put("type", "string")
+                    put("description", "Umkreissuche, nach Entfernung sortiert: id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext' (= Bezugspunkt) oder 'lat,lng'")
+                }
+                putJsonObject("maxKm") { put("type", "number"); put("description", "Radius für near in km (Standard 15)") }
             },
         )
         add(tool("get_place", "Alle Details zu einem hinterlegten Ort (Dossier, Tipps, Öffnungstage).") {
             putJsonObject("id") { put("type", "string"); put("description", "id aus search_saved_places") }
+        })
+        add(tool("get_day", "Ein Reisetag mit Unterkünften, Fahrten, Programm (mit Adressen und Entfernungen) und Notizen.") {
+            putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
         })
         if (web != null) {
             add(tool("web_search", "Websuche (Parallel). Nur wenn der Nutzer nach neuen Orten, aktuellen Infos oder Webrecherche fragt oder die hinterlegten Vorschläge nicht reichen.") {
@@ -275,6 +482,8 @@ class ChatTools(private val t: ChatTrip, private val web: WebSearch?, private va
         return when (name) {
             "search_saved_places" -> { say("Durchsuche hinterlegte Vorschläge …"); search(args) }
             "get_place" -> getPlace(args)
+            "get_day" -> args.s("date")?.takeIf { d -> runCatching { LocalDate.parse(d) }.isSuccess }
+                ?.let { d -> say("Lese Tag ${shortDateOf(d)} …"); ChatContextText.day(d, t) } ?: "Ungültiges Datum."
             "web_search" -> webSearch(args)
             "show_place_cards" -> showPlaces(args)
             "show_web_cards" -> showWeb(args)
@@ -294,47 +503,60 @@ class ChatTools(private val t: ChatTrip, private val web: WebSearch?, private va
         val dow = args.s("openOn")?.let { runCatching { sunday0(LocalDate.parse(it)) }.getOrNull() }
         val includePlanned = (args["includePlanned"] as? JsonPrimitive)?.contentOrNull == "true"
         val regionIds = regionId?.let { t.regionWithDayTrips(it) }
+        val nearArg = args.s("near")
+        val near = nearArg?.let { resolvePoint(it) }
+        if (nearArg != null && near == null) return "Unbekannter Bezugspunkt $nearArg (ohne Koordinaten?). Nutze eine Orts-id, ein Datum oder lat,lng."
+        val maxKm = (args["maxKm"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.takeIf { it > 0 } ?: DEFAULT_KM
+        val from = near ?: anchor
+        fun km(s: SavedPlace): Double? = from?.let { a -> t.point(s.placeId)?.let { distanceKm(a.lat, a.lng, it.lat, it.lng) } }
+        var noCoords = 0
         val pool = t.saved.filter { s ->
             s.status != PlaceStatus.DROPPED &&
                 (regionIds == null || s.regionId in regionIds) &&
                 (category == null || s.category == category) &&
                 (includePlanned || (s.status == PlaceStatus.IDEA && t.plannedDates[s.placeId].isNullOrEmpty())) &&
                 (dow == null || t.places[s.placeId]?.let { p -> isOpenOn(p.openingPeriods, dow) } != false)
+        }.filter { s ->
+            if (near == null) return@filter true
+            val d = km(s)
+            if (d == null) noCoords++
+            d != null && d <= maxKm
         }
         val tokens = args.s("query")?.lowercase()?.split(Regex("[^\\p{L}\\p{N}]+"))?.filter { it.length >= 2 }.orEmpty()
         val scored = pool.map { it to matchScore(it, tokens) }
         val hits = if (tokens.isEmpty()) scored else scored.filter { it.second > 0 }
         val ranked = hits.sortedWith(
             compareByDescending<Pair<SavedPlace, Int>> { it.second }
+                .thenBy { if (near != null) km(it.first) ?: Double.MAX_VALUE else 0.0 }
                 .thenBy { worthRank(it.first.worth) }
                 .thenByDescending { t.places[it.first.placeId]?.rating ?: 0.0 },
         ).map { it.first }
         val shown = (if (ranked.isEmpty() && tokens.isNotEmpty()) {
-            pool.sortedWith(compareBy<SavedPlace> { worthRank(it.worth) }.thenByDescending { t.places[it.placeId]?.rating ?: 0.0 })
+            pool.sortedWith(compareBy<SavedPlace> { if (near != null) km(it) ?: Double.MAX_VALUE else 0.0 }.thenBy { worthRank(it.worth) }.thenByDescending { t.places[it.placeId]?.rating ?: 0.0 })
         } else {
             ranked
         }).take(MAX_ROWS)
-        if (shown.isEmpty()) return "Keine passenden hinterlegten Vorschläge."
+        if (shown.isEmpty()) {
+            return "Keine passenden hinterlegten Vorschläge" + (near?.let { " im Umkreis von ${distanceText(maxKm)} um ${it.name}" } ?: "") +
+                (if (noCoords > 0) " ($noCoords ohne Koordinaten ausgelassen)" else "") + "."
+        }
         return buildString {
+            near?.let { append("Umkreis ").append(distanceText(maxKm)).append(" um ").append(it.name).append(if (noCoords > 0) " ($noCoords ohne Koordinaten ausgelassen)" else "").append(".\n") }
             if (ranked.isEmpty() && tokens.isNotEmpty()) append("Keine Treffer für die Suchbegriffe; stattdessen die besten Orte der Auswahl:\n")
             append(pool.size).append(" Orte in der Auswahl, gezeigt ").append(shown.size).append(":\n")
-            shown.forEach { s -> append(row(s)).append('\n') }
+            shown.forEach { s -> append(ChatContextText.row(s, t, from)).append('\n') }
         }
     }
 
-    private fun row(s: SavedPlace): String {
-        val p = t.places[s.placeId]
-        return listOfNotNull(
-            "id=${s.id}",
-            p?.name ?: "?",
-            t.regionName(s.regionId),
-            s.category.name,
-            s.worth?.name,
-            p?.rating?.let { "★$it" },
-            s.tags.takeIf { it.isNotEmpty() }?.joinToString(" "),
-            t.plannedDates[s.placeId]?.takeIf { it.isNotEmpty() }?.let { "eingeplant ${it.joinToString(",")}" },
-            (s.dossier?.verdict?.takeIf { it.isNotBlank() } ?: s.worthReason.takeIf { it.isNotBlank() } ?: p?.description)?.take(160),
-        ).joinToString(" | ")
+    /** A saved place id, a place id, a date (that night's stay), "kontext" or "lat,lng" as a point. */
+    private fun resolvePoint(v: String): Anchor? {
+        Regex("^\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*$").find(v)?.let { m ->
+            return Anchor("Punkt $v", m.groupValues[1].toDouble(), m.groupValues[2].toDouble())
+        }
+        if (v.equals("kontext", ignoreCase = true)) return anchor
+        if (runCatching { LocalDate.parse(v) }.isSuccess) return t.dayAnchor(v)
+        t.savedById[v]?.let { return t.point(it.placeId) }
+        return t.point(v)
     }
 
     private fun matchScore(s: SavedPlace, tokens: List<String>): Int {
@@ -405,6 +627,7 @@ class ChatTools(private val t: ChatTrip, private val web: WebSearch?, private va
 
     companion object {
         const val MAX_ROWS = 25
+        const val DEFAULT_KM = 15.0
         const val MAX_CARDS = 10
 
         fun worthRank(w: Worth?): Int = when (w) {
@@ -434,8 +657,9 @@ class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, p
     /** Answers the last user message of [history] (the earlier ones are context). Blocking; throws [AiFailed]. */
     fun answer(history: List<ChatMessage>, trip: ChatTrip, say: (String) -> Unit = {}): ChatAnswer {
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
-        val tools = ChatTools(trip, web, say)
-        val messages = mutableListOf(system(systemPrompt(trip, last.context ?: ChatContext())))
+        val context = last.context ?: ChatContext()
+        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), say)
+        val messages = mutableListOf(system(systemPrompt(trip, context)))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
                 msg("user", (m.context?.label?.let { "[Geöffnet bei: $it] " } ?: "") + m.text)
@@ -472,6 +696,10 @@ class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, p
             (Markdown: kurze Absätze, Listen, **fett**; keine Tabellen, keine Links im Text).
             - Für Vorschläge suchst du zuerst mit search_saved_places in den hinterlegten Vorschlägen der Reisenden und empfiehlst bevorzugt diese.
               Nutze dafür den Kontext (Region und Datum des Tages, Öffnungstage mit openOn) und die Wünsche des Nutzers.
+            - Achte auf Entfernungen (Luftlinie, in den Zeilen angegeben). Unterkünfte und Programm mit Adressen stehen unten.
+              Bei „in der Nähe“, „nicht weit“, „auf dem Weg“ suchst du mit near (Bezugspunkt: Unterkunft, ein Programmpunkt oder Koordinaten)
+              und maxKm (in der Nähe ≈ bis 15 km, zu Fuß ≈ 2 km). Nenne bei Empfehlungen die Entfernung; schlage nichts weit Entferntes vor,
+              ohne das zu sagen. Für andere Tage nutzt du get_day.
             - Jeden hinterlegten Ort, den du empfiehlst, zeigst du zusätzlich mit show_place_cards (beste zuerst, höchstens 8). Erfinde keine ids.
             """.trimIndent(),
         ).append('\n')
@@ -481,6 +709,8 @@ class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, p
                 - web_search nutzt du, wenn der Nutzer ausdrücklich im Web suchen will, nach neuen Orten fragt, die nicht hinterlegt sind,
                   aktuelle Infos braucht (Events, Öffnungszeiten, Preise) oder eine allgemeine Frage hat, die du nicht sicher weißt.
                   Im Web gefundene Orte oder Seiten zeigst du mit show_web_cards. Kennzeichne Webfunde als „nicht hinterlegt“.
+                  Suchst du Orte in der Nähe, nenne in objective und queries den konkreten Ort (Stadt/Ortsteil aus der Adresse der
+                  Unterkunft oder des Programmpunkts), nicht nur den Regionsnamen, und prüfe die Lage der Funde.
                 """.trimIndent(),
             ).append('\n')
         } else {

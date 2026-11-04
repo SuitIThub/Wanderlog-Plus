@@ -1,6 +1,8 @@
 package de.wanderlogplus.server.ai
 
 import de.wanderlogplus.shared.model.Day
+import de.wanderlogplus.shared.model.Endpoint
+import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.DayItem
 import de.wanderlogplus.shared.model.OpeningPeriod
 import de.wanderlogplus.shared.model.Place
@@ -34,12 +36,12 @@ class ChatAgentTest {
         trip = Trip("t", "Japan 2027", "2027-05-18", "2027-05-22"),
         regions = listOf(Region("r-kyoto", "Kyoto"), Region("r-nara", "Nara", dayTripFromRegionId = "r-kyoto"), Region("r-tokyo", "Tokyo")),
         places = listOf(
-            Place("p-hotel", name = "Hotel Gion"),
-            Place("p-kiyo", name = "Kiyomizu-dera", rating = 4.6, description = "Buddhistischer Tempel am Hang"),
-            Place("p-ramen", name = "Ramen Ichiran", rating = 4.2),
+            Place("p-hotel", name = "Hotel Gion", lat = 35.0037, lng = 135.7788, address = "Gionmachi, Higashiyama, Kyoto"),
+            Place("p-kiyo", name = "Kiyomizu-dera", lat = 34.9949, lng = 135.7850, rating = 4.6, description = "Buddhistischer Tempel am Hang"),
+            Place("p-ramen", name = "Ramen Ichiran", lat = 35.0050, lng = 135.7700, rating = 4.2),
             // Open Monday only (day 1).
-            Place("p-market", name = "Nishiki Markt", openingPeriods = listOf(OpeningPeriod(1, "09:00", 1, "17:00"))),
-            Place("p-deer", name = "Nara-Park", description = "Hirsche"),
+            Place("p-market", name = "Nishiki Markt", lat = 35.0050, lng = 135.7650, openingPeriods = listOf(OpeningPeriod(1, "09:00", 1, "17:00"))),
+            Place("p-deer", name = "Nara-Park", lat = 34.6851, lng = 135.8430, description = "Hirsche"),
             Place("p-shib", name = "Shibuya Crossing"),
         ).associateBy { it.id },
         saved = listOf(
@@ -52,6 +54,7 @@ class ChatAgentTest {
         stays = listOf(Stay("st", "p-hotel", "r-kyoto", "2027-05-18", "2027-05-22", confirmationNumber = "SECRET-123", travelerNames = listOf("Erika Muster"))),
         days = listOf(Day("d1", "2027-05-19", title = "Tempeltag")),
         dayItems = listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00")),
+        trains = listOf(Train("tr", carrier = "JR", depart = Endpoint("Kyoto", date = "2027-05-22", time = "09:10"), arrive = Endpoint("Tokyo", date = "2027-05-22", time = "11:20"), confirmationNumber = "SECRET-TRAIN")),
     )
 
     /** Plays back scripted turns and records the messages it was sent. */
@@ -118,7 +121,7 @@ class ChatAgentTest {
     fun `failed web search is reported to the model, not thrown`() {
         val t = tools(WebSearch { _, _ -> throw AiFailed("research_no_credit") })
         assertTrue(t.run("web_search", """{"objective":"x"}""").startsWith("Websuche fehlgeschlagen (research_no_credit)"))
-        assertEquals(listOf("search_saved_places", "get_place", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
+        assertEquals(listOf("search_saved_places", "get_place", "get_day", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
     }
 
     @Test
@@ -158,6 +161,34 @@ class ChatAgentTest {
         assertEquals(ChatAgent.MAX_ROUNDS + 1, model.seen.size)
         val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
         assertTrue("Geheimtipps: Hinterer Pfad ist leer" in system && "Fazit: Ikonisch" in system)
+    }
+
+    @Test
+    fun `day context knows the stay, the whole plan and distances`() {
+        val system = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }.systemPrompt(trip, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertTrue("Übernachtung: Hotel Gion (Kyoto), 2027-05-18 bis 2027-05-22, Gionmachi, Higashiyama, Kyoto, Koordinaten 35.00370,135.77880" in system, system)
+        assertTrue("Bezugspunkt für Entfernungen: Unterkunft Hotel Gion" in system)
+        assertTrue("12:00 Ramen Ichiran [id=s-ramen], 810 m von der Unterkunft" in system, system)
+        assertTrue("Offene Vorschläge für diesen Tag" in system && "Kiyomizu-dera | Kyoto | SIGHT | 1,1 km entfernt" in system, system)
+        // The whole trip: every day with its night and the train on the last day (without booking numbers).
+        assertTrue("Unterkünfte:\n- Hotel Gion" in system)
+        assertTrue("Sa 22.05. (2027-05-22): Kyoto · Zug JR: Kyoto 09:10 → Tokyo 11:20" in system, system)
+        assertFalse("SECRET" in system)
+    }
+
+    @Test
+    fun `near search keeps the radius around the stay and sorts by distance`() {
+        val t = ChatTools(trip, null, trip.dayAnchor("2027-05-19")) {}
+        val r = t.search(buildJsonObject { put("near", "2027-05-19"); put("maxKm", 20) })
+        assertTrue(r.startsWith("Umkreis 20 km um Unterkunft Hotel Gion (1 ohne Koordinaten ausgelassen)."), r)
+        assertFalse("s-deer" in r, "Nara is 36 km away")
+        assertTrue(r.indexOf("s-kiyo") < r.indexOf("s-market"))
+        assertTrue("s-deer" in t.search(buildJsonObject { put("near", "s-kiyo"); put("maxKm", 50) }))
+        assertTrue(t.search(buildJsonObject { put("near", "34.5,135.5"); put("maxKm", 1) }).startsWith("Keine passenden hinterlegten Vorschläge im Umkreis von 1,0 km"))
+        assertTrue(t.search(buildJsonObject { put("near", "s-shib") }).startsWith("Unbekannter Bezugspunkt"))
+        // Without near the rows still show the distance to where the chat was opened.
+        assertTrue("Nara-Park | Nara | SIGHT | 36 km entfernt" in t.search(buildJsonObject { put("regionId", "r-kyoto") }))
+        assertTrue("Übernachtung: Hotel Gion" in t.run("get_day", """{"date":"2027-05-20"}"""))
     }
 
     @Test
