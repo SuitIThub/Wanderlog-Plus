@@ -53,7 +53,25 @@ class ChatViewModel(
     private val backend: ChatBackend,
     private val last: LastChat,
     private val pollMillis: Long = 1_500,
+    /** Reads the position for "Standort mitsenden"; null: the switch is hidden. */
+    private val locator: ChatLocator? = null,
 ) : ViewModel() {
+    val canShareLocation: Boolean get() = locator != null
+
+    /** "Standort mitsenden": every message carries the current position (for that answer only). */
+    private val _shareLocation = MutableStateFlow(false)
+    val shareLocation: StateFlow<Boolean> = _shareLocation
+
+    fun setShareLocation(on: Boolean) {
+        _shareLocation.value = on && locator != null
+    }
+
+    /** The permission was refused: the switch stays off. */
+    fun locationDenied() {
+        _shareLocation.value = false
+        _message.value = "Ohne Standort-Berechtigung kann der Chat deinen Standort nicht nutzen."
+    }
+
     private val _chat = MutableStateFlow<ChatInfo?>(null)
     val chat: StateFlow<ChatInfo?> = _chat
 
@@ -126,7 +144,14 @@ class ChatViewModel(
         viewModelScope.launch {
             guard {
                 val id = _chat.value?.id ?: backend.create().id.also { last.set(it) }
-                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext()))
+                val location = if (_shareLocation.value) {
+                    val l = try { locator?.locate() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    if (l == null) _message.value = "Standort gerade nicht verfügbar – ohne Standort gesendet."
+                    l
+                } else {
+                    null
+                }
+                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext(), location))
                 _chat.value = sent
                 poll(sent.id)
             }

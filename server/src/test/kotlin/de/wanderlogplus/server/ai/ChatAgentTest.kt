@@ -293,6 +293,22 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `a shared location is "hier" for the tools and the prompt but not kept in the chat`() {
+        val model = ScriptedModel(listOf(calls("search_saved_places" to """{"near":"hier","maxKm":2}"""), text("Gleich um die Ecke.")))
+        val here = de.wanderlogplus.shared.sync.ChatLocation(34.9960, 135.7840, 25)
+        ChatAgent(model, null) { "2027-05-19" }.answer(listOf(user("Was ist hier?", ChatContext(ChatScreens.TODAY))), trip, here)
+        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        assertTrue("Standort des Nutzers (jetzt, \"hier\"): 34.99600,135.78400, Genauigkeit ca. 20 m" in system, system)
+        assertTrue("Nächste Unterkunft: Hotel Gion, 970 m entfernt" in system, system)
+        assertTrue("Hinterlegte Orte im Umkreis von 3 km:\n- id=s-kiyo | Kiyomizu-dera | Kyoto | SIGHT | 150 m entfernt" in system, system)
+        val tool = model.seen.last().first { it["role"]?.jsonPrimitive?.content == "tool" }["content"]!!.jsonPrimitive.content
+        assertTrue(tool.startsWith("Umkreis 2,0 km um Dein Standort"), tool)
+        assertTrue("s-kiyo" in tool && "s-deer" !in tool)
+        // Without a location "hier" is unknown.
+        assertTrue(tools().search(buildJsonObject { put("near", "hier") }).startsWith("Unbekannter Bezugspunkt"))
+    }
+
+    @Test
     fun `openrouter tool turn parsing keeps calls and a clean history message`() {
         val body = """{"choices":[{"message":{"role":"assistant","content":null,"reasoning":"x",
             "tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_place","arguments":"{\"id\":\"s-kiyo\"}"}}]}}]}"""

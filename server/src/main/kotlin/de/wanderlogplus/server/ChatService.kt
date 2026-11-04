@@ -75,7 +75,8 @@ class ChatService(
                 ),
             )
         }
-        executor.execute { runAnswer(id) }
+        val location = req.location?.takeIf { it.lat in -90.0..90.0 && it.lng in -180.0..180.0 }
+        executor.execute { runAnswer(id, location) }
         return started
     }
 
@@ -98,11 +99,11 @@ class ChatService(
         store.chats(200).map { decode(it) }.filter { it.pending }.forEach { finish(it.id, errorMessage("interrupted")) }
     }
 
-    private fun runAnswer(id: String) {
+    private fun runAnswer(id: String, location: de.wanderlogplus.shared.sync.ChatLocation? = null) {
         val a = agent ?: return
         val chat = get(id) ?: return
         val reply = try {
-            val answer = a.answer(chat.messages, ChatTrip.from(store)) { line -> status(id, line) }
+            val answer = a.answer(chat.messages, ChatTrip.from(store), location) { line -> status(id, line) }
             ChatMessage(UUID.randomUUID().toString(), ChatMessage.ROLE_ASSISTANT, answer.text, now().toEpochMilli(), cards = answer.cards)
         } catch (e: AiFailed) {
             errorMessage(e.code)
