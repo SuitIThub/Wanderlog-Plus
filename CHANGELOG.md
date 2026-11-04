@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.17.0
+
+- **Heute simulieren** (nur im Debug-Modus, Einstellungen → Entwicklung): ein Datum und auf Wunsch eine Uhrzeit, die der Heute-Screen vorgibt, um ihn vor der Abreise zu testen. Eine Leiste über „Heute“ zeigt den simulierten Tag, schaltet einen Tag vor oder zurück oder die Simulation aus.
+- **QR-Code anzeigen** (Einstellungen → Server, in jedem Profil): der Einrichtungs-Code mit Adresse und Token der aktuellen Verbindung, um ein weiteres Gerät einzurichten.
+
 ## 0.16.0
 
 - **Debug-Modus** (Einstellungen → Entwicklung): ein eigenes Profil mit eigenen Verbindungsdaten und eigenen lokalen Daten (Reise, Sync-Stand, Anhänge, Wege, Erinnerungen). Die normale Verbindung zum Heimserver bleibt unberührt; beim Zurückschalten ist alles wie vorher. Umschalten startet die App neu, im Debug-Modus zeigt ein rotes „DEBUG“ oben, mit welchem Server die App gerade spricht.

@@ -68,6 +68,11 @@ fun SettingsScreen(
     /** Debug mode: separate server connection and local data; switching restarts the app. Null hides it. */
     debugMode: Boolean = false,
     onDebugMode: ((Boolean) -> Unit)? = null,
+    /** The connection in use; enables "QR-Code anzeigen". */
+    server: de.wanderlogplus.app.data.ServerSettings? = null,
+    /** Debug mode: simulated "now" for Heute; [onSimulatedTime] null hides it. */
+    simulatedTime: de.wanderlogplus.app.data.SimulatedTime? = null,
+    onSimulatedTime: ((de.wanderlogplus.app.data.SimulatedTime?) -> Unit)? = null,
     /** Opens "KI-Kriterien"; null hides the section. */
     onOpenAiSettings: (() -> Unit)? = null,
     /** "Kartenbilder neu laden": drops the cached route snapshots so they are rendered again. */
@@ -75,6 +80,7 @@ fun SettingsScreen(
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
     var confirmDebug by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    var showQr by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     var systemAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
     LifecycleResumeEffect(context) {
@@ -101,7 +107,12 @@ fun SettingsScreen(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Adresse: ${info.serverUrl ?: "–"}")
                 Text("Token: ${maskToken(info.token)}")
-                OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onChangeServer) { Text("Server ändern") }
+                    if (server != null) {
+                        OutlinedButton(onClick = { showQr = true }, modifier = Modifier.testTag("settings-show-qr")) { Text("QR-Code anzeigen") }
+                    }
+                }
             }
         }
 
@@ -174,6 +185,7 @@ fun SettingsScreen(
                         Text("Debug-Modus", Modifier.weight(1f))
                         Switch(checked = debugMode, onCheckedChange = { confirmDebug = it }, modifier = Modifier.testTag("settings-debug"))
                     }
+                    if (debugMode && onSimulatedTime != null) SimulationSettings(simulatedTime, onSimulatedTime)
                     Text(
                         "Eigene Verbindungsdaten und eigene lokale Daten (Reise, Sync-Stand, Anhänge). Die normale Verbindung " +
                             "zu deinem Server bleibt unberührt; beim Zurückschalten ist alles wie vorher. Umschalten startet die App neu.",
@@ -196,6 +208,7 @@ fun SettingsScreen(
             }
         }
     }
+    if (showQr && server != null) SetupQrDialog(server, debugMode, onDismiss = { showQr = false })
     confirmDebug?.let { target ->
         AlertDialog(
             onDismissRequest = { confirmDebug = null },
