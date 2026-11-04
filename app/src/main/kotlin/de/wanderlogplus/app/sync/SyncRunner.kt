@@ -76,7 +76,11 @@ class SyncRunner(private val container: AppContainer) {
                 SyncResult.Failed(ApiErrorKind.SERVER, "Unerwarteter Fehler beim Synchronisieren")
             }
             _status.update { it.copy(lastError = (result as? SyncResult.Failed)?.message) }
-            if (result !is SyncResult.Failed) container.syncScheduler.requestFiles()
+            if (result !is SyncResult.Failed) {
+                container.syncScheduler.requestFiles()
+                // The server may have an "Upload fortsetzen" request waiting (set from its web overview).
+                container.vaultUploadTrigger.check()
+            }
             result
         } finally {
             val last = runners.decrementAndGet() == 0

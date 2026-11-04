@@ -25,6 +25,7 @@ import de.wanderlogplus.shared.sync.TransitStations
 import de.wanderlogplus.shared.sync.VaultImageInfo
 import de.wanderlogplus.shared.sync.VaultScanStatus
 import de.wanderlogplus.shared.sync.VaultScanUpdate
+import de.wanderlogplus.shared.sync.VaultUploadTrigger
 import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
@@ -346,6 +347,34 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             contentType(ContentType.Application.Json)
             setBody(update)
         }
+    }
+
+    /** The web overview's "Upload fortsetzen" flag (best effort; callers swallow failures, e.g. an old server's 404). */
+    suspend fun vaultUploadRequested(): Boolean = call<VaultUploadTrigger> {
+        client.get("$base/api/vault/uploads/request") { auth() }
+    }.requested
+
+    /** Clears the flag after the app has scheduled the upload pass. */
+    suspend fun clearVaultUploadRequest() {
+        val r = try {
+            client.post("$base/api/vault/uploads/request/clear") { auth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        }
+        if (r.status.value !in 200..299) throw classify(r.status.value, try { r.body<ErrorResponse>() } catch (e: Exception) { null })
+    }
+
+    /**
+     * The vault image with this content hash (SHA-256 hex), or null when the server does not have it.
+     * Lets the uploader skip re-sending a body the server already stored – e.g. an earlier attempt whose
+     * response was lost on a slow relay (the server stores uploads idempotently by content hash).
+     */
+    suspend fun vaultImageByHash(hash: String): VaultImageInfo? = try {
+        call { client.get("$base/api/vault/images/by-hash/$hash") { auth() } }
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
     }
 
     /** Uploads one flagged image to the vault; [score] is the classifier value (0..1). */

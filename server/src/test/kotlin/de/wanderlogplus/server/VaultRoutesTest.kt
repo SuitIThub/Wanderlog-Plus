@@ -3,6 +3,7 @@ package de.wanderlogplus.server
 import de.wanderlogplus.shared.sync.VaultImageInfo
 import de.wanderlogplus.shared.sync.VaultScanStatus
 import de.wanderlogplus.shared.sync.VaultScanUpdate
+import de.wanderlogplus.shared.sync.VaultUploadTrigger
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.delete
@@ -39,6 +40,17 @@ class VaultRoutesTest {
         application { module(services) }
         try {
             block()
+        } finally {
+            services.store.close()
+        }
+    }
+
+    /** Same as [app], but hands the services over for direct store seeding. */
+    private fun appWith(block: suspend ApplicationTestBuilder.(Services) -> Unit) = testApplication {
+        val services = testServices(dir)
+        application { module(services) }
+        try {
+            block(services)
         } finally {
             services.store.close()
         }
@@ -121,6 +133,67 @@ class VaultRoutesTest {
     }
 
     @Test
+    fun imageUploadIsIdempotent() = app {
+        val c = jsonClient()
+        val bytes = Random(7).nextBytes(8 * 1024)
+        val first: VaultImageInfo = c.uploadImage(bytes, fileName = "same.jpg").body()
+        // A retried upload (e.g. the app timed out after the server stored the file) must not duplicate.
+        val second: VaultImageInfo = c.uploadImage(bytes, fileName = "same.jpg").body()
+        assertEquals(first.id, second.id)
+        assertEquals(listOf(first.id), c.get("/api/vault/images") { authed() }.body<List<VaultImageInfo>>().map { it.id })
+        // Same content under another name is still the same image; different content is not.
+        val renamed: VaultImageInfo = c.uploadImage(bytes, fileName = "other.jpg").body()
+        assertEquals(first.id, renamed.id)
+        val other: VaultImageInfo = c.uploadImage(Random(8).nextBytes(1024), fileName = "same.jpg").body()
+        assertTrue(other.id != first.id)
+        assertEquals(2, c.get("/api/vault/images") { authed() }.body<List<VaultImageInfo>>().size)
+    }
+
+    @Test
+    fun uploadDedupsAgainstPreHashEntries() = appWith { services ->
+        val c = jsonClient()
+        val bytes = Random(9).nextBytes(2048)
+        val old = services.vault.addImage("alice", bytes.inputStream(), "old.jpg", "image/jpeg", 0.5)
+        // Simulate an entry from before hashes existed: strip the hash from the stored metadata.
+        val meta = dir.resolve("vault/alice/images.json")
+        val stripped = kotlinx.serialization.json.Json { explicitNulls = false }.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(VaultImageInfo.serializer()),
+            services.vault.images("alice").map { it.copy(hash = null) },
+        )
+        java.nio.file.Files.writeString(meta, stripped)
+        assertEquals(null, services.vault.images("alice").single().hash)
+
+        val again: VaultImageInfo = c.uploadImage(bytes, fileName = "old.jpg").body()
+        assertEquals(old.id, again.id)
+        val all = services.vault.images("alice")
+        assertEquals(1, all.size)
+        assertTrue(all.single().hash != null) // backfilled during the check
+    }
+
+    @Test
+    fun imageByHashFindsStoredImage() = app {
+        val c = jsonClient()
+        val bytes = Random(11).nextBytes(4096)
+        val info: VaultImageInfo = c.uploadImage(bytes, fileName = "hashed.jpg").body()
+        val hash = info.hash!!
+        val found = c.get("/api/vault/images/by-hash/$hash") { authed() }
+        assertEquals(HttpStatusCode.OK, found.status)
+        assertEquals(info.id, found.body<VaultImageInfo>().id)
+        // Hex case does not matter.
+        assertEquals(HttpStatusCode.OK, c.get("/api/vault/images/by-hash/${hash.uppercase()}") { authed() }.status)
+        // Other users' namespaces are not searched.
+        assertEquals(HttpStatusCode.NotFound, c.get("/api/vault/images/by-hash/$hash") { authed(TOKEN_B) }.status)
+    }
+
+    @Test
+    fun imageByHashMissesAndValidates() = app {
+        val c = jsonClient()
+        assertEquals(HttpStatusCode.NotFound, c.get("/api/vault/images/by-hash/${"0".repeat(64)}") { authed() }.status)
+        assertEquals(HttpStatusCode.BadRequest, c.get("/api/vault/images/by-hash/not-a-hash") { authed() }.status)
+        assertEquals(HttpStatusCode.Unauthorized, c.get("/api/vault/images/by-hash/${"0".repeat(64)}").status)
+    }
+
+    @Test
     fun perUserIsolation() = app {
         val c = jsonClient()
         val info: VaultImageInfo = c.uploadImage(Random(2).nextBytes(1024)).body()
@@ -175,6 +248,60 @@ class VaultRoutesTest {
         assertEquals(HttpStatusCode.Unauthorized, c.get("/vault/img/${info.id}").status)
         // Another user's web token does not unlock the image either.
         assertEquals(HttpStatusCode.NotFound, c.get("/vault/img/${info.id}?token=$TOKEN_B").status)
+    }
+
+    @Test
+    fun uploadTriggerRoundTrip() = app {
+        val c = jsonClient()
+        assertEquals(false, c.get("/api/vault/uploads/request") { authed() }.body<VaultUploadTrigger>().requested)
+        assertEquals(HttpStatusCode.NoContent, c.post("/api/vault/uploads/request") { authed() }.status)
+        assertEquals(true, c.get("/api/vault/uploads/request") { authed() }.body<VaultUploadTrigger>().requested)
+        // Reading does not consume: the app clears explicitly after scheduling (at-least-once).
+        assertEquals(true, c.get("/api/vault/uploads/request") { authed() }.body<VaultUploadTrigger>().requested)
+        assertEquals(HttpStatusCode.NoContent, c.post("/api/vault/uploads/request/clear") { authed() }.status)
+        assertEquals(false, c.get("/api/vault/uploads/request") { authed() }.body<VaultUploadTrigger>().requested)
+    }
+
+    @Test
+    fun uploadTriggerIsPerUserAndNeedsAuth() = app {
+        val c = jsonClient()
+        c.post("/api/vault/uploads/request") { authed() }
+        assertEquals(false, c.get("/api/vault/uploads/request") { authed(TOKEN_B) }.body<VaultUploadTrigger>().requested)
+        assertEquals(HttpStatusCode.Unauthorized, c.get("/api/vault/uploads/request").status)
+        assertEquals(HttpStatusCode.Unauthorized, c.post("/api/vault/uploads/request").status)
+    }
+
+    @Test
+    fun webPageHasResumeButton() = app {
+        val c = jsonClient()
+        val html = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertTrue(html.contains("Upload fortsetzen"))
+        assertTrue(html.contains("/api/vault/uploads/request"))
+    }
+
+    @Test
+    fun webPagePaginatesImages() = appWith { services ->
+        val c = jsonClient()
+        val total = VAULT_PAGE_SIZE + 5
+        repeat(total) { i ->
+            val name = "img-%03d.jpg".format(i)
+            services.vault.addImage("alice", name.byteInputStream(), name, "image/jpeg", 0.5)
+            Thread.sleep(2) // distinct uploadedAt, so the newest-first order is deterministic
+        }
+        val p1 = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertEquals(VAULT_PAGE_SIZE, p1.split("<figure>").size - 1)
+        assertTrue(p1.contains("Seite 1 von 2"))
+        assertTrue(p1.contains("page=2"))
+        assertTrue(p1.contains("Gefundene Bilder ($total)"))
+        assertTrue(p1.contains("img-%03d.jpg".format(total - 1)))
+        assertTrue(!p1.contains("img-000.jpg"))
+        val p2 = c.get("/vault?token=$TOKEN_A&page=2").bodyAsText()
+        assertEquals(5, p2.split("<figure>").size - 1)
+        assertTrue(p2.contains("Seite 2 von 2"))
+        assertTrue(p2.contains("img-000.jpg"))
+        // Out-of-range pages clamp to the last page instead of showing an empty grid.
+        val p99 = c.get("/vault?token=$TOKEN_A&page=99").bodyAsText()
+        assertEquals(5, p99.split("<figure>").size - 1)
     }
 
     @Test

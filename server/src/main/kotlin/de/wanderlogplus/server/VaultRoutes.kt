@@ -4,6 +4,7 @@ import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.VaultImageInfo
 import de.wanderlogplus.shared.sync.VaultScanStates
 import de.wanderlogplus.shared.sync.VaultScanUpdate
+import de.wanderlogplus.shared.sync.VaultUploadTrigger
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -29,6 +30,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private const val VAULT_MULTIPART_HEADROOM = 64L * 1024
+
+/** SHA-256 hex, as produced by `VaultStore`'s content hashing. */
+private val VAULT_HASH_RE = Regex("[0-9a-f]{64}")
+
+/** Images per page of the web overview; hundreds of `<img>` nodes would make the browser page laggy. */
+internal const val VAULT_PAGE_SIZE = 60
 
 /**
  * JSON API of the vault; mounted inside `protectedApi`, so bearer token and protocol header are already checked.
@@ -84,6 +91,14 @@ fun Route.vaultApi(services: Services) {
         get("/images") {
             call.respond(withContext(Dispatchers.IO) { services.vault.images(call.author()) }.sortedByDescending { it.uploadedAt })
         }
+        // Declared before "/images/{id}": "by-hash" must not be read as an image id. Lets the uploader check
+        // cheaply whether the bytes are already stored before (re-)sending a whole body over a slow link.
+        get("/images/by-hash/{hash}") {
+            val hash = call.parameters["hash"].orEmpty().lowercase()
+            if (!VAULT_HASH_RE.matches(hash)) throw BadInput()
+            val found = withContext(Dispatchers.IO) { services.vault.imageByHash(call.author(), hash) }
+            if (found == null) call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) else call.respond(found)
+        }
         get("/images/{id}") {
             val id = call.parameters["id"].orEmpty()
             val path = services.vault.imagePath(call.author(), id)
@@ -98,6 +113,18 @@ fun Route.vaultApi(services: Services) {
             val id = call.parameters["id"].orEmpty()
             val removed = withContext(Dispatchers.IO) { services.vault.deleteImage(call.author(), id) }
             if (removed) call.respond(HttpStatusCode.NoContent) else call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+        }
+        // "Upload fortsetzen" of the web overview: the device polls this flag after each sync (there is no push).
+        post("/uploads/request") {
+            withContext(Dispatchers.IO) { services.vault.requestUpload(call.author()) }
+            call.respond(HttpStatusCode.NoContent)
+        }
+        get("/uploads/request") {
+            call.respond(VaultUploadTrigger(withContext(Dispatchers.IO) { services.vault.uploadRequested(call.author()) }))
+        }
+        post("/uploads/request/clear") {
+            withContext(Dispatchers.IO) { services.vault.clearUploadRequest(call.author()) }
+            call.respond(HttpStatusCode.NoContent)
         }
     }
 }
@@ -158,11 +185,12 @@ fun Route.vaultWeb(services: Services) {
         }
         val scan = withContext(Dispatchers.IO) { services.vault.scan(user) }
         val images = withContext(Dispatchers.IO) { services.vault.images(user) }.sortedByDescending { it.uploadedAt }
-        call.respondText(vaultPage(user, token, scan, images), ContentType.Text.Html)
+        val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
+        call.respondText(vaultPage(user, token, scan, images, page), ContentType.Text.Html)
     }
 }
 
-private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared.sync.VaultScanStatus?, images: List<VaultImageInfo>): String {
+private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared.sync.VaultScanStatus?, images: List<VaultImageInfo>, page: Int): String {
     val scanHtml = if (scan == null) {
         "<p class=\"muted\">Noch kein Scan gemeldet.</p>"
     } else {
@@ -184,10 +212,13 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
         </div>
         """.trimIndent()
     }
+    val pageCount = maxOf(1, (images.size + VAULT_PAGE_SIZE - 1) / VAULT_PAGE_SIZE)
+    val current = page.coerceIn(1, pageCount)
+    val pageImages = images.drop((current - 1) * VAULT_PAGE_SIZE).take(VAULT_PAGE_SIZE)
     val imagesHtml = if (images.isEmpty()) {
         "<p class=\"muted\">Keine Bilder gespeichert.</p>"
     } else {
-        images.joinToString("\n") { img ->
+        pageImages.joinToString("\n") { img ->
             """
             <figure>
               <a href="/vault/img/${img.id}?token=${esc(token)}" target="_blank"><img loading="lazy" src="/vault/img/${img.id}?token=${esc(token)}" alt=""></a>
@@ -196,6 +227,13 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
             </figure>
             """.trimIndent()
         }
+    }
+    val pagerHtml = if (pageCount <= 1) {
+        ""
+    } else {
+        val prev = if (current > 1) "<a href=\"/vault?token=${esc(token)}&amp;page=${current - 1}\">« Neuere</a>" else ""
+        val next = if (current < pageCount) "<a href=\"/vault?token=${esc(token)}&amp;page=${current + 1}\">Ältere »</a>" else ""
+        """<div class="pager">$prev<span class="muted">Seite $current von $pageCount</span>$next</div>"""
     }
     // The token reaches the page only after successful authentication and is JSON-escaped for the script context.
     val tokenJs = kotlinx.serialization.json.Json.encodeToString(
@@ -220,6 +258,7 @@ a { color: #8ab4f8; }
 progress { width: 100%; height: 14px; }
 .muted { color: #9aa0a6; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.pager { display: flex; gap: 16px; justify-content: center; align-items: center; margin: 16px 0; }
 figure { margin: 0; background: #1e242c; border-radius: 12px; overflow: hidden; }
 figure img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #0d1013; }
 figcaption { padding: 8px; font-size: 0.8rem; word-break: break-all; }
@@ -229,15 +268,24 @@ button { background: #353b44; color: #e8eaed; border: 0; border-radius: 8px; pad
 <body>
 <h1>Sensitiv-Scan &middot; ${esc(user)}</h1>
 $scanHtml
+<div class="card">
+  <div><button onclick="resumeUpload()">Upload fortsetzen</button> <span class="muted" id="resume-state"></span></div>
+  <div class="muted">Fordert das Gerät an, wartende Uploads fortzusetzen – wirkt ab dem nächsten Sync des Geräts.</div>
+</div>
 <h2>Gefundene Bilder (${images.size})</h2>
 <div class="grid">
 $imagesHtml
 </div>
+$pagerHtml
 <script>
 function del(id) {
   if (!confirm('Bild wirklich löschen?')) return;
   fetch('/api/vault/images/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + $tokenJs, 'X-Protocol-Version': '${de.wanderlogplus.shared.sync.PROTOCOL_VERSION}' } })
     .then(function () { location.reload(); });
+}
+function resumeUpload() {
+  fetch('/api/vault/uploads/request', { method: 'POST', headers: { 'Authorization': 'Bearer ' + $tokenJs, 'X-Protocol-Version': '${de.wanderlogplus.shared.sync.PROTOCOL_VERSION}' } })
+    .then(function () { document.getElementById('resume-state').textContent = 'Angefordert.'; });
 }
 </script>
 </body>

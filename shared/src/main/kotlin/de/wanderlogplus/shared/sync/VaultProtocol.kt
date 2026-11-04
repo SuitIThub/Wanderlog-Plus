@@ -33,6 +33,10 @@ data class VaultScanStatus(
     val updatedAt: Long,
 )
 
+/** Answer of `GET /api/vault/uploads/request`: the web overview asked this device to resume its vault upload queue. */
+@Serializable
+data class VaultUploadTrigger(val requested: Boolean)
+
 /** One image uploaded to the vault; [score] is the classifier's value (0..1, higher = more skin). */
 @Serializable
 data class VaultImageInfo(
@@ -42,4 +46,6 @@ data class VaultImageInfo(
     val size: Long,
     val score: Double,
     val uploadedAt: Long,
+    /** SHA-256 of the content for idempotent re-uploads; null on entries stored before hashes existed. */
+    val hash: String? = null,
 )

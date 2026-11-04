@@ -9,6 +9,7 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
 import java.util.UUID
 
 /**
@@ -47,14 +48,20 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
         }
     }
 
-    /** Streams the image to disk (throwing [FileTooLarge] past [maxBytes]), then appends its metadata. */
+    /**
+     * Streams the image to disk (throwing [FileTooLarge] past [maxBytes]), then appends its metadata.
+     * Idempotent per user: content whose SHA-256 is already stored returns the existing entry instead of a
+     * duplicate, so a retried upload (e.g. the client timed out after the file was stored) stays harmless.
+     */
     @Synchronized
     fun addImage(user: String, input: InputStream, fileName: String, mimeType: String, score: Double): VaultImageInfo {
         val files = filesDir(user)
         Files.createDirectories(files)
         val tmp = Files.createTempFile(files, "upload-", ".tmp")
         val size: Long
+        val hash: String
         try {
+            val digest = MessageDigest.getInstance("SHA-256")
             size = Files.newOutputStream(tmp).use { out ->
                 var n = 0L
                 val buf = ByteArray(8192)
@@ -63,12 +70,19 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
                     if (r < 0) break
                     n += r
                     if (n > maxBytes) throw FileTooLarge()
+                    digest.update(buf, 0, r)
                     out.write(buf, 0, r)
                 }
                 n
             }
+            hash = digest.digest().joinToString("") { "%02x".format(it) }
         } finally {
             // Kept when the move below succeeds? No: tmp is either moved or deleted here on failure paths.
+        }
+        val existing = ensureHashes(user).firstOrNull { it.hash == hash }
+        if (existing != null) {
+            Files.deleteIfExists(tmp)
+            return existing
         }
         val info = VaultImageInfo(
             id = UUID.randomUUID().toString().replace("-", ""),
@@ -77,6 +91,7 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
             size = size,
             score = score.coerceIn(0.0, 1.0),
             uploadedAt = System.currentTimeMillis(),
+            hash = hash,
         )
         return try {
             Files.move(tmp, files.resolve(info.id), StandardCopyOption.ATOMIC_MOVE)
@@ -89,6 +104,40 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
         }
     }
 
+    /**
+     * The image with this content hash (lowercase SHA-256 hex), when the user's vault has it. Lets clients
+     * skip re-sending bytes the server already stored (e.g. an upload whose response never arrived).
+     */
+    fun imageByHash(user: String, hash: String): VaultImageInfo? = ensureHashes(user).firstOrNull { it.hash == hash }
+
+    /**
+     * The image list with every entry carrying its content hash; entries stored before hashes existed are
+     * backfilled once and persisted (entries whose file vanished keep a null hash and never dedup-match).
+     */
+    private fun ensureHashes(user: String): List<VaultImageInfo> {
+        val all = images(user)
+        if (all.all { it.hash != null }) return all
+        val enriched = all.map { info ->
+            if (info.hash != null) info else info.copy(hash = hashFile(filesDir(user).resolve(info.id)))
+        }
+        writeJson(imagesFile(user), imagesSerializer, enriched)
+        return enriched
+    }
+
+    private fun hashFile(p: Path): String? {
+        if (!Files.isRegularFile(p)) return null
+        val digest = MessageDigest.getInstance("SHA-256")
+        Files.newInputStream(p).use { input ->
+            val buf = ByteArray(8192)
+            while (true) {
+                val r = input.read(buf)
+                if (r < 0) break
+                digest.update(buf, 0, r)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     @Synchronized
     fun images(user: String): List<VaultImageInfo> {
         val f = imagesFile(user)
@@ -98,6 +147,23 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    /** The web overview's "Upload fortsetzen" flag: the device picks it up on its next sync (there is no push channel). */
+    @Synchronized
+    fun requestUpload(user: String) {
+        val f = uploadRequestFile(user)
+        Files.createDirectories(f.parent)
+        Files.writeString(f, "1")
+    }
+
+    /** Peek without consuming; the device clears explicitly after scheduling the upload pass (at-least-once). */
+    @Synchronized
+    fun uploadRequested(user: String): Boolean = Files.isRegularFile(uploadRequestFile(user))
+
+    @Synchronized
+    fun clearUploadRequest(user: String) {
+        Files.deleteIfExists(uploadRequestFile(user))
     }
 
     /** Path of the image, or null when [id] is malformed or unknown (never touches the FS for malformed ids). */
@@ -128,6 +194,7 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
     private fun filesDir(user: String): Path = userDir(user).resolve("files")
     private fun imagesFile(user: String): Path = userDir(user).resolve("images.json")
     private fun scanFile(user: String): Path = userDir(user).resolve("scan.json")
+    private fun uploadRequestFile(user: String): Path = userDir(user).resolve("upload-request")
 
     private fun <T> writeJson(file: Path, serializer: kotlinx.serialization.SerializationStrategy<T>, value: T) {
         Files.createDirectories(file.parent)

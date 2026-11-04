@@ -40,6 +40,55 @@ class SyncApiTest {
         return e
     }
 
+    @Test fun vaultUploadTriggerGetAndClear() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val api = api { req ->
+            seen += req
+            if (req.method == io.ktor.http.HttpMethod.Get) {
+                json(HttpStatusCode.OK, """{"requested":true}""")
+            } else {
+                respond("", HttpStatusCode.NoContent)
+            }
+        }
+        assertEquals(true, api.vaultUploadRequested())
+        api.clearVaultUploadRequest()
+        assertEquals("/api/vault/uploads/request", seen[0].url.encodedPath)
+        assertEquals("/api/vault/uploads/request/clear", seen[1].url.encodedPath)
+        assertEquals(listOf(io.ktor.http.HttpMethod.Get, io.ktor.http.HttpMethod.Post), seen.map { it.method })
+        assertEquals("Bearer tok", seen[1].headers[HttpHeaders.Authorization])
+    }
+
+    @Test fun vaultImageByHashReturnsImage() = runTest {
+        val hash = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        var path = ""
+        var method: io.ktor.http.HttpMethod? = null
+        val api = api { req ->
+            path = req.url.encodedPath
+            method = req.method
+            json(HttpStatusCode.OK, """{"id":"i1","fileName":"a.jpg","mimeType":"image/jpeg","size":3,"score":0.5,"uploadedAt":7,"hash":"$hash"}""")
+        }
+        val info = api.vaultImageByHash(hash)
+        assertEquals("/api/vault/images/by-hash/$hash", path)
+        assertEquals(io.ktor.http.HttpMethod.Get, method)
+        assertEquals("i1", info?.id)
+        assertEquals(hash, info?.hash)
+    }
+
+    @Test fun vaultImageByHashIsNullOn404() = runTest {
+        val api = api { json(HttpStatusCode.NotFound, """{"error":"not_found"}""") }
+        assertNull(api.vaultImageByHash("0".repeat(64)))
+    }
+
+    @Test fun vaultImageByHashRethrowsNon404() = runTest {
+        val api = api { json(HttpStatusCode.InternalServerError, """{"error":"boom"}""") }
+        assertEquals(ApiErrorKind.SERVER, assertFailsWith<ApiException> { api.vaultImageByHash("0".repeat(64)) }.kind)
+    }
+
+    @Test fun vaultUploadTriggerErrorPropagates() = runTest {
+        val api = error(HttpStatusCode.InternalServerError, "boom")
+        assertFailsWith<ApiException> { api.vaultUploadRequested() }
+    }
+
     @Test fun pushSendsHeaders() = runTest {
         var seen: HttpRequestData? = null
         val api = api { req ->

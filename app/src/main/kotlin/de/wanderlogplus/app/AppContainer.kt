@@ -108,6 +108,11 @@ class AppContainer(context: Context) {
         de.wanderlogplus.app.vault.VaultScanner(appContext, db.vault(), api = { syncApi() })
     }
 
+    /** Server-side "Upload fortsetzen" flag of the vault web overview; checked after every successful sync. */
+    val vaultUploadTrigger: de.wanderlogplus.app.vault.VaultUploadTrigger by lazy {
+        de.wanderlogplus.app.vault.VaultUploadTrigger(api = { syncApi() }, onRequested = { syncScheduler.requestVaultUploads() })
+    }
+
     /**
      * The clock is advanced past the highest stored HLC so local writes always order after existing data.
      * Started lazily so tests can seed the DB first; [warmUp] starts it.

@@ -30,6 +30,8 @@ class VaultScanner(
     private val classifier: SensitiveClassifier = SkinRatioClassifier(),
     private val api: suspend () -> SyncApi?,
     private val device: String = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" "),
+    /** Reads a media item; injectable so tests can skip the content resolver. */
+    private val openStream: (Uri) -> java.io.InputStream? = { appContext.contentResolver.openInputStream(it) },
 ) {
     data class Result(val total: Int, val scanned: Int, val found: Int, val uploaded: Int)
 
@@ -156,6 +158,10 @@ class VaultScanner(
      * stopping early lets the caller chain a follow-up worker with a fresh window instead of being killed
      * mid-upload. A permanently rejected image (HTTP 4xx, e.g. too large for the server) is dropped from the
      * queue – retrying it would never succeed and it would block everything behind it.
+     *
+     * Every item is content-hashed while being staged; a by-hash lookup skips bodies the server already
+     * has, and a failed upload gets one re-check before giving up (the outcome of an upload that died
+     * mid-response is ambiguous, and the server stores idempotently by content hash).
      */
     suspend fun drainUploads(): DrainOutcome = withContext(Dispatchers.IO) {
         val client = try {
@@ -172,15 +178,30 @@ class VaultScanner(
             if (System.currentTimeMillis() >= deadline) break
             val tmp = File(appContext.cacheDir, "vault-upload-${UUID.randomUUID()}")
             try {
-                val copied = appContext.contentResolver.openInputStream(Uri.parse(pending.uri))?.use { input ->
-                    tmp.outputStream().use { input.copyTo(it) }
-                } != null
-                if (!copied) {
+                val hash = copyHashing(Uri.parse(pending.uri), tmp)
+                if (hash == null) {
                     // The source vanished from the device: drop it from the queue instead of retrying forever.
                     dao.markUploaded(pending.uri, System.currentTimeMillis())
                     continue
                 }
-                client.uploadVaultImage(tmp, pending.fileName, pending.mimeType, pending.score)
+                // Cheap pre-check: an earlier attempt may already have stored these bytes while its response
+                // got lost on a slow relay – then the body does not need to crawl up again.
+                if (client.vaultImageByHash(hash) != null) {
+                    dao.markUploaded(pending.uri, System.currentTimeMillis())
+                    uploaded++
+                    continue
+                }
+                try {
+                    client.uploadVaultImage(tmp, pending.fileName, pending.mimeType, pending.score)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Permanent rejections are handled below; everything else has an ambiguous outcome:
+                    // the server stores idempotently, so one cheap re-check settles whether the body
+                    // arrived before the connection died. Only a real miss rethrows.
+                    if (e is de.wanderlogplus.client.ApiException && e.kind == de.wanderlogplus.client.ApiErrorKind.BAD_REQUEST) throw e
+                    if (client.vaultImageByHash(hash) == null) throw e
+                }
                 dao.markUploaded(pending.uri, System.currentTimeMillis())
                 uploaded++
             } catch (e: CancellationException) {
@@ -202,6 +223,24 @@ class VaultScanner(
             }
         }
         DrainOutcome(uploaded, dao.pendingUploadCount(), stoppedOnError)
+    }
+
+    /** Copies [uri] to [dest] while computing its SHA-256 (hex); null when the source cannot be opened. */
+    private fun copyHashing(uri: Uri, dest: File): String? {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val input = openStream(uri) ?: return null
+        input.use { inp ->
+            dest.outputStream().use { out ->
+                val buf = ByteArray(8192)
+                while (true) {
+                    val r = inp.read(buf)
+                    if (r < 0) break
+                    digest.update(buf, 0, r)
+                    out.write(buf, 0, r)
+                }
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     // -- Progress --
