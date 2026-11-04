@@ -181,6 +181,7 @@ class MainActivity : ComponentActivity() {
                         attachmentFiles = container.attachmentFiles,
                         onReloadMapImages = routeMaps::clearCache,
                         appVersion = updates.version,
+                        transitApi = { container.syncApi() },
                         onCheckUpdates = updates::checkNow,
                         onResetSync = {
                             scope.launch {

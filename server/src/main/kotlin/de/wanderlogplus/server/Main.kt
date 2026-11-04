@@ -39,6 +39,11 @@ fun main() {
             config.dataDir.resolve("ai-work"),
             writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         ),
+        transit = TransitService(
+            store,
+            config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
+            config.apifyToken?.let { PhotonStationFinder(PhotonGeocoder()) },
+        ),
     )
     services.ai.resumeInterrupted()
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)

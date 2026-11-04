@@ -84,4 +84,12 @@ class TripViewModel(
 
     fun setLegMode(itemId: String, mode: TravelMode) =
         write { e, _ -> e.set(EntityType.DAY_ITEM, itemId, mapOf("legMode" to JsonPrimitive(mode.name))) }
+
+    /** Takes a public-transport connection over for the way to [itemId] (mode becomes ÖPNV); null: found automatically again. */
+    fun setLegTransit(itemId: String, connection: de.wanderlogplus.shared.sync.TransitResult?) = write { e, _ ->
+        val value = connection?.let { TRANSIT_JSON.encodeToJsonElement(de.wanderlogplus.shared.sync.TransitResult.serializer(), it) } ?: kotlinx.serialization.json.JsonNull
+        e.set(EntityType.DAY_ITEM, itemId, mapOf("legTransit" to value, "legMode" to JsonPrimitive(TravelMode.TRANSIT.name)))
+    }
 }
+
+private val TRANSIT_JSON = kotlinx.serialization.json.Json { encodeDefaults = false }

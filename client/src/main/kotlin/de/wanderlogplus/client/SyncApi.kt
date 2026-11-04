@@ -14,6 +14,10 @@ import de.wanderlogplus.shared.sync.AssessRequest
 import de.wanderlogplus.shared.sync.AssessConfig
 import de.wanderlogplus.shared.sync.ResearchRequest
 import de.wanderlogplus.shared.sync.ReelRequest
+import de.wanderlogplus.shared.sync.TransitRequest
+import de.wanderlogplus.shared.sync.TransitResult
+import de.wanderlogplus.shared.sync.TransitStationNear
+import de.wanderlogplus.shared.sync.TransitStations
 import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
@@ -160,6 +164,35 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     } catch (e: ApiException) {
         if (e.status == 404 && e.code == "no_route") null else throw e
     }
+
+    /**
+     * A public-transport connection in Japan (`POST /api/transit`); null when there is none (also: both places use
+     * the same station, or no station near one of them – see [ApiException.code] via [transitOrThrow]).
+     * NOT_CONFIGURED without an Apify token on the server. A search can take some 20 seconds.
+     */
+    suspend fun transit(req: TransitRequest): TransitResult? = try {
+        transitOrThrow(req)
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
+    }
+
+    suspend fun transitOrThrow(req: TransitRequest): TransitResult = call {
+        client.post("$base/api/transit") {
+            auth()
+            timeout { requestTimeoutMillis = TRANSIT_TIMEOUT_MS }
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+    }
+
+    /** Railway stations near a point, nearest first. */
+    suspend fun transitStations(lat: Double, lng: Double): List<TransitStationNear> = call<TransitStations> {
+        client.get("$base/api/transit/stations") {
+            auth()
+            parameter("lat", lat)
+            parameter("lng", lng)
+        }
+    }.stations
 
     /** Starts the assistant on a reel link; NOT_CONFIGURED without an OpenRouter key on the server. */
     suspend fun startReel(url: String, config: AssessConfig = AssessConfig()): AiJobInfo = call {
@@ -335,6 +368,7 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             status == 400 && code == "import_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status == 503 && code == "routes_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status == 503 && code == "ai_not_configured" -> ApiErrorKind.NOT_CONFIGURED
+            status == 503 && code == "transit_not_configured" -> ApiErrorKind.NOT_CONFIGURED
             status in 400..499 -> ApiErrorKind.BAD_REQUEST
             else -> ApiErrorKind.SERVER
         }
@@ -344,5 +378,6 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
     private companion object {
         val KNOWN_TYPES: Set<String> = EntityType.entries.map { it.name }.toSet()
         const val DOWNLOAD_TIMEOUT_MS = 300_000L
+        const val TRANSIT_TIMEOUT_MS = 150_000L
     }
 }

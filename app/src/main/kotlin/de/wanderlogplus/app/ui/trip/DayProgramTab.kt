@@ -65,6 +65,8 @@ internal fun DayProgramTab(
     onInsert: ((ItemPosition) -> Unit)? = null,
     /** Opens the full map of the day's route; null hides the button. */
     onOpenMap: (() -> Unit)? = null,
+    /** Opens "Verbindung abfragen" for the way to this item; null hides the button. */
+    onTransitDetails: ((itemId: String) -> Unit)? = null,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp)) {
         val places = items.count { it.kind == DayItemKind.PLACE }
@@ -117,6 +119,9 @@ internal fun DayProgramTab(
                     onMode = { m -> onLegMode(to.id, m) },
                     accent = accent,
                     onOpenLink = onOpenLink,
+                    datetime = de.wanderlogplus.app.ui.transit.transitDateTime(date, from.time),
+                    chosen = to.legTransit,
+                    onTransitDetails = onTransitDetails?.let { open -> { open(to.id) } },
                 )
             },
             modifier = Modifier.testTag("program-list"),

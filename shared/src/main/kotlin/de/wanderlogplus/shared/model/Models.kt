@@ -155,6 +155,8 @@ data class DayItem(
     val time: String? = null,
     /** How to get here from the previous place of the day; null = on foot. */
     val legMode: TravelMode? = null,
+    /** The public-transport connection chosen for that way ("Verbindung abfragen"); null = found automatically. */
+    val legTransit: de.wanderlogplus.shared.sync.TransitResult? = null,
 )
 
 @Serializable

@@ -18,6 +18,8 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter; muss Bilder und Ton verstehen. |
 | `WLP_PARALLEL_KEY` | – | Optional; Parallel-Key für die Web-Recherche zu Orten aus Reels (Search + Task API). Ohne Key recherchiert das OpenRouter-Modell selbst. |
 | `WLP_PARALLEL_PROCESSOR` | `base` | Parallel-Task-Prozessor (`lite`, `base`, `core`, …): gründlicher = langsamer und teurer. |
+| `WLP_APIFY_TOKEN` | – | Optional; Apify-Token für ÖPNV-Verbindungen in Japan (`POST /api/transit`, Actor „Japan Train Route & Fare Finder“, Daten von Yahoo! 乗換案内). Ohne Token: `transit_not_configured`, die App fällt auf Google zurück. |
+| `WLP_APIFY_TRANSIT_ACTOR` | `FjxdTwrnBwvjDSBe0` | Optional; anderer Apify-Actor mit derselben Ein- und Ausgabe. |
 | `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei für yt-dlp, falls Instagram Reels nur angemeldet zeigt. Die Datei enthält eine Anmeldung, also wie ein Passwort behandeln. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
 | `WLP_HOST_PORT` | `8080` | Nur Compose: Port auf dem Host (`127.0.0.1:<port>`), falls 8080 belegt ist. |
@@ -69,6 +71,7 @@ Alle Routen außer `GET /api/health` brauchen `Authorization: Bearer <token>` un
 - `POST /api/sync/push`, `GET /api/sync/pull?since=&limit=`
 - `POST /api/files` (multipart `file`), `GET /api/files/{sha256}`
 - `POST /api/routes` (`{fromLat, fromLng, toLat, toLng, mode}` mit `mode` = WALK/BICYCLE/DRIVE/TRANSIT) → `{durationSeconds, distanceMeters, polyline}`; 404 `no_route`, 503 `routes_not_configured`
+- `POST /api/transit` (`{from, to | fromStation, toStation, datetime, searchType, preference, use*, fresh}`), `GET /api/transit/stations?lat&lng`: Verbindungen und Bahnhöfe. Bahnhöfe findet der Server über Photon (OpenStreetMap, japanischer und englischer Name), Antworten speichert er 7 Tage (auch „keine Verbindung“); `fresh` fragt neu. Eine Suche kostet bei Apify etwa 0,7 Cent und dauert 10–20 s.
 - `POST /api/ai/reels` (`{url}`), `POST /api/ai/reels/upload` (multipart `file`, optional `caption`), `POST /api/ai/assess` (`{savedPlaceIds, config}`), `POST /api/ai/research` (`{savedPlaceIds, config}`, 1–300 Orte), `GET /api/ai/jobs?kind=reel|assess|research`, `GET /api/ai/jobs/{id}`
 - `POST /api/import/wanderlog`, `GET /api/import/status`
 - `GET /api/export`

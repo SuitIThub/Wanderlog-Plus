@@ -142,7 +142,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     /** Routes nested below this tab's root (the tab stays highlighted there). */
     val nestedRoutes: Set<String>
         get() = when (this) {
-            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE)
+            REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
             MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE)
@@ -202,6 +202,8 @@ fun AppNavigation(
     onPendingReelConsumed: () -> Unit = {},
     /** Deletes the cached route map pictures ("Kartenbilder neu laden" in Einstellungen). */
     onReloadMapImages: suspend () -> Unit = {},
+    /** Server API for "Verbindung abfragen" (public transport in Japan); null hides those buttons. */
+    transitApi: (suspend () -> de.wanderlogplus.client.SyncApi?)? = null,
     /** Installed app version, shown in Einstellungen. */
     appVersion: String = "",
     /** "Nach Updates suchen"; null hides it. */
@@ -287,6 +289,7 @@ fun AppNavigation(
                 onAddNoteAt = vm::addNoteAt,
                 onSearchPlace = geoSearch?.let { { d, pos -> nav.navigate(daySearchRoute(d, pos.encode())) } },
                 onOpenMap = { d -> nav.navigate(dayMapRoute(d)) },
+                onTransitDetails = transitApi?.let { { d, id -> nav.navigate(de.wanderlogplus.app.ui.transit.transitRoute(d, id)) } },
                 onAddStayAt = vm::addStayAt,
             )
         }
@@ -420,7 +423,49 @@ fun AppNavigation(
                     val snap by vm.snapshot.collectAsState()
                     val date = entry.arguments?.getString("date").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
-                        snap?.let { s -> DayMapScreen(s, date, onBack = { nav.popBackStack() }) }
+                        snap?.let { s ->
+                            DayMapScreen(
+                                s, date, onBack = { nav.popBackStack() },
+                                onTransitDetails = transitApi?.let { { id -> nav.navigate(de.wanderlogplus.app.ui.transit.transitRoute(date, id)) } },
+                            )
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE) { entry ->
+                    val vm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val date = entry.arguments?.getString("date").orEmpty()
+                    val itemId = entry.arguments?.getString("itemId").orEmpty()
+                    val api = transitApi
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        val way = s?.let { de.wanderlogplus.app.ui.transit.transitWay(it, date, itemId) }
+                        if (way == null || api == null) {
+                            EmptyHint("Für diesen Weg fehlt eine Kartenposition.", Modifier.padding(24.dp))
+                        } else {
+                            val tvm: de.wanderlogplus.app.ui.transit.TransitViewModel = viewModel(
+                                key = "transit-$date-$itemId",
+                                factory = remember(way) {
+                                    object : androidx.lifecycle.ViewModelProvider.Factory {
+                                        @Suppress("UNCHECKED_CAST")
+                                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                                            de.wanderlogplus.app.ui.transit.TransitViewModel(api, way.from, way.to, date, way.fromItem.time, way.toItem.legTransit) as T
+                                    }
+                                },
+                            )
+                            val state by tvm.state.collectAsState()
+                            de.wanderlogplus.app.ui.transit.TransitScreen(
+                                title = "${way.from.name} → ${way.to.name}",
+                                state = state,
+                                accent = MaterialTheme.colorScheme.primary,
+                                chosen = way.toItem.legTransit,
+                                onEdit = tvm::edit,
+                                onSearch = tvm::search,
+                                onChoose = { r -> vm.setLegTransit(itemId, r); nav.popBackStack() },
+                                onClear = { vm.setLegTransit(itemId, null) },
+                                onBack = { nav.popBackStack() },
+                            )
+                        }
                     }
                 }
                 composable(DAY_SEARCH_ROUTE) { entry ->
