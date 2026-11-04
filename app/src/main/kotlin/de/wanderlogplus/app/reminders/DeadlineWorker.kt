@@ -45,7 +45,7 @@ class DeadlineWorker(
             return Result.success() // next daily run tries again
         }
         if (!input.enabled || !canNotify(applicationContext)) return Result.success()
-        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = applicationContext.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(applicationContext, PREFS), Context.MODE_PRIVATE)
         val sent = prefs.getStringSet(SENT, emptySet()).orEmpty().toSet()
         val due = dueReminders(input.snapshot.stays, input.snapshot.places, input.today, sent)
         if (due.isEmpty()) return Result.success()

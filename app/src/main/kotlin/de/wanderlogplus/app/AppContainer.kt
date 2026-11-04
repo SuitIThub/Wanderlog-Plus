@@ -54,7 +54,7 @@ class AppContainer(context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val db: AppDatabase by lazy {
-        Room.databaseBuilder(appContext, AppDatabase::class.java, "wanderlog-plus.db")
+        Room.databaseBuilder(appContext, AppDatabase::class.java, AppProfile.databaseName(appContext))
             .addMigrations(MIGRATION_1_2)
             .build()
     }
@@ -68,7 +68,7 @@ class AppContainer(context: Context) {
     /** Place search for stopovers; a third-party service, so it never gets the server token. */
     val geoSearch: GeoSearch by lazy { GeoSearch(http) }
 
-    val attachmentFiles: AttachmentFiles by lazy { AttachmentFiles(File(appContext.filesDir, "attachments")) }
+    val attachmentFiles: AttachmentFiles by lazy { AttachmentFiles(File(appContext.filesDir, AppProfile.scoped(appContext, "attachments"))) }
 
     private var apiFor: ServerSettings? = null
     private var api: SyncApi? = null
@@ -85,7 +85,7 @@ class AppContainer(context: Context) {
     suspend fun syncApi(): SyncApi? = withContext(Dispatchers.IO) { currentApi() }
 
     /** Ways between a day's places (cached on disk, so legs seen once work offline). */
-    val legs: LegRepository by lazy { LegRepository(api = { syncApi() }, dir = File(appContext.filesDir, "legs")) }
+    val legs: LegRepository by lazy { LegRepository(api = { syncApi() }, dir = File(appContext.filesDir, AppProfile.scoped(appContext, "legs"))) }
 
     val fileSyncRunner: FileSyncRunner by lazy {
         FileSyncRunner(

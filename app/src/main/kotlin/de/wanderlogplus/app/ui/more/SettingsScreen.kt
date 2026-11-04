@@ -65,12 +65,16 @@ fun SettingsScreen(
     /** Installed version and "Nach Updates suchen" (null hides the button). */
     appVersion: String = "",
     onCheckUpdates: (() -> Unit)? = null,
+    /** Debug mode: separate server connection and local data; switching restarts the app. Null hides it. */
+    debugMode: Boolean = false,
+    onDebugMode: ((Boolean) -> Unit)? = null,
     /** Opens "KI-Kriterien"; null hides the section. */
     onOpenAiSettings: (() -> Unit)? = null,
     /** "Kartenbilder neu laden": drops the cached route snapshots so they are rendered again. */
     onReloadMaps: () -> Unit = {},
 ) {
     var confirmReset by rememberSaveable { mutableStateOf(false) }
+    var confirmDebug by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
     var systemAllowed by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
     LifecycleResumeEffect(context) {
@@ -92,7 +96,7 @@ fun SettingsScreen(
             }
         }
 
-        SectionLabel("Server")
+        SectionLabel(if (debugMode) "Server (Debug-Modus)" else "Server")
         SurfaceCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Adresse: ${info.serverUrl ?: "–"}")
@@ -162,6 +166,24 @@ fun SettingsScreen(
             }
         }
 
+        onDebugMode?.let {
+            SectionLabel("Entwicklung")
+            SurfaceCard {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Debug-Modus", Modifier.weight(1f))
+                        Switch(checked = debugMode, onCheckedChange = { confirmDebug = it }, modifier = Modifier.testTag("settings-debug"))
+                    }
+                    Text(
+                        "Eigene Verbindungsdaten und eigene lokale Daten (Reise, Sync-Stand, Anhänge). Die normale Verbindung " +
+                            "zu deinem Server bleibt unberührt; beim Zurückschalten ist alles wie vorher. Umschalten startet die App neu.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
         SectionLabel("Karten")
         SurfaceCard {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -173,6 +195,21 @@ fun SettingsScreen(
                 OutlinedButton(onClick = onReloadMaps, modifier = Modifier.testTag("settings-reload-maps")) { Text("Kartenbilder neu laden") }
             }
         }
+    }
+    confirmDebug?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmDebug = null },
+            modifier = Modifier.testTag("settings-debug-dialog"),
+            title = { Text(if (target) "Debug-Modus einschalten?" else "Debug-Modus ausschalten?") },
+            text = {
+                Text(
+                    if (target) "Die App startet neu und nutzt dann eigene Verbindungsdaten und eigene lokale Daten. Beim ersten Mal richtest du den Debug-Server ein."
+                    else "Die App startet neu und nutzt wieder die normale Verbindung und deine normalen Daten.",
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmDebug = null; onDebugMode?.invoke(target) }, modifier = Modifier.testTag("settings-debug-confirm")) { Text("Neu starten") } },
+            dismissButton = { TextButton(onClick = { confirmDebug = null }) { Text("Abbrechen") } },
+        )
     }
     if (confirmReset) {
         AlertDialog(

@@ -204,6 +204,10 @@ fun AppNavigation(
     onReloadMapImages: suspend () -> Unit = {},
     /** Server API for "Verbindung abfragen" (public transport in Japan); null hides those buttons. */
     transitApi: (suspend () -> de.wanderlogplus.client.SyncApi?)? = null,
+    /** The app runs with the separate debug profile (own server and data). */
+    debugMode: Boolean = false,
+    /** Switches the profile (restarts the app); null hides the switch. */
+    onDebugMode: ((Boolean) -> Unit)? = null,
     /** Installed app version, shown in Einstellungen. */
     appVersion: String = "",
     /** "Nach Updates suchen"; null hides it. */
@@ -811,6 +815,8 @@ fun AppNavigation(
                             onOpenAiSettings = { nav.navigate(de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE) },
                             appVersion = appVersion,
                             onCheckUpdates = onCheckUpdates,
+                            debugMode = debugMode,
+                            onDebugMode = onDebugMode,
                             onReloadMaps = {
                                 uiScope.launch {
                                     onReloadMapImages()
