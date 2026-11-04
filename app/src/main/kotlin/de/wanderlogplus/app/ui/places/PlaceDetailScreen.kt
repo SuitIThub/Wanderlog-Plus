@@ -262,13 +262,16 @@ fun PlaceDetailScreen(
             TAB_INFO -> PlaceInfoTab(place, accent, today, saved)
             TAB_ASSESS -> PlaceAssessmentTab(saved, accent, research)
             TAB_RESEARCH -> PlaceResearchTab(saved, accent, research)
-            TAB_PHOTOS -> de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                snapshot.photosFor(EntityType.SAVED_PLACE, saved.id),
-                attachments?.files,
-                onAdd = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
-                onOpen = { i -> onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i) },
-                modifier = Modifier.padding(16.dp),
-            )
+            TAB_PHOTOS -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                PlacePhotosRow(place)
+                Text("Eigene Fotos", style = MaterialTheme.typography.titleSmall)
+                de.wanderlogplus.app.ui.attachments.PhotoGrid(
+                    snapshot.photosFor(EntityType.SAVED_PLACE, saved.id),
+                    attachments?.files,
+                    onAdd = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
+                    onOpen = { i -> onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i) },
+                )
+            }
             TAB_NOTE -> PlaceNoteTab(
                 note = pendingNote ?: saved.note,
                 accent = accent,

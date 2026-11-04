@@ -193,6 +193,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs,
                     de.wanderlogplus.app.ui.weather.LocalTripWeather provides tripWeather,
+                    de.wanderlogplus.app.ui.places.LocalPlacePhotos provides container.placePhotos,
                 ) {
                     AppNavigation(
                         pendingSetup = pending,

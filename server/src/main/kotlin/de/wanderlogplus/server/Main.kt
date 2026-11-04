@@ -56,6 +56,7 @@ fun main() {
         transit = transit,
         weather = weather,
         rates = RatesService(store, OpenMeteoHttp()),
+        photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
         chats = ChatService(
             store,
             openRouter?.let { model ->

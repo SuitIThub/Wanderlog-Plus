@@ -193,6 +193,25 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Google photos of a place (by its Google place id); NOT_CONFIGURED without a key on the server. */
+    suspend fun placePhotos(googlePlaceId: String): List<de.wanderlogplus.shared.sync.PlacePhoto> = call<de.wanderlogplus.shared.sync.PlacePhotos> {
+        client.get("$base/api/places/photos") {
+            auth()
+            parameter("placeId", googlePlaceId)
+        }
+    }.photos
+
+    /** The JPEG bytes of a place photo, at most [maxWidth] pixels wide. */
+    suspend fun placePhoto(name: String, maxWidth: Int): ByteArray {
+        val response = client.get("$base/api/places/photos/media") {
+            auth()
+            parameter("name", name)
+            parameter("w", maxWidth)
+        }
+        if (response.status.value !in 200..299) throw ApiException(ApiErrorKind.SERVER, status = response.status.value, message = "Foto nicht verfügbar")
+        return response.body<ByteArray>()
+    }
+
     /** Euros per unit of [from] on [date] (null: the latest rate); BAD_GATEWAY code `rates_unavailable` when unreachable. */
     suspend fun rate(from: String, date: String? = null): de.wanderlogplus.shared.sync.RateInfo = call {
         client.get("$base/api/rates") {
