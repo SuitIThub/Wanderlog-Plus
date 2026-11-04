@@ -85,16 +85,18 @@ fun DayMapScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     repository: LegRepository? = LocalLegRepository.current,
+    /** "Verbindung abfragen" for the way to a program item; null hides the buttons. */
+    onTransitDetails: ((itemId: String) -> Unit)? = null,
 ) {
     val stops = remember(snapshot, date) { routeStops(snapshot, date) }
-    val plain = remember(snapshot, stops) { routeSegments(snapshot, stops) }
-    var segments by remember(plain) { mutableStateOf(plain.map { s -> s.copy(result = repository?.peek(s.from.at, s.to.at, s.mode)) }) }
+    val plain = remember(snapshot, stops) { routeSegments(snapshot, stops, date) }
+    var segments by remember(plain) { mutableStateOf(plain.map { s -> s.copy(result = repository?.peekWay(s.from.at, s.to.at, s.mode, s.datetime, s.chosen)) }) }
     LaunchedEffect(plain, repository) {
         if (repository == null) return@LaunchedEffect
         coroutineScope {
             plain.forEachIndexed { i, s ->
                 launch {
-                    val r = repository.leg(s.from.at, s.to.at, s.mode)
+                    val r = repository.way(s.from.at, s.to.at, s.mode, s.datetime, s.chosen)
                     segments = segments.toMutableList().also { list -> if (i < list.size) list[i] = list[i].copy(result = r) }
                 }
             }
@@ -136,7 +138,7 @@ fun DayMapScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("day-map-totals"),
                     )
                 }
-                RouteStopList(stops, segments, selected, onSelect = { selected = it }, modifier = Modifier.fillMaxWidth().weight(1f))
+                RouteStopList(stops, segments, selected, onSelect = { selected = it }, onTransitDetails = onTransitDetails, modifier = Modifier.fillMaxWidth().weight(1f))
             }
         }
         if (wide) {
@@ -176,6 +178,7 @@ private fun RouteStopList(
     segments: List<RouteSegment>,
     selected: String?,
     onSelect: (String) -> Unit,
+    onTransitDetails: ((itemId: String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier) {
@@ -189,7 +192,13 @@ private fun RouteStopList(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(modeIcon(seg.mode), contentDescription = modeLabel(seg.mode), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                        Text(legSummary(seg.result, seg.mode), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(legSummary(seg.result, seg.mode), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
+                        if (seg.mode == de.wanderlogplus.shared.sync.TravelMode.TRANSIT && onTransitDetails != null) {
+                            androidx.compose.material3.TextButton(
+                                onClick = { onTransitDetails(seg.to.itemId) },
+                                modifier = Modifier.testTag("day-map-transit-${stop.number}"),
+                            ) { Text("Abfragen") }
+                        }
                     }
                 }
             }

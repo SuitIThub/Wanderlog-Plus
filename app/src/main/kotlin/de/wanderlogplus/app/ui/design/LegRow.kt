@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.DirectionsTransit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -85,10 +86,11 @@ fun distanceLabel(meters: Long): String = when {
  * to the Google Maps app, which does have them.
  */
 fun legSummary(r: LegResult?, mode: TravelMode = TravelMode.WALK): String = when (r) {
-    null -> "Weg wird berechnet …"
-    is LegResult.Route -> durationLabel(r.durationSeconds) + " · " + distanceLabel(r.distanceMeters)
+    null -> if (mode == TravelMode.TRANSIT) "Verbindung wird gesucht …" else "Weg wird berechnet …"
+    is LegResult.Route -> r.transit?.routes?.firstOrNull()?.let { de.wanderlogplus.app.ui.transit.transitSummary(it) }
+        ?: (durationLabel(r.durationSeconds) + " · " + distanceLabel(r.distanceMeters))
     LegResult.NoRoute ->
-        if (mode == TravelMode.TRANSIT) "ÖPNV-Zeiten nur in Google Maps (aufklappen)" else "Keine Route mit diesem Verkehrsmittel"
+        if (mode == TravelMode.TRANSIT) "Keine ÖPNV-Verbindung gefunden (aufklappen)" else "Keine Route mit diesem Verkehrsmittel"
     LegResult.NotConfigured -> "Wegzeiten brauchen einen Routen-Key auf dem Server"
     LegResult.Offline -> "Offline – Weg noch nicht geladen"
     LegResult.Failed -> "Weg konnte nicht berechnet werden"
@@ -125,6 +127,12 @@ fun LegRow(
     onOpenLink: ((ExternalLink) -> Unit)?,
     modifier: Modifier = Modifier,
     repository: LegRepository? = LocalLegRepository.current,
+    /** Japan time the way starts ("2027-05-20T09:00"): public transport then uses the timetable search. */
+    datetime: String? = null,
+    /** The connection picked in "Verbindung abfragen"; shown instead of searching. */
+    chosen: de.wanderlogplus.shared.sync.TransitResult? = null,
+    /** Opens "Verbindung abfragen" for this way; null hides the button. */
+    onTransitDetails: (() -> Unit)? = null,
 ) {
     var expanded by rememberSaveable(tag) { mutableStateOf(false) }
     if (from == null || to == null) {
@@ -136,9 +144,9 @@ fun LegRow(
         )
         return
     }
-    var result by remember(from, to, mode, repository) { mutableStateOf(repository?.peek(from, to, mode)) }
-    LaunchedEffect(from, to, mode, repository) {
-        if (repository != null && result == null) result = repository.leg(from, to, mode)
+    var result by remember(from, to, mode, repository, datetime, chosen) { mutableStateOf(repository?.peekWay(from, to, mode, datetime, chosen)) }
+    LaunchedEffect(from, to, mode, repository, datetime, chosen) {
+        if (repository != null && result == null) result = repository.way(from, to, mode, datetime, chosen)
     }
     Surface(
         modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("leg-$tag"),
@@ -153,6 +161,11 @@ fun LegRow(
             ) {
                 Icon(modeIcon(mode), contentDescription = modeLabel(mode), tint = accent, modifier = Modifier.size(20.dp))
                 Text(legSummary(result, mode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("leg-summary"))
+                if (mode == TravelMode.TRANSIT && onTransitDetails != null) {
+                    androidx.compose.material3.IconButton(onClick = onTransitDetails, modifier = Modifier.size(36.dp).testTag("leg-transit-open")) {
+                        Icon(Icons.Filled.Search, contentDescription = "Verbindung abfragen", modifier = Modifier.size(20.dp))
+                    }
+                }
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "Weg zuklappen" else "Weg aufklappen",
@@ -173,6 +186,18 @@ fun LegRow(
                         )
                     }
                 }
+                val transit = (result as? LegResult.Route)?.transit
+                val route = transit?.routes?.firstOrNull()
+                if (transit != null && route != null) {
+                    transit.stationWarning?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                    }
+                    de.wanderlogplus.app.ui.transit.TransitRouteCard(
+                        transit, route, 0, accent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).testTag("leg-transit"),
+                        chosen = chosen != null,
+                    )
+                }
                 val path = (result as? LegResult.Route)?.path?.takeIf { it.size >= 2 }
                 RouteMap(
                     RouteGeometry(listOf(from, to), arc = false, path = path),
@@ -180,9 +205,17 @@ fun LegRow(
                     height = 160.dp,
                     modifier = Modifier.padding(top = 8.dp).testTag("leg-map"),
                 )
-                if (onOpenLink != null) {
-                    TextButton(onClick = { onOpenLink(legMapsLink(from, to, mode)) }, modifier = Modifier.padding(start = 4.dp)) {
-                        Text("In Google Maps öffnen")
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 4.dp)) {
+                    if (mode == TravelMode.TRANSIT && onTransitDetails != null) {
+                        TextButton(onClick = onTransitDetails, modifier = Modifier.testTag("leg-transit-details")) {
+                            Icon(Icons.Filled.DirectionsTransit, contentDescription = null, modifier = Modifier.size(18.dp).padding(end = 4.dp))
+                            Text("Verbindung abfragen")
+                        }
+                    }
+                    if (onOpenLink != null) {
+                        TextButton(onClick = { onOpenLink(legMapsLink(from, to, mode)) }) {
+                            Text("In Google Maps öffnen")
+                        }
                     }
                 }
             }

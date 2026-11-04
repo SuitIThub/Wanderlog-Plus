@@ -19,6 +19,10 @@ data class ServerConfig(
     val parallelProcessor: String = "base",
     /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
     val instagramCookies: Path? = null,
+    /** Apify token for public-transport connections in Japan; without it `/api/transit` answers `transit_not_configured`. */
+    val apifyToken: String? = null,
+    /** Apify actor of the timetable search ("Japan Train Route & Fare Finder"). */
+    val apifyTransitActor: String = ApifyTransitSource.DEFAULT_ACTOR,
 ) {
     companion object {
         const val MIN_TOKEN_LENGTH = 16
@@ -65,6 +69,8 @@ data class ServerConfig(
                 parallelKey = env["WLP_PARALLEL_KEY"]?.takeIf { it.isNotBlank() },
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
+                apifyToken = env["WLP_APIFY_TOKEN"]?.takeIf { it.isNotBlank() },
+                apifyTransitActor = env["WLP_APIFY_TRANSIT_ACTOR"]?.takeIf { it.isNotBlank() } ?: ApifyTransitSource.DEFAULT_ACTOR,
             )
         }
     }

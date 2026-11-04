@@ -95,6 +95,27 @@ class PhotonGeocoder(
         throw GeocoderUnavailable()
     }
 
+    /**
+     * Any Photon request ([pathAndQuery] like `reverse?lat=…`) with the same pacing and retries as [find]: the JSON
+     * feature list, or null for a refused request; [GeocoderUnavailable] when Photon does not answer.
+     */
+    fun features(pathAndQuery: String): kotlinx.serialization.json.JsonArray? {
+        val uri = URI.create("${baseUrl.trimEnd('/')}/$pathAndQuery")
+        for (attempt in 0..backoffMillis.size) {
+            if (attempt > 0) sleep(backoffMillis[attempt - 1])
+            val (status, body) = send(uri) ?: continue
+            if (status == 429 || status >= 500) continue
+            if (status !in 200..299) return null
+            val list = try {
+                json.parseToJsonElement(body ?: continue).jsonObject["features"]?.jsonArray
+            } catch (e: Exception) {
+                null
+            } ?: continue
+            return list
+        }
+        throw GeocoderUnavailable()
+    }
+
     private fun send(uri: URI): Pair<Int, String?>? = synchronized(LOCK) {
         val wait = lastRequestAt + minIntervalMillis - System.currentTimeMillis()
         if (wait > 0) sleep(wait)

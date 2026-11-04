@@ -77,7 +77,12 @@ class DayMapTest {
         val repo = LegRepository(
             api = {
                 SyncApi(
-                    HttpClient(MockEngine { respond("""{"durationSeconds":1500,"distanceMeters":1800,"polyline":"_p~iF~ps|U_ulLnnqC"}""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json")) }),
+                    HttpClient(MockEngine { req ->
+                        val json = headersOf(HttpHeaders.ContentType, "application/json")
+                        // No timetable search on this server: the transit way falls back to the Google route.
+                        if (req.url.encodedPath.endsWith("/api/transit")) respond("""{"error":"transit_not_configured"}""", HttpStatusCode.ServiceUnavailable, json)
+                        else respond("""{"durationSeconds":1500,"distanceMeters":1800,"polyline":"_p~iF~ps|U_ulLnnqC"}""", HttpStatusCode.OK, json)
+                    }),
                     "https://s", "tok",
                 )
             },

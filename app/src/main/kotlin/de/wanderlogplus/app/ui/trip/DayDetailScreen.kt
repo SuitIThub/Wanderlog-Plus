@@ -101,6 +101,8 @@ fun DayDetailScreen(
     onSearchPlace: ((date: String, position: ItemPosition) -> Unit)? = null,
     /** Opens the full map of the day's route; null hides "Karte". */
     onOpenMap: ((date: String) -> Unit)? = null,
+    /** "Verbindung abfragen" for the way to a program item; null hides it. */
+    onTransitDetails: ((date: String, itemId: String) -> Unit)? = null,
     /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
     onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
 ) {
@@ -183,6 +185,7 @@ fun DayDetailScreen(
                     onOpenLink = onOpenLink,
                     onInsert = { pos -> insertAt = pos.encode(); addingNote = false; adding = true },
                     onOpenMap = onOpenMap?.let { open -> { open(date) } },
+                    onTransitDetails = onTransitDetails?.let { open -> { id -> open(date, id) } },
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,

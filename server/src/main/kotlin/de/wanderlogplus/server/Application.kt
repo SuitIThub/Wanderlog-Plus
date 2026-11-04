@@ -75,6 +75,7 @@ class Services(
     val imports: ImportService,
     val routes: RoutesService = RoutesService(store, null),
     val ai: AiJobs = AiJobs(store, null, ToolReelMedia(), config.dataDir.resolve("ai-work")),
+    val transit: TransitService = TransitService(store, null, null),
 )
 
 @Serializable
@@ -134,6 +135,9 @@ fun Application.module(services: Services) {
         exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
         exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
         exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }
+        exception<NoStation> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_station")) }
+        exception<TransitNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("transit_not_configured")) }
+        exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
         exception<BadInput> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -204,6 +208,15 @@ fun Application.module(services: Services) {
                     call.response.headers.append("X-Content-Type-Options", "nosniff")
                     call.respond(LocalFileContent(path.toFile(), ContentType.Application.OctetStream))
                 }
+            }
+            post("/api/transit") {
+                val req = call.receive<de.wanderlogplus.shared.sync.TransitRequest>()
+                call.respond(withContext(Dispatchers.IO) { services.transit.search(req) })
+            }
+            get("/api/transit/stations") {
+                val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
+                val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
+                call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
             }
             post("/api/routes") {
                 val req = call.receive<RouteRequest>()
