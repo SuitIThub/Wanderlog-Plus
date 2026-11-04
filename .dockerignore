@@ -7,3 +7,9 @@ testdata
 .remember
 .superpowers
 .idea
+
+# Signier-Schlüssel nie in den Build-Kontext
+keystore
+keystore.properties
+**/*.jks
+**/*.keystore
