@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.23.0
+
+- **Aus dem Chat einplanen:** Unter den Karten im Reise-Chat gibt es jetzt „Einplanen“. Ein Dialog fragt Tag und Stelle im Programm (am Anfang, nach einem Programmpunkt, am Ende); hat der Chat einen Tag oder eine Stelle vorgeschlagen, ist das vorausgewählt.
+- **Webfunde zu Orten hinzufügen:** Findet der Chat im Web einen konkreten Ort, schlägt der Server dessen Lage nach; die Karte bekommt dann „Zu Orten“ (in die Region der nächsten Unterkunft, mit dem Link als Notiz) und „Einplanen“. Ist der Ort schon hinterlegt, steht dort „Hinterlegt“ statt eines Duplikats.
+- Der Chat selbst ändert weiterhin nichts: geschrieben wird erst, wenn du tippst – offline möglich und synchronisiert wie jede andere Änderung. Benötigt das Server-Update.
+
 ## 0.22.1
 
 - **Reise-Chat kennt mehr Kontext:** alle Unterkünfte mit Adresse, den ganzen Reiseplan (Übernachtung, Programm, Fahrten je Tag) und Entfernungen. Auf einem Tag sieht er Unterkunft, Programm und offene Vorschläge samt Entfernung zur Unterkunft; „in der Nähe“ sucht er im Umkreis statt in der ganzen Region (Server-Update nötig).

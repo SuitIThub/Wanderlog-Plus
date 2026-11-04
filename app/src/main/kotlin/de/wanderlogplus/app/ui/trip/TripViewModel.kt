@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import de.wanderlogplus.client.GeoPlace
 import de.wanderlogplus.client.ItemPosition
+import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.TravelMode
 import kotlinx.serialization.json.JsonNull
@@ -103,6 +104,14 @@ class TripViewModel(
     fun addSearchedPlace(date: String, position: ItemPosition, place: GeoPlace) = write { e, s ->
         e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position)
     }
+
+    /** A chat's web find becomes a planned place of the day's region and a program item at [position]. */
+    fun addFoundToDay(date: String, position: ItemPosition, name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory) =
+        write { e, s -> e.addPlaceToDay(s, date, name, lat, lng, address, category, position) }
+
+    /** A chat's web find goes into [regionId]'s collection as an idea. */
+    fun addFoundToPlaces(name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory, regionId: String?, note: String = "") =
+        write { e, _ -> e.addPlaceToCollection(name, lat, lng, address, category, regionId, note = note) }
 
     fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
 
