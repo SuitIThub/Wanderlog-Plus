@@ -186,6 +186,7 @@ class MainActivity : ComponentActivity() {
                         pendingSetup = pending,
                         onPendingSetupConsumed = { pendingSetup.value = null },
                         reelsViewModelFactory = remember { reelsFactory(container) },
+                        chatViewModelFactory = remember { chatFactory(container) },
                         vaultScanViewModelFactory = remember { vaultScanFactory(container) },
                         pendingReelJob = reelJob,
                         onPendingReelConsumed = { pendingReel.value = null },
@@ -272,6 +273,14 @@ class MainActivity : ComponentActivity() {
         ) as T
     }
 
+    private fun chatFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.chat.ChatViewModel(
+            de.wanderlogplus.app.ui.chat.SyncApiChatBackend { container.syncApi() },
+            PrefsLastChat(applicationContext),
+        ) as T
+    }
+
     private fun reelsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
@@ -354,6 +363,15 @@ class PrefsUpdatePrefs(context: android.content.Context) : de.wanderlogplus.app.
     override var skippedVersion: String?
         get() = prefs.getString("skipped", null)
         set(v) { prefs.edit().putString("skipped", v).apply() }
+}
+
+/** The chat that was open last (per profile). */
+class PrefsLastChat(context: android.content.Context) : de.wanderlogplus.app.ui.chat.LastChat {
+    private val prefs = context.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(context, "chat"), android.content.Context.MODE_PRIVATE)
+    override suspend fun get(): String? = prefs.getString("last", null)
+    override suspend fun set(id: String?) {
+        prefs.edit().apply { if (id == null) remove("last") else putString("last", id) }.apply()
+    }
 }
 
 class PrefsImportedJobs(context: android.content.Context) : de.wanderlogplus.app.ui.reels.ImportedJobs {

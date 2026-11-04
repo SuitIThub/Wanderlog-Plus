@@ -252,3 +252,31 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
         }
     }
 }
+
+/** A free web search (chat): pages with excerpts for [objective]. Blocking; throws [AiFailed] when it fails. */
+fun interface WebSearch {
+    fun search(objective: String, queries: List<String>): List<WebSource>
+}
+
+/** [WebSearch] via Parallel's Search API ("fast"). */
+class ParallelWebSearch(private val transport: ParallelTransport) : WebSearch {
+    override fun search(objective: String, queries: List<String>): List<WebSource> {
+        val (status, text) = transport.send("POST", "/v1/search", body(objective, queries), Duration.ofSeconds(30))
+        if (status == 401 || status == 403) throw AiFailed("research_key_rejected")
+        if (status == 402) throw AiFailed("research_no_credit")
+        if (status !in 200..299) throw AiFailed("research_failed")
+        return ParallelResearcher.parseSearch(text)
+    }
+
+    companion object {
+        fun body(objective: String, queries: List<String>): String = buildJsonObject {
+            put("objective", objective.take(1000))
+            putJsonArray("search_queries") { queries.map { it.take(200) }.filter { it.isNotBlank() }.distinct().take(3).forEach { add(JsonPrimitive(it)) } }
+            put("mode", "fast")
+            putJsonObject("advanced_settings") {
+                put("max_results", 6)
+                putJsonObject("excerpt_settings") { put("max_chars_per_result", 1200) }
+            }
+        }.toString()
+    }
+}

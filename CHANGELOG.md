@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.21.0
+
+- **Reise-Chat** mit KI: über das Chat-Symbol oben (im Bildkopf von Heute, Tag, Region, Ort und Buchung, auf den Tab-Startseiten in einer schmalen Leiste) öffnet sich der Chat. Frag nach Vorschlägen oder nenne Wünsche („Regentag“, „gutes Essen, nicht touristisch“): Er sucht in euren hinterlegten Orten, beachtet Region und Öffnungstage des Tages und zeigt seine Empfehlungen als Karten, die die Ortsdetails öffnen.
+- Auf Wunsch sucht er im Web (Parallel) nach neuen Orten oder beantwortet allgemeine Fragen; Webfunde erscheinen als Karten mit Link und dem Hinweis „nicht hinterlegt“.
+- Der Bildschirm, von dem aus du den Chat öffnest, geht als Kontext mit (z. B. „Kontext: Tag Fr 02.04. · Kyoto“); antippen entfernt ihn.
+- Chats liegen auf dem Server: mehrere Chats, auf allen Geräten und für alle Mitreisenden sichtbar, mit Liste, „Neuer Chat“ und Löschen. Eine Antwort läuft auch weiter, wenn die App geschlossen wird. Benötigt `WLP_OPENROUTER_KEY` auf dem Server, für die Websuche zusätzlich `WLP_PARALLEL_KEY`.
+
 ## 0.19.0
 
 - **Fotogalerie** für jeden Ort und jeden Tag: neuer Tab „Fotos“ mit Vorschaubildern, „Fotos hinzufügen“ wählt mehrere Bilder auf einmal aus der Galerie. Ein Tipp öffnet die Vollbildansicht zum Durchwischen, dort lässt sich ein Foto auch löschen.

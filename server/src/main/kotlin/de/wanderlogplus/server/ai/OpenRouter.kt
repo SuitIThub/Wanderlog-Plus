@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -37,17 +38,33 @@ fun interface ChatModel {
     fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String
 }
 
+/** A function call the model asked for; [arguments] is its JSON text. */
+data class ToolCall(val id: String, val name: String, val arguments: String)
+
+/** One model turn with tools: answer text and/or tool calls; [message] goes back into the history as is. */
+data class ToolTurn(val text: String?, val calls: List<ToolCall>, val message: JsonObject)
+
+/** Chat completion with OpenAI-style function tools ([tools] null: the model must answer in text). Blocking. */
+fun interface ToolChatModel {
+    fun turn(messages: List<JsonObject>, tools: JsonArray?): ToolTurn
+}
+
 /** OpenRouter's chat completions endpoint; [model] e.g. "google/gemini-2.5-flash". */
-class OpenRouterModel(private val apiKey: String, private val model: String) : ChatModel {
+class OpenRouterModel(private val apiKey: String, private val model: String) : ChatModel, ToolChatModel {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build()
 
-    override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String {
+    override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String =
+        answerText(post(requestBody(model, system, parts, webSearch)))
+
+    override fun turn(messages: List<JsonObject>, tools: JsonArray?): ToolTurn = toolTurn(post(toolRequestBody(model, messages, tools)))
+
+    private fun post(body: String): String {
         val request = HttpRequest.newBuilder(URI.create(ENDPOINT))
             .timeout(Duration.ofSeconds(180))
             .header("Content-Type", "application/json")
             .header("Authorization", "Bearer $apiKey")
             .header("X-Title", "Wanderlog Plus")
-            .POST(HttpRequest.BodyPublishers.ofString(requestBody(model, system, parts, webSearch)))
+            .POST(HttpRequest.BodyPublishers.ofString(body))
             .build()
         val response = try {
             http.send(request, HttpResponse.BodyHandlers.ofString())
@@ -57,7 +74,7 @@ class OpenRouterModel(private val apiKey: String, private val model: String) : C
         if (response.statusCode() == 401 || response.statusCode() == 403) throw AiFailed("ai_key_rejected")
         if (response.statusCode() == 402) throw AiFailed("ai_no_credit")
         if (response.statusCode() !in 200..299) throw AiFailed()
-        return answerText(response.body())
+        return response.body()
     }
 
     companion object {
@@ -78,6 +95,58 @@ class OpenRouterModel(private val apiKey: String, private val model: String) : C
             putJsonObject("response_format") { put("type", "json_object") }
             if (webSearch) putJsonArray("plugins") { add(buildJsonObject { put("id", "web"); put("max_results", 5) }) }
         }.toString()
+
+        fun toolRequestBody(model: String, messages: List<JsonObject>, tools: JsonArray?): String = buildJsonObject {
+            put("model", model)
+            put("messages", JsonArray(messages))
+            if (tools != null && tools.isNotEmpty()) put("tools", tools)
+        }.toString()
+
+        /** Text and tool calls of the first choice; the history message keeps only role, content and tool_calls. */
+        fun toolTurn(body: String): ToolTurn {
+            val root = try {
+                JSON.parseToJsonElement(body).jsonObject
+            } catch (e: Exception) {
+                throw AiFailed()
+            }
+            val choice = (root["choices"] as? JsonArray)?.firstOrNull() as? JsonObject ?: throw AiFailed()
+            val msg = choice["message"] as? JsonObject ?: throw AiFailed()
+            val text = when (val c = msg["content"]) {
+                is JsonPrimitive -> c.contentOrNull
+                is JsonArray -> c.joinToString("") { ((it as? JsonObject)?.get("text") as? JsonPrimitive)?.content.orEmpty() }
+                else -> null
+            }?.takeIf { it.isNotBlank() }
+            val rawCalls = (msg["tool_calls"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            val calls = rawCalls.mapIndexedNotNull { i, c ->
+                val fn = c["function"] as? JsonObject ?: return@mapIndexedNotNull null
+                val name = (fn["name"] as? JsonPrimitive)?.contentOrNull ?: return@mapIndexedNotNull null
+                val id = (c["id"] as? JsonPrimitive)?.contentOrNull ?: "call_$i"
+                val args = when (val a = fn["arguments"]) {
+                    is JsonPrimitive -> a.contentOrNull ?: "{}"
+                    is JsonObject -> a.toString()
+                    else -> "{}"
+                }
+                ToolCall(id, name, args)
+            }
+            val history = buildJsonObject {
+                put("role", "assistant")
+                put("content", text.orEmpty())
+                if (calls.isNotEmpty()) {
+                    putJsonArray("tool_calls") {
+                        calls.forEach { c ->
+                            add(
+                                buildJsonObject {
+                                    put("id", c.id)
+                                    put("type", "function")
+                                    putJsonObject("function") { put("name", c.name); put("arguments", c.arguments) }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            return ToolTurn(text, calls, history)
+        }
 
         private fun partJson(p: AiPart): JsonElement = when (p) {
             is AiPart.Text -> buildJsonObject { put("type", "text"); put("text", p.text) }

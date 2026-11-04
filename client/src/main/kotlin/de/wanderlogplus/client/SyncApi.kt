@@ -225,6 +225,38 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         if (r.status.value !in 200..299) throw classify(r.status.value, try { r.body<ErrorResponse>() } catch (e: Exception) { null })
     }
 
+    /** Chats, newest activity first. */
+    suspend fun chats(limit: Int = 50): List<de.wanderlogplus.shared.sync.ChatSummary> = call {
+        client.get("$base/api/chats") { auth(); parameter("limit", limit) }
+    }
+
+    /** A new, empty chat; NOT_CONFIGURED without an OpenRouter key on the server. */
+    suspend fun createChat(): de.wanderlogplus.shared.sync.ChatInfo = call { client.post("$base/api/chats") { auth() } }
+
+    suspend fun chat(id: String): de.wanderlogplus.shared.sync.ChatInfo = call { client.get("$base/api/chats/${id.encodeURLPathPart()}") { auth() } }
+
+    /** Sends a message; the answer comes in the background (poll [chat] while `pending`). BAD_REQUEST `chat_busy` meanwhile. */
+    suspend fun sendChat(id: String, req: de.wanderlogplus.shared.sync.ChatSendRequest): de.wanderlogplus.shared.sync.ChatInfo = call {
+        client.post("$base/api/chats/${id.encodeURLPathPart()}/messages") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+    }
+
+    suspend fun retryChat(id: String): de.wanderlogplus.shared.sync.ChatInfo = call { client.post("$base/api/chats/${id.encodeURLPathPart()}/retry") { auth() } }
+
+    suspend fun deleteChat(id: String) {
+        val r = try {
+            client.delete("$base/api/chats/${id.encodeURLPathPart()}") { auth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        }
+        if (r.status.value !in 200..299) throw classify(r.status.value, readError(r))
+    }
+
     /** Starts the assistant on a reel link; NOT_CONFIGURED without an OpenRouter key on the server. */
     suspend fun startReel(url: String, config: AssessConfig = AssessConfig()): AiJobInfo = call {
         client.post("$base/api/ai/reels") {

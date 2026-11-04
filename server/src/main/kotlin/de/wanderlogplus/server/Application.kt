@@ -81,6 +81,8 @@ class Services(
     val tokens: TokenService = TokenService(config, store),
     /** Sensitive-media vault: per-user namespace, addressed by random ids (see [vaultApi]/[vaultWeb]). */
     val vault: VaultStore = VaultStore.forConfig(config),
+    /** The trip chat (assistant with the saved places and web search). */
+    val chats: ChatService = ChatService(store, null),
 )
 
 @Serializable
@@ -157,6 +159,8 @@ fun Application.module(services: Services) {
         exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
+        exception<ChatBusy> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("chat_busy")) }
+        exception<ChatNotFound> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) }
         exception<BadInput> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<BadRequestException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
         exception<ContentTransformationException> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("bad_request")) }
@@ -315,6 +319,31 @@ fun Application.module(services: Services) {
                 val id = call.parameters["id"].orEmpty()
                 val job = withContext(Dispatchers.IO) { services.ai.get(id) }
                 if (job == null) call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) else call.respond(job)
+            }
+            get("/api/chats") {
+                val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 50
+                if (limit !in 1..200) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.chats.list(limit) })
+            }
+            post("/api/chats") {
+                if (!services.chats.configured) throw AiNotConfigured()
+                call.respond(HttpStatusCode.Created, withContext(Dispatchers.IO) { services.chats.create(call.author()) })
+            }
+            get("/api/chats/{id}") {
+                val chat = withContext(Dispatchers.IO) { services.chats.get(call.parameters["id"].orEmpty()) } ?: throw ChatNotFound()
+                call.respond(chat)
+            }
+            delete("/api/chats/{id}") {
+                withContext(Dispatchers.IO) { services.chats.delete(call.parameters["id"].orEmpty()) }
+                call.respond(HttpStatusCode.NoContent)
+            }
+            post("/api/chats/{id}/messages") {
+                val req = call.receive<de.wanderlogplus.shared.sync.ChatSendRequest>()
+                val author = call.author()
+                call.respond(withContext(Dispatchers.IO) { services.chats.send(call.parameters["id"].orEmpty(), author, req) })
+            }
+            post("/api/chats/{id}/retry") {
+                call.respond(withContext(Dispatchers.IO) { services.chats.retry(call.parameters["id"].orEmpty()) })
             }
             post("/api/import/wanderlog") {
                 val entry = withContext(Dispatchers.IO) { services.imports.runImport() }
