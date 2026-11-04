@@ -407,6 +407,8 @@ class ChatTools(
     private val web: WebSearch?,
     /** Where the chat was opened (the day's stay, the place): rows show their distance to it. */
     private val anchor: Anchor? = null,
+    /** Looks up where a web find is, so it can be added to the trip; null: web finds stay links. */
+    private val geocoder: Geocoder? = null,
     private val say: (String) -> Unit,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -443,8 +445,21 @@ class ChatTools(
                 putJsonObject("queries") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "1-3 kurze Suchanfragen") }
             })
         }
-        add(tool("show_place_cards", "Zeigt hinterlegte Orte als antippbare Karten unter der Antwort (Reihenfolge = Empfehlung).") {
-            putJsonObject("ids") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
+        add(tool("show_place_cards", "Zeigt hinterlegte Orte als antippbare Karten unter der Antwort (Reihenfolge = Empfehlung). Die Karten haben einen Button „Einplanen“; date/after belegen ihn vor.") {
+            putJsonObject("ids") { put("type", "array"); putJsonObject("items") { put("type", "string") }; put("description", "ids ohne Planungsvorschlag") }
+            putJsonObject("items") {
+                put("type", "array")
+                put("description", "alternativ zu ids: Orte mit Planungsvorschlag")
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("id") { put("type", "string") }
+                        putJsonObject("date") { put("type", "string"); put("description", "vorgeschlagener Tag yyyy-MM-dd, optional") }
+                        putJsonObject("after") { put("type", "string"); put("description", "id des Programmpunkts dieses Tages, nach dem er passt, optional") }
+                    }
+                    putJsonArray("required") { add(JsonPrimitive("id")) }
+                }
+            }
         })
         if (web != null) {
             add(tool("show_web_cards", "Zeigt Webseiten aus web_search als antippbare Karten (nur URLs aus den Suchergebnissen).") {
@@ -456,6 +471,10 @@ class ChatTools(
                             putJsonObject("title") { put("type", "string") }
                             putJsonObject("url") { put("type", "string") }
                             putJsonObject("snippet") { put("type", "string"); put("description", "ein kurzer Satz auf Deutsch") }
+                            putJsonObject("place") { put("type", "string"); put("description", "nur für einen konkreten Ort: Name und Ort zum Nachschlagen der Lage, z. B. „Kiso Onsen Hotel, Agematsu“. Dann kann der Nutzer ihn zur Reise hinzufügen.") }
+                            putJsonObject("category") { put("type", "string"); putJsonArray("enum") { PlaceCategory.entries.forEach { add(JsonPrimitive(it.name)) } } }
+                            putJsonObject("date") { put("type", "string"); put("description", "vorgeschlagener Tag yyyy-MM-dd, optional") }
+                            putJsonObject("after") { put("type", "string"); put("description", "id des Programmpunkts dieses Tages, nach dem er passt, optional") }
                         }
                         putJsonArray("required") { add(JsonPrimitive("title")); add(JsonPrimitive("url")) }
                     }
@@ -597,15 +616,31 @@ class ChatTools(
         }
     }
 
+    /** The suggested day if it is a trip day, else null. */
+    private fun planDate(v: String?): String? = v?.takeIf { d -> t.queries?.days()?.any { it.date == d } == true }
+
+    /** The suggested "after" if it is a program place of [date] (saved place or place id), else null. */
+    private fun planAfter(date: String?, v: String?): String? {
+        if (date == null || v == null) return null
+        val day = t.queries?.dayFor(date) ?: return null
+        val placeId = t.savedById[v]?.placeId ?: v
+        return v.takeIf { t.dayItems.any { it.dayId == day.id && it.kind == DayItemKind.PLACE && it.placeId == placeId } }
+    }
+
     private fun showPlaces(args: JsonObject): String {
-        val ids = args.list("ids")
+        val wanted = args.list("ids").map { Triple(it, null as String?, null as String?) } +
+            (args["items"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.mapNotNull { o -> o.s("id")?.let { Triple(it, o.s("date"), o.s("after")) } }
         val unknown = mutableListOf<String>()
-        ids.forEach { id ->
+        wanted.forEach { (id, date, after) ->
             val s = t.savedById[id] ?: run { unknown += id; return@forEach }
             if (cards.any { it.savedPlaceId == id }) return@forEach
             if (cards.size >= MAX_CARDS) return@forEach
             val subtitle = listOfNotNull(t.regionName(s.regionId), worthLabel(s.worth)).joinToString(" · ").ifEmpty { null }
-            cards += ChatCard(ChatCard.KIND_PLACE, t.places[s.placeId]?.name ?: "Ort", savedPlaceId = id, subtitle = subtitle)
+            val day = planDate(date)
+            cards += ChatCard(
+                ChatCard.KIND_PLACE, t.places[s.placeId]?.name ?: "Ort", savedPlaceId = id, subtitle = subtitle,
+                planDate = day, planAfter = planAfter(day, after),
+            )
         }
         return if (unknown.isEmpty()) "Karten werden gezeigt." else "Karten gezeigt; unbekannte ids ignoriert: ${unknown.joinToString(", ")}"
     }
@@ -613,21 +648,54 @@ class ChatTools(
     private fun showWeb(args: JsonObject): String {
         val items = (args["items"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
         var skipped = 0
+        val notFound = mutableListOf<String>()
         items.forEach { o ->
             val url = o.s("url") ?: return@forEach
             val source = seenUrls[url] ?: run { skipped++; return@forEach }
             if (cards.any { it.url == url } || cards.size >= MAX_CARDS) return@forEach
-            cards += ChatCard(
-                ChatCard.KIND_WEB, (o.s("title") ?: source.title ?: ParallelResearcher.hostOf(url)).take(120),
-                subtitle = (o.s("snippet")?.take(160) ?: ParallelResearcher.hostOf(url)), url = url,
+            val title = (o.s("title") ?: source.title ?: ParallelResearcher.hostOf(url)).take(120)
+            val day = planDate(o.s("date"))
+            val card = ChatCard(
+                ChatCard.KIND_WEB, title, subtitle = (o.s("snippet")?.take(160) ?: ParallelResearcher.hostOf(url)), url = url,
+                planDate = day, planAfter = planAfter(day, o.s("after")),
             )
+            val located = o.s("place")?.let { q -> locate(q, card, o.s("category"), day) ?: run { notFound += q; null } }
+            cards += located ?: card
         }
-        return if (skipped == 0) "Karten werden gezeigt." else "$skipped Links ignoriert: nur URLs aus web_search sind erlaubt."
+        return buildString {
+            append(if (skipped == 0) "Karten werden gezeigt." else "$skipped Links ignoriert: nur URLs aus web_search sind erlaubt.")
+            if (notFound.isNotEmpty()) append(" Lage nicht gefunden (nur als Link): ").append(notFound.joinToString(", "))
+        }
+    }
+
+    /**
+     * Looks up where [query] is; the hit must be near the trip (a stay or a saved place within [MAX_LOCATE_KM]).
+     * An already saved place at the spot is linked instead of offered again.
+     */
+    private fun locate(query: String, card: ChatCard, category: String?, day: String?): ChatCard? {
+        val g = geocoder ?: return null
+        say("Suche Lage von ${query.take(40)} …")
+        val hit = try { g.find(query) } catch (e: GeocoderUnavailable) { null } ?: return null
+        val known = (t.stays.map { it.placeId to it.regionId } + t.saved.map { it.placeId to it.regionId })
+            .mapNotNull { (pid, region) -> t.point(pid)?.let { Triple(pid, region, distanceKm(hit.lat, hit.lng, it.lat, it.lng)) } }
+        val nearest = known.minByOrNull { it.third } ?: return null
+        if (nearest.third > MAX_LOCATE_KM) return null
+        val same = t.saved.firstOrNull { s ->
+            s.status != PlaceStatus.DROPPED && t.point(s.placeId)?.let { distanceKm(hit.lat, hit.lng, it.lat, it.lng) < SAME_PLACE_KM } == true
+        }
+        val region = day?.let { t.queries?.regionFor(it) } ?: known.filter { it.second != null }.minByOrNull { it.third }?.second
+        return card.copy(
+            lat = hit.lat, lng = hit.lng, address = hit.address,
+            category = category?.let { c -> PlaceCategory.entries.firstOrNull { it.name.equals(c, ignoreCase = true) }?.name },
+            regionId = region, savedPlaceId = same?.id,
+        )
     }
 
     companion object {
         const val MAX_ROWS = 25
         const val DEFAULT_KM = 15.0
+        const val MAX_LOCATE_KM = 60.0
+        const val SAME_PLACE_KM = 0.15
         const val MAX_CARDS = 10
 
         fun worthRank(w: Worth?): Int = when (w) {
@@ -652,13 +720,18 @@ class ChatTools(
 data class ChatAnswer(val text: String, val cards: List<ChatCard>)
 
 /** Answers chat messages with the model and the [ChatTools]. */
-class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, private val today: () -> String = { LocalDate.now().toString() }) {
+class ChatAgent(
+    private val model: ToolChatModel,
+    private val web: WebSearch?,
+    private val geocoder: Geocoder? = null,
+    private val today: () -> String = { LocalDate.now().toString() },
+) {
 
     /** Answers the last user message of [history] (the earlier ones are context). Blocking; throws [AiFailed]. */
     fun answer(history: List<ChatMessage>, trip: ChatTrip, say: (String) -> Unit = {}): ChatAnswer {
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
-        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), say)
+        val tools = ChatTools(trip, web, ChatContextText.anchor(context, trip, today()), geocoder, say)
         val messages = mutableListOf(system(systemPrompt(trip, context)))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
@@ -701,6 +774,8 @@ class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, p
               und maxKm (in der Nähe ≈ bis 15 km, zu Fuß ≈ 2 km). Nenne bei Empfehlungen die Entfernung; schlage nichts weit Entferntes vor,
               ohne das zu sagen. Für andere Tage nutzt du get_day.
             - Jeden hinterlegten Ort, den du empfiehlst, zeigst du zusätzlich mit show_place_cards (beste zuerst, höchstens 8). Erfinde keine ids.
+            - Unter den Karten kann der Nutzer selbst „Einplanen“ bzw. „Zu Orten“ tippen. Passt ein Ort zu einem bestimmten Tag oder
+              hinter einen Programmpunkt, gib das als date/after mit. Du änderst selbst nichts; sag nie, du hättest etwas eingeplant.
             """.trimIndent(),
         ).append('\n')
         if (web != null) {
@@ -709,6 +784,8 @@ class ChatAgent(private val model: ToolChatModel, private val web: WebSearch?, p
                 - web_search nutzt du, wenn der Nutzer ausdrücklich im Web suchen will, nach neuen Orten fragt, die nicht hinterlegt sind,
                   aktuelle Infos braucht (Events, Öffnungszeiten, Preise) oder eine allgemeine Frage hat, die du nicht sicher weißt.
                   Im Web gefundene Orte oder Seiten zeigst du mit show_web_cards. Kennzeichne Webfunde als „nicht hinterlegt“.
+                  Ist ein Webfund ein konkreter Ort (Onsen, Restaurant, Sehenswürdigkeit), gib place (Name und Ort) und category mit,
+                  dann kann der Nutzer ihn hinzufügen.
                   Suchst du Orte in der Nähe, nenne in objective und queries den konkreten Ort (Stadt/Ortsteil aus der Adresse der
                   Unterkunft oder des Programmpunkts), nicht nur den Regionsnamen, und prüfe die Lage der Funde.
                 """.trimIndent(),

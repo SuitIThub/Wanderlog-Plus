@@ -78,7 +78,14 @@ val CHAT_EXAMPLES = listOf(
 )
 
 @Composable
-fun ChatRoute(vm: ChatViewModel, snapshot: TripSnapshot?, onBack: () -> Unit, onOpenPlace: (String) -> Unit, onOpenUrl: (String) -> Unit) {
+fun ChatRoute(
+    vm: ChatViewModel,
+    snapshot: TripSnapshot?,
+    onBack: () -> Unit,
+    onOpenPlace: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    actions: ChatActions? = null,
+) {
     val chat by vm.chat.collectAsState()
     val chats by vm.chats.collectAsState()
     val context by vm.context.collectAsState()
@@ -88,7 +95,7 @@ fun ChatRoute(vm: ChatViewModel, snapshot: TripSnapshot?, onBack: () -> Unit, on
         chat, chats, context, sending, message, snapshot,
         onBack = onBack, onSend = vm::send, onRetry = vm::retry, onClearContext = vm::clearContext, onNewChat = vm::newChat,
         onShowList = vm::refreshList, onSelect = vm::select, onDelete = vm::delete, onConsumeMessage = vm::consumeMessage,
-        onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl,
+        onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl, actions = actions,
     )
 }
 
@@ -112,6 +119,8 @@ fun ChatScreen(
     onConsumeMessage: () -> Unit,
     onOpenPlace: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    /** Card buttons ("Einplanen", "Zu Orten"); null: cards only open. */
+    actions: ChatActions? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var showList by remember { mutableStateOf(false) }
@@ -155,7 +164,7 @@ fun ChatScreen(
                 when (m.role) {
                     ChatMessage.ROLE_USER -> UserBubble(m)
                     ChatMessage.ROLE_ERROR -> ErrorBubble(m, showRetry = m == messages.last() && !busy, onRetry)
-                    else -> AssistantMessage(m, snapshot, onOpenPlace, onOpenUrl)
+                    else -> AssistantMessage(m, snapshot, onOpenPlace, onOpenUrl, actions, context?.date)
                 }
             }
             if (chat?.pending == true) {
@@ -250,10 +259,22 @@ private fun ErrorBubble(m: ChatMessage, showRetry: Boolean, onRetry: () -> Unit)
 }
 
 @Composable
-private fun AssistantMessage(m: ChatMessage, snapshot: TripSnapshot?, onOpenPlace: (String) -> Unit, onOpenUrl: (String) -> Unit) {
+private fun AssistantMessage(
+    m: ChatMessage,
+    snapshot: TripSnapshot?,
+    onOpenPlace: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    actions: ChatActions?,
+    defaultDate: String?,
+) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         MarkdownText(m.text, Modifier.padding(horizontal = 4.dp))
-        m.cards.forEach { c -> ChatCardView(c, snapshot, onOpenPlace, onOpenUrl) }
+        m.cards.forEachIndexed { i, c ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ChatCardView(c, snapshot, onOpenPlace, onOpenUrl)
+                if (actions != null) ChatCardActions(c, "${m.id}-$i", snapshot, defaultDate, actions)
+            }
+        }
     }
 }
 

@@ -173,6 +173,64 @@ class ChatTest {
         assertNull(sentText)
     }
 
+    private class RecordingActions : ChatActions {
+        val calls = mutableListOf<String>()
+        override fun planSaved(savedPlaceId: String, date: String, position: de.wanderlogplus.client.ItemPosition) { calls += "saved:$savedPlaceId@$date/${position.encode()}" }
+        override fun planFound(card: ChatCard, date: String, position: de.wanderlogplus.client.ItemPosition) { calls += "found:${card.title}@$date/${position.encode()}" }
+        override fun addFound(card: ChatCard) { calls += "add:${card.title}" }
+    }
+
+    @Test fun cardButtonsPlanAndAddWithTheChatsSuggestion() {
+        val actions = RecordingActions()
+        val chat = ChatInfo(
+            "c1", "x", 0, 0,
+            messages = listOf(
+                ChatMessage(
+                    "a", ChatMessage.ROLE_ASSISTANT, "Ideen:", 1,
+                    cards = listOf(
+                        // Suggested after the noodle kitchen on day 2.
+                        ChatCard(ChatCard.KIND_PLACE, "Moosgarten", "s-garten", planDate = "2027-04-02", planAfter = "s-nudel"),
+                        ChatCard(ChatCard.KIND_WEB, "Onsen am Fluss", url = "https://x.example/onsen", lat = 35.02, lng = 135.77, regionId = "r-berg"),
+                        // At the noodle kitchen's spot: already saved, so no second "Zu Orten".
+                        ChatCard(ChatCard.KIND_WEB, "Nudeln (Blog)", url = "https://x.example/nudel", lat = 35.0001, lng = 135.7501),
+                        ChatCard(ChatCard.KIND_WEB, "Nur ein Link", url = "https://x.example/info"),
+                    ),
+                ),
+            ),
+        )
+        rule.setContent {
+            WanderlogPlusTheme {
+                ChatScreen(
+                    chat, emptyList(), ChatContext(date = "2027-04-03"), false, null, Fixtures.trip(),
+                    {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions,
+                )
+            }
+        }
+        rule.onNodeWithText("Vorschlag: Fr 02.04.").assertExists()
+        rule.onNodeWithTag("chat-plan-a-0").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("plan-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("saved:s-garten@2027-04-02/after:i-3", actions.calls.last())
+
+        // A web find: day from the chat's context, position chosen in the dialog.
+        rule.onNodeWithTag("chat-plan-a-1").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("plan-pos-start").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("plan-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("found:Onsen am Fluss@2027-04-03/start", actions.calls.last())
+        rule.onNodeWithTag("chat-add-a-1").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("add:Onsen am Fluss", actions.calls.last())
+
+        rule.onNodeWithTag("chat-saved-a-2").assertExists()
+        rule.onNodeWithTag("chat-add-a-2").assertDoesNotExist()
+        rule.onNodeWithTag("chat-plan-a-2").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("plan-day-2027-04-05").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("plan-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("saved:s-nudel@2027-04-05/end", actions.calls.last())
+        rule.onNodeWithText("Eingeplant: Fr 02.04.").assertExists() // the noodle kitchen is on day 2 already
+
+        rule.onNodeWithTag("chat-plan-a-3").assertDoesNotExist()
+        rule.onNodeWithTag("chat-add-a-3").assertDoesNotExist()
+    }
+
     @Test fun errorOffersRetryAndEmptyChatOffersExamples() {
         var retried = 0
         var sentText: String? = null

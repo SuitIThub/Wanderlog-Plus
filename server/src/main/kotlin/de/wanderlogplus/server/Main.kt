@@ -50,7 +50,7 @@ fun main() {
             store,
             openRouter?.let { model ->
                 // "Today" in Japan, where the trip happens.
-                ChatAgent(model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }) {
+                ChatAgent(model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder()) {
                     java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
                 }
             },

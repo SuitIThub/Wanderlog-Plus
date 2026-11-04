@@ -192,6 +192,34 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `cards carry a checked plan suggestion and web finds get a location near the trip`() {
+        val t = ChatTools(trip, null) {}
+        t.run("show_place_cards", """{"items":[{"id":"s-kiyo","date":"2027-05-19","after":"s-ramen"},{"id":"s-market","date":"2030-01-01","after":"s-kiyo"}]}""")
+        assertEquals(listOf("2027-05-19" to "s-ramen", null to null), t.cards.map { it.planDate to it.planAfter })
+
+        val hits = mapOf(
+            "Gion Onsen, Kyoto" to GeoHit(35.0040, 135.7760, "Gion, Kyoto"),
+            "Fuji Onsen" to GeoHit(35.36, 138.73, "Fujiyoshida"), // 200 km away: not the trip's
+            "Kiyomizu" to GeoHit(34.9950, 135.7851, null), // the saved temple
+        )
+        val web = WebSearch { _, _ -> hits.keys.map { WebSource("https://x.example/$it", it, listOf("…")) } }
+        val w = ChatTools(trip, web, geocoder = { q -> hits[q] }) {}
+        w.run("web_search", """{"objective":"Onsen"}""")
+        val r = w.run(
+            "show_web_cards",
+            """{"items":[
+              {"title":"Gion Onsen","url":"https://x.example/Gion Onsen, Kyoto","place":"Gion Onsen, Kyoto","category":"sight","date":"2027-05-20"},
+              {"title":"Fuji","url":"https://x.example/Fuji Onsen","place":"Fuji Onsen"},
+              {"title":"Tempel","url":"https://x.example/Kiyomizu","place":"Kiyomizu"}]}""",
+        )
+        assertTrue("Lage nicht gefunden (nur als Link): Fuji Onsen" in r, r)
+        val (gion, fuji, temple) = w.cards
+        assertTrue(gion.canAdd && gion.regionId == "r-kyoto" && gion.category == "SIGHT" && gion.planDate == "2027-05-20" && gion.address == "Gion, Kyoto")
+        assertFalse(fuji.canAdd)
+        assertEquals("s-kiyo", temple.savedPlaceId, "already saved: linked, not added twice")
+    }
+
+    @Test
     fun `openrouter tool turn parsing keeps calls and a clean history message`() {
         val body = """{"choices":[{"message":{"role":"assistant","content":null,"reasoning":"x",
             "tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_place","arguments":"{\"id\":\"s-kiyo\"}"}}]}}]}"""

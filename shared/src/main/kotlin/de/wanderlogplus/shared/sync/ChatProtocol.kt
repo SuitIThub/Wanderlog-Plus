@@ -35,7 +35,20 @@ data class ChatCard(
     val savedPlaceId: String? = null,
     val subtitle: String? = null,
     val url: String? = null,
+    /** Where a web find is (looked up by the server); without it the find cannot be added to the trip. */
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val address: String? = null,
+    /** A [de.wanderlogplus.shared.model.PlaceCategory] name for adding a web find. */
+    val category: String? = null,
+    /** The region a web find would be added to (the nearest stay's or the suggested day's). */
+    val regionId: String? = null,
+    /** The chat's planning suggestion: the day (yyyy-MM-dd) and the place (saved place or place id) to put it after. */
+    val planDate: String? = null,
+    val planAfter: String? = null,
 ) {
+    val canAdd: Boolean get() = kind == KIND_WEB && lat != null && lng != null
+
     companion object {
         const val KIND_PLACE = "place"
         const val KIND_WEB = "web"

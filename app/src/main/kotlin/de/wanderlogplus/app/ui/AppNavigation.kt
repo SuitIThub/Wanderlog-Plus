@@ -110,6 +110,7 @@ import de.wanderlogplus.app.ui.trip.rememberPlaceSearchModel
 import de.wanderlogplus.app.ui.trip.searchStart
 import de.wanderlogplus.client.GeoSearch
 import de.wanderlogplus.client.ItemPosition
+import de.wanderlogplus.app.ui.chat.placeCategory
 import de.wanderlogplus.app.ui.trip.DayDetailScreen
 import de.wanderlogplus.app.ui.trip.TripScreen
 import de.wanderlogplus.app.ui.trip.TripViewModel
@@ -410,8 +411,14 @@ fun AppNavigation(
             if (chatVm != null) {
                 composable(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) {
                     val uri = androidx.compose.ui.platform.LocalUriHandler.current
+                    val tripVm: TripViewModel? = tripViewModelFactory?.let { viewModel(factory = it) }
+                    val live = tripVm?.snapshot?.collectAsState()?.value ?: snapshot
+                    tripVm?.let { TripErrors(it, snackbar) }
+                    val liveNow = androidx.compose.runtime.rememberUpdatedState(live)
+                    val actions = tripVm?.let { vm -> remember(vm) { chatActions(vm, { liveNow.value }) { msg -> uiScope.launch { snackbar.showSnackbar(msg) } } } }
                     de.wanderlogplus.app.ui.chat.ChatRoute(
-                        chatVm, snapshot,
+                        chatVm, live,
+                        actions = actions,
                         onBack = { nav.popBackStack() },
                         onOpenPlace = { id -> nav.navigate(if (placesViewModelFactory != null) placeRoute(id) else tripPlaceRoute(id)) },
                         onOpenUrl = { url -> if (runCatching { uri.openUri(url) }.isFailure) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) } },
@@ -1051,5 +1058,31 @@ private fun NavController.navigateToTab(tab: Tab) = navigate(tab.route) {
 private fun PlaceholderScreen(title: String) {
     Box(Modifier.fillMaxSize().testTag("screen-$title"), contentAlignment = Alignment.Center) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
+    }
+}
+
+/** The chat cards' buttons, written through the trip's editor; [notify] confirms each one in a snackbar. */
+private fun chatActions(vm: TripViewModel, snapshot: () -> TripSnapshot?, notify: (String) -> Unit) = object : de.wanderlogplus.app.ui.chat.ChatActions {
+    override fun planSaved(savedPlaceId: String, date: String, position: ItemPosition) {
+        vm.addSuggestionAt(date, savedPlaceId, position)
+        notify("Eingeplant am " + dayCardLabel(date))
+    }
+
+    override fun planFound(card: de.wanderlogplus.shared.sync.ChatCard, date: String, position: ItemPosition) {
+        val lat = card.lat ?: return
+        val lng = card.lng ?: return
+        vm.addFoundToDay(date, position, card.title, lat, lng, card.address, card.placeCategory())
+        notify("Eingeplant am " + dayCardLabel(date) + " und zu Orten hinzugefügt")
+    }
+
+    override fun addFound(card: de.wanderlogplus.shared.sync.ChatCard) {
+        val lat = card.lat ?: return
+        val lng = card.lng ?: return
+        val region = card.regionId?.let { id -> snapshot()?.regions?.firstOrNull { it.id == id } }
+        vm.addFoundToPlaces(
+            card.title, lat, lng, card.address, card.placeCategory(), region?.id,
+            note = card.url?.let { "Gefunden im Reise-Chat: $it" }.orEmpty(),
+        )
+        notify("Zu Orten hinzugefügt" + (region?.let { " (${it.name})" } ?: ""))
     }
 }
