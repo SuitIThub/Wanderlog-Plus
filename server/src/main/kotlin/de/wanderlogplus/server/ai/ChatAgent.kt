@@ -454,6 +454,24 @@ class ChatTools(
                 putJsonObject("mode") { put("type", "string"); putJsonArray("enum") { add(JsonPrimitive("WALK")); add(JsonPrimitive("BICYCLE")); add(JsonPrimitive("DRIVE")) } }
             })
         }
+        add(tool("check_day", "Prüft einen Tagesablauf ohne KI: geschätzte Wege und Aufenthalte, Öffnungszeiten/Ruhetage, Zug- und Flugzeiten des Tages. Ohne plan wird das aktuelle Programm geprüft; mit plan ein Vorschlag.") {
+            putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
+            putJsonObject("plan") {
+                put("type", "array")
+                put("description", "optional: geplante Reihenfolge")
+                putJsonObject("items") {
+                    put("type", "object")
+                    putJsonObject("properties") {
+                        putJsonObject("id") { put("type", "string"); put("description", "Orts-id (hinterlegt oder Programm)") }
+                        putJsonObject("name") { put("type", "string"); put("description", "für Orte ohne id (Webfund)") }
+                        putJsonObject("lat") { put("type", "number") }
+                        putJsonObject("lng") { put("type", "number") }
+                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm, optional") }
+                        putJsonObject("minutes") { put("type", "integer"); put("description", "Aufenthalt, optional") }
+                    }
+                }
+            }
+        })
         add(tool("get_day", "Ein Reisetag mit Unterkünften, Fahrten, Programm (mit Adressen und Entfernungen) und Notizen.") {
             putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
         })
@@ -523,6 +541,7 @@ class ChatTools(
                 ?.let { d -> say("Lese Tag ${shortDateOf(d)} …"); ChatContextText.day(d, t) } ?: "Ungültiges Datum."
             "web_search" -> webSearch(args)
             "transit" -> transit(args)
+            "check_day" -> checkDay(args)
             "route" -> route(args)
             "show_place_cards" -> showPlaces(args)
             "show_web_cards" -> showWeb(args)
@@ -585,6 +604,29 @@ class ChatTools(
             append(pool.size).append(" Orte in der Auswahl, gezeigt ").append(shown.size).append(":\n")
             shown.forEach { s -> append(ChatContextText.row(s, t, from)).append('\n') }
         }
+    }
+
+    private fun checkDay(args: JsonObject): String {
+        val date = args.s("date")?.takeIf { d -> t.queries?.days()?.any { it.date == d } == true } ?: return "date fehlt oder ist kein Reisetag."
+        say("Prüfe den Ablauf am ${shortDateOf(date)} …")
+        val check = ChatDayCheck(t)
+        val plan = (args["plan"] as? JsonArray)?.mapNotNull { it as? JsonObject }
+        val stops = plan?.mapNotNull { o -> planStop(o) } ?: check.programStops(date)
+        if (stops.isEmpty()) return "Am ${shortDateOf(date)} ist noch nichts geplant."
+        return check.check(date, stops)
+    }
+
+    private fun planStop(o: JsonObject): PlanStop? {
+        val id = o.s("id")
+        val placeId = id?.let { t.savedById[it]?.placeId ?: it.takeIf { p -> t.places.containsKey(p) } }
+        val lat = (o["lat"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+        val lng = (o["lng"] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
+        val name = placeId?.let { t.places[it]?.name } ?: o.s("name") ?: return null
+        return PlanStop(
+            name, placeId, lat.takeIf { placeId == null }, lng.takeIf { placeId == null },
+            time = o.s("time")?.takeIf { ChatDayCheck.mins(it) != null },
+            minutes = (o["minutes"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()?.takeIf { it in 5..600 },
+        )
     }
 
     private fun transit(args: JsonObject): String {
@@ -860,6 +902,8 @@ class ChatAgent(
               Bei „in der Nähe“, „nicht weit“, „auf dem Weg“ suchst du mit near (Bezugspunkt: Unterkunft, ein Programmpunkt oder Koordinaten)
               und maxKm (in der Nähe ≈ bis 15 km, zu Fuß ≈ 2 km). Nenne bei Empfehlungen die Entfernung; schlage nichts weit Entferntes vor,
               ohne das zu sagen. Für andere Tage nutzt du get_day.
+            - Fragt der Nutzer, ob ein Tag passt („schaffen wir das?“, „Plan-Check“), nutzt du check_day und erklärst die Probleme
+              mit konkreten Lösungen (früher los, Reihenfolge tauschen, etwas streichen). Die Zeiten dort sind Schätzungen; sag das.
             """.trimIndent(),
         ).append('\n')
         if (ways != null) {

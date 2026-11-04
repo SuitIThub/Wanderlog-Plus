@@ -121,7 +121,7 @@ class ChatAgentTest {
     fun `failed web search is reported to the model, not thrown`() {
         val t = tools(WebSearch { _, _ -> throw AiFailed("research_no_credit") })
         assertTrue(t.run("web_search", """{"objective":"x"}""").startsWith("Websuche fehlgeschlagen (research_no_credit)"))
-        assertEquals(listOf("search_saved_places", "get_place", "get_day", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
+        assertEquals(listOf("search_saved_places", "get_place", "check_day", "get_day", "show_place_cards"), tools(null).definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
     }
 
     @Test
