@@ -52,8 +52,12 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
      * Streams the image to disk (throwing [FileTooLarge] past [maxBytes]), then appends its metadata.
      * Idempotent per user: content whose SHA-256 is already stored returns the existing entry instead of a
      * duplicate, so a retried upload (e.g. the client timed out after the file was stored) stays harmless.
+     *
+     * Deliberately NOT synchronized: the blocking read of [input] (an upload coming off the network) must not
+     * hold the store monitor, or a single stalled client freezes every other vault request on the same lock.
+     * The temp file name is unique per call, so concurrent uploads never collide here; only the fast
+     * metadata commit ([commitImage]) takes the lock.
      */
-    @Synchronized
     fun addImage(user: String, input: InputStream, fileName: String, mimeType: String, score: Double): VaultImageInfo {
         val files = filesDir(user)
         Files.createDirectories(files)
@@ -76,9 +80,20 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
                 n
             }
             hash = digest.digest().joinToString("") { "%02x".format(it) }
-        } finally {
-            // Kept when the move below succeeds? No: tmp is either moved or deleted here on failure paths.
+        } catch (e: Exception) {
+            Files.deleteIfExists(tmp) // a short/aborted upload or FileTooLarge leaves no orphan temp file
+            throw e
         }
+        return commitImage(user, tmp, size, hash, fileName, mimeType, score)
+    }
+
+    /**
+     * Lock-held tail of [addImage]: dedup by content hash, otherwise move the temp file into place and persist
+     * the metadata. Fast and local (no network I/O), so holding the monitor here is safe. Still synchronized so
+     * the read-modify-write of `images.json` stays atomic across concurrent uploads.
+     */
+    @Synchronized
+    private fun commitImage(user: String, tmp: Path, size: Long, hash: String, fileName: String, mimeType: String, score: Double): VaultImageInfo {
         val existing = ensureHashes(user).firstOrNull { it.hash == hash }
         if (existing != null) {
             Files.deleteIfExists(tmp)
@@ -94,7 +109,7 @@ class VaultStore(private val dir: Path, private val maxBytes: Long) {
             hash = hash,
         )
         return try {
-            Files.move(tmp, files.resolve(info.id), StandardCopyOption.ATOMIC_MOVE)
+            Files.move(tmp, filesDir(user).resolve(info.id), StandardCopyOption.ATOMIC_MOVE)
             val all = images(user) + info
             writeJson(imagesFile(user), imagesSerializer, all)
             info
