@@ -22,6 +22,8 @@ fun rememberMinuteNow(clock: () -> LocalDateTime): LocalDateTime {
     val currentClock by rememberUpdatedState(clock)
     var now by remember { mutableStateOf(clock().truncatedTo(ChronoUnit.MINUTES)) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { now = currentClock().truncatedTo(ChronoUnit.MINUTES) }
+    // A new clock (e.g. another simulated day in debug mode) shows at once, not only at the next minute.
+    LaunchedEffect(clock) { now = clock().truncatedTo(ChronoUnit.MINUTES) }
     LaunchedEffect(Unit) {
         while (true) {
             val t = currentClock()

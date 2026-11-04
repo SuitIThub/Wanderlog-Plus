@@ -124,6 +124,14 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
                 val assessConfig by remember { container.settings.assessConfig }.collectAsState(de.wanderlogplus.shared.sync.AssessConfig())
+                val debugMode = de.wanderlogplus.app.AppProfile.isDebug(this@MainActivity)
+                val simulated by remember { container.settings.simulatedTime }.collectAsState(null)
+                // Debug mode may pretend another day for "Heute"; everything else keeps the real time.
+                val appClock: () -> java.time.LocalDateTime = remember(tripZone, simulated, debugMode) {
+                    val sim = simulated?.takeIf { debugMode }
+                    val clockFn: () -> java.time.LocalDateTime = { tripZone.now().let { real -> sim?.at(real) ?: real } }
+                    clockFn
+                }
                 // Not on the very first launch before Setup: ask once a server is configured.
                 LaunchedEffect(remindersEnabled, hasServer) { if (remindersEnabled && hasServer == true) requestNotificationPermissionOnce() }
                 val status by container.syncRunner.status.collectAsState()
@@ -176,7 +184,10 @@ class MainActivity : ComponentActivity() {
                         onRemindersEnabled = { v -> scope.launch { container.settings.setRemindersEnabled(v) } },
                         assessConfig = assessConfig,
                         onAssessConfig = { c -> scope.launch { container.settings.setAssessConfig(c) } },
-                        clock = { tripZone.now() },
+                        clock = appClock,
+                        simulatedTime = simulated?.takeIf { debugMode },
+                        onSimulatedTime = if (debugMode) { s -> scope.launch { container.settings.setSimulatedTime(s) } } else null,
+                        currentServer = server,
                         attachmentsViewModelFactory = remember { attachmentsFactory(container) },
                         attachmentFiles = container.attachmentFiles,
                         onReloadMapImages = routeMaps::clearCache,

@@ -69,6 +69,20 @@ class SettingsStore(context: Context) : SyncStateStore {
         }
     }
 
+    private val simDateKey = stringPreferencesKey("sim_date")
+    private val simTimeKey = stringPreferencesKey("sim_time")
+
+    /** The pretended "now" for the Heute screen (only offered in debug mode); null = real time. */
+    val simulatedTime: Flow<SimulatedTime?> = appContext.serverDataStore.data.map { p ->
+        p[simDateKey]?.takeIf { it.isNotBlank() }?.let { SimulatedTime(it, p[simTimeKey]?.takeIf { t -> t.isNotBlank() }) }
+    }
+
+    suspend fun setSimulatedTime(s: SimulatedTime?) {
+        appContext.serverDataStore.edit {
+            if (s == null) { it.remove(simDateKey); it.remove(simTimeKey) } else { it[simDateKey] = s.date; it[simTimeKey] = s.time.orEmpty() }
+        }
+    }
+
     /** Tests: empties the settings and sync state of the active profile. */
     internal suspend fun clearForTests() {
         appContext.serverDataStore.edit { it.clear() }

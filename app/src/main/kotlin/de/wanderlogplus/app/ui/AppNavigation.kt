@@ -204,6 +204,12 @@ fun AppNavigation(
     onReloadMapImages: suspend () -> Unit = {},
     /** Server API for "Verbindung abfragen" (public transport in Japan); null hides those buttons. */
     transitApi: (suspend () -> de.wanderlogplus.client.SyncApi?)? = null,
+    /** Debug mode: the pretended "now" of the Heute screen (null = real time). */
+    simulatedTime: de.wanderlogplus.app.data.SimulatedTime? = null,
+    /** Sets or clears it; null outside debug mode (hides the controls). */
+    onSimulatedTime: ((de.wanderlogplus.app.data.SimulatedTime?) -> Unit)? = null,
+    /** The connection in use, for "QR-Code anzeigen" in Einstellungen. */
+    currentServer: ServerSettings? = null,
     /** The app runs with the separate debug profile (own server and data). */
     debugMode: Boolean = false,
     /** Switches the profile (restarts the app); null hides the switch. */
@@ -379,6 +385,10 @@ fun AppNavigation(
                         if (s == null) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         } else {
+                            androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+                            if (simulatedTime != null && onSimulatedTime != null) {
+                                de.wanderlogplus.app.ui.more.SimulationBar(simulatedTime, onSimulatedTime)
+                            }
                             TodayScreen(
                                 s, now,
                                 onOpenDay = { nav.navigate(dayRoute(it)) },
@@ -388,6 +398,7 @@ fun AppNavigation(
                                 onOpenLink = onOpenLink,
                                 available = attachmentActions?.available ?: { true },
                             )
+                            }
                         }
                     }
                 }
@@ -817,6 +828,9 @@ fun AppNavigation(
                             onCheckUpdates = onCheckUpdates,
                             debugMode = debugMode,
                             onDebugMode = onDebugMode,
+                            server = currentServer,
+                            simulatedTime = simulatedTime,
+                            onSimulatedTime = onSimulatedTime,
                             onReloadMaps = {
                                 uiScope.launch {
                                     onReloadMapImages()
