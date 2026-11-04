@@ -29,7 +29,8 @@ android {
         rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { props.load(it) }
         fun value(env: String, prop: String): String? = System.getenv(env)?.takeIf { it.isNotBlank() } ?: props.getProperty(prop)
         val store = value("WLP_KEYSTORE_FILE", "storeFile")
-        if (store == null) null else listOf(store, value("WLP_KEYSTORE_PASSWORD", "storePassword"), value("WLP_KEY_ALIAS", "keyAlias"), value("WLP_KEY_PASSWORD", "keyPassword"))
+        // Only an existing keystore: a path from another machine (or no keystore at all) builds unsigned.
+        if (store == null || !file(store).isFile) null else listOf(store, value("WLP_KEYSTORE_PASSWORD", "storePassword"), value("WLP_KEY_ALIAS", "keyAlias"), value("WLP_KEY_PASSWORD", "keyPassword"))
     }
     signingConfigs {
         if (releaseKey != null) {
