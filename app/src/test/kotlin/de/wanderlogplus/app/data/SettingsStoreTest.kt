@@ -45,6 +45,17 @@ class SettingsStoreTest {
         assertEquals(ServerSettings("http://192.168.1.2:8080", "tok"), s.server.first())
     }
 
+    @Test fun adminTokenSetFollowsStoredToken() = runTest {
+        val s = SettingsStore(ctx)
+        assertFalse(s.adminTokenSet.first())
+        s.setAdminToken("adm")
+        assertTrue(s.adminTokenSet.first())
+        s.setAdminToken(" ")
+        assertFalse(s.adminTokenSet.first())
+        s.setAdminToken(null)
+        assertFalse(s.adminTokenSet.first())
+    }
+
     @Test fun tripZoneDefaultsToJapanAndPersists() = runTest {
         val s = SettingsStore(ctx)
         assertEquals(TripZone.JAPAN, s.tripZone.first())

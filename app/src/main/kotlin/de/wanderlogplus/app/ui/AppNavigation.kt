@@ -198,8 +198,10 @@ fun AppNavigation(
     onPendingSetupConsumed: () -> Unit = {},
     /** Reel analyses (Mehr → Reels); null hides the screens. */
     reelsViewModelFactory: ViewModelProvider.Factory? = null,
-    /** Media scan (Mehr → Scan); null hides the row. */
+    /** Media scan (Mehr → Sensitiv-Scan); null hides the row. */
     vaultScanViewModelFactory: ViewModelProvider.Factory? = null,
+    /** An admin token is stored; together with [vaultScanViewModelFactory] it shows the Sensitiv-Scan row. */
+    hasAdminToken: Boolean = false,
     /** A reel job started from the share sheet: shown once, then [onPendingReelConsumed]. */
     pendingReelJob: String? = null,
     onPendingReelConsumed: () -> Unit = {},
@@ -834,7 +836,7 @@ fun AppNavigation(
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory)
                     val snap by vm.snapshot.collectAsState()
                     SyncedScreen(syncStatus, onRefresh) {
-                        MoreScreen(snap?.conflicts?.size ?: 0, onOpen = { nav.navigate(it) }, vaultScan = vaultScanViewModelFactory != null)
+                        MoreScreen(snap?.conflicts?.size ?: 0, onOpen = { nav.navigate(it) }, vaultScan = vaultScanViewModelFactory != null && hasAdminToken)
                     }
                 }
                 if (vaultScanViewModelFactory != null) {

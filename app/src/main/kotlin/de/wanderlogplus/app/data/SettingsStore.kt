@@ -75,6 +75,9 @@ class SettingsStore(context: Context) : SyncStateStore {
     /** The admin token for "Zugänge verwalten" (per profile); never used for sync. */
     suspend fun adminToken(): String? = appContext.serverDataStore.data.first()[adminTokenKey]?.takeIf { it.isNotBlank() }
 
+    /** Whether a usable admin token is stored; shows admin-only UI such as the Sensitiv-Scan. */
+    val adminTokenSet: Flow<Boolean> = appContext.serverDataStore.data.map { p -> !p[adminTokenKey].isNullOrBlank() }
+
     suspend fun setAdminToken(token: String?) {
         appContext.serverDataStore.edit { if (token == null) it.remove(adminTokenKey) else it[adminTokenKey] = token }
     }

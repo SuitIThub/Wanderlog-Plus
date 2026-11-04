@@ -40,7 +40,7 @@ fun MoreScreen(
     conflictCount: Int,
     onOpen: (route: String) -> Unit,
     modifier: Modifier = Modifier,
-    /** Shows "Scan" (only with a vault-scan ViewModel wired in). */
+    /** Shows "Sensitiv-Scan" (only with an admin token and a wired vault-scan ViewModel). */
     vaultScan: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth().padding(16.dp).testTag("more-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -59,9 +59,9 @@ fun MoreScreen(
                 onOpen(CONFLICTS_ROUTE)
             }
         }
-        if (false) {
+        if (vaultScan) {
             SurfaceCard {
-                MoreRow("Scan", Icons.Filled.ImageSearch) { onOpen(de.wanderlogplus.app.ui.vault.VAULT_ROUTE) }
+                MoreRow("Sensitiv-Scan", Icons.Filled.ImageSearch) { onOpen(de.wanderlogplus.app.ui.vault.VAULT_ROUTE) }
             }
         }
         SurfaceCard {

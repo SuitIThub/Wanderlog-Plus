@@ -63,7 +63,7 @@ class AppNavigationSmokeTest {
 
     private var mapReloads = 0
 
-    private fun launch(hasServer: Boolean = true) {
+    private fun launch(hasServer: Boolean = true, hasAdminToken: Boolean = true) {
         val files = AttachmentFiles(tmp.newFolder("att"))
         val imported = files.importStream("not really a jpeg".byteInputStream())
         val ticket = Attachment("a-ticket", EntityType.TRAIN, "tr-1", imported.hash, "Buchung.jpg", "image/jpeg", imported.size)
@@ -73,6 +73,7 @@ class AppNavigationSmokeTest {
             WanderlogPlusTheme {
                 AppNavigation(
                     hasServer = hasServer,
+                    hasAdminToken = hasAdminToken,
                     snapshot = snapshot,
                     setupViewModelFactory = factory { SetupViewModel({ _, _ -> Result.success("a") }) { _, _ -> } },
                     tripViewModelFactory = factory { TripViewModel({ flow }, edit, scope) },
@@ -244,5 +245,11 @@ class AppNavigationSmokeTest {
         rule.waitForIdle()
         shows("vault-scan-screen")
         shows("vault-scan-start")
+    }
+
+    @Test fun vaultScanHiddenWithoutAdminToken() {
+        launch(hasAdminToken = false)
+        tab("mehr")
+        rule.onNodeWithText("Sensitiv-Scan").assertDoesNotExist()
     }
 }

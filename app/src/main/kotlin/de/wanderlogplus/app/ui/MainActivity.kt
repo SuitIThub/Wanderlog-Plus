@@ -143,6 +143,7 @@ class MainActivity : ComponentActivity() {
                 val tripZone by remember { container.settings.tripZone }.collectAsState(TripZone.JAPAN)
                 val scope = rememberCoroutineScope()
                 val remindersEnabled by remember { container.settings.remindersEnabled }.collectAsState(true)
+                val hasAdminToken by remember { container.settings.adminTokenSet }.collectAsState(false)
                 val assessConfig by remember { container.settings.assessConfig }.collectAsState(de.wanderlogplus.shared.sync.AssessConfig())
                 val debugMode = de.wanderlogplus.app.AppProfile.isDebug(this@MainActivity)
                 val simulated by remember { container.settings.simulatedTime }.collectAsState(null)
@@ -188,6 +189,7 @@ class MainActivity : ComponentActivity() {
                         reelsViewModelFactory = remember { reelsFactory(container) },
                         chatViewModelFactory = remember { chatFactory(container) },
                         vaultScanViewModelFactory = remember { vaultScanFactory(container) },
+                        hasAdminToken = hasAdminToken,
                         pendingReelJob = reelJob,
                         onPendingReelConsumed = { pendingReel.value = null },
                         hasServer = hasServer,
