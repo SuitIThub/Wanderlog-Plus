@@ -280,6 +280,29 @@ class VaultRoutesTest {
     }
 
     @Test
+    fun vaultStateReportsImageAndScanFingerprint() = app {
+        val c = jsonClient()
+        assertEquals(HttpStatusCode.Unauthorized, c.get("/vault/state").status)
+        assertEquals("""{"images":0,"latest":0,"scanUpdated":0}""", c.get("/vault/state?token=$TOKEN_A").bodyAsText())
+
+        val info: VaultImageInfo = c.uploadImage(Random(3).nextBytes(256)).body()
+        val scan: VaultScanStatus = c.postScan(VaultScanUpdate("running", 10, 5, 1)).body()
+        val body = c.get("/vault/state?token=$TOKEN_A").bodyAsText()
+        assertEquals("""{"images":1,"latest":${info.uploadedAt},"scanUpdated":${scan.updatedAt}}""", body)
+
+        // Bob has his own namespace (no images, no scan).
+        assertEquals("""{"images":0,"latest":0,"scanUpdated":0}""", c.get("/vault/state?token=$TOKEN_B").bodyAsText())
+    }
+
+    @Test
+    fun webPagePollsStateInsteadOfMetaRefresh() = app {
+        val c = jsonClient()
+        val html = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertTrue(!html.contains("http-equiv=\"refresh\""))
+        assertTrue(html.contains("/vault/state"))
+    }
+
+    @Test
     fun webPagePaginatesImages() = appWith { services ->
         val c = jsonClient()
         val total = VAULT_PAGE_SIZE + 5

@@ -159,7 +159,7 @@ private val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.
 private fun formatTime(epochMillis: Long): String =
     TIME_FORMAT.format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
 
-/** Small self-refreshing overview page (`/vault?token=…`) plus image serving for its `<img>` tags. */
+/** Overview page (`/vault?token=…`) that reloads only when its content changes, plus image serving for its `<img>` tags. */
 fun Route.vaultWeb(services: Services) {
     get("/vault/img/{id}") {
         val user = call.webUser(services)
@@ -187,6 +187,19 @@ fun Route.vaultWeb(services: Services) {
         val images = withContext(Dispatchers.IO) { services.vault.images(user) }.sortedByDescending { it.uploadedAt }
         val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
         call.respondText(vaultPage(user, token, scan, images, page), ContentType.Text.Html)
+    }
+    // Cheap change fingerprint for the overview page: it polls this instead of reloading blindly and only
+    // reloads when one of the values moved (new image, deleted image, scan progress). Numbers only.
+    get("/vault/state") {
+        val user = call.webUser(services)
+        if (user == null) {
+            call.respond(HttpStatusCode.Unauthorized, ErrorResponse("unauthorized"))
+            return@get
+        }
+        val images = withContext(Dispatchers.IO) { services.vault.images(user) }
+        val scanUpdated = withContext(Dispatchers.IO) { services.vault.scan(user)?.updatedAt ?: 0L }
+        val latest = images.maxOfOrNull { it.uploadedAt } ?: 0L
+        call.respondText("""{"images":${images.size},"latest":$latest,"scanUpdated":$scanUpdated}""", ContentType.Application.Json)
     }
 }
 
@@ -240,13 +253,14 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
         kotlinx.serialization.json.JsonPrimitive.serializer(),
         kotlinx.serialization.json.JsonPrimitive(token),
     )
+    // Fingerprint of what the page currently shows; the poll below reloads only when this changes.
+    val initialState = """{"images":${images.size},"latest":${images.maxOfOrNull { it.uploadedAt } ?: 0L},"scanUpdated":${scan?.updatedAt ?: 0L}}"""
     return """
 <!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="15">
 <title>Sensitiv-Scan</title>
 <style>
 body { font-family: system-ui, sans-serif; background: #14171c; color: #e8eaed; max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -287,6 +301,16 @@ function resumeUpload() {
   fetch('/api/vault/uploads/request', { method: 'POST', headers: { 'Authorization': 'Bearer ' + $tokenJs, 'X-Protocol-Version': '${de.wanderlogplus.shared.sync.PROTOCOL_VERSION}' } })
     .then(function () { document.getElementById('resume-state').textContent = 'Angefordert.'; });
 }
+// Statt starr neu zu laden: nur abfragen, ob sich etwas getan hat – und nur dann die Seite erneuern.
+var known = $initialState;
+setInterval(function () {
+  fetch('/vault/state?token=' + encodeURIComponent($tokenJs))
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (s) {
+      if (s && (s.images !== known.images || s.latest !== known.latest || s.scanUpdated !== known.scanUpdated)) location.reload();
+    })
+    .catch(function () { /* offline: Seite einfach so lassen */ });
+}, 15000);
 </script>
 </body>
 </html>
