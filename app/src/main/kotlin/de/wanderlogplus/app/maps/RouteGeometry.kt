@@ -99,7 +99,7 @@ internal val AIRPORTS: Map<String, LatLngD> = mapOf(
 )
 
 /** The airport of [Endpoint.code] from [AIRPORTS] (case-insensitive), or null. */
-private fun Endpoint.airportCoords(): LatLngD? = code?.trim()?.uppercase(Locale.ROOT)?.let { AIRPORTS[it] }
+internal fun Endpoint.airportCoords(): LatLngD? = code?.trim()?.uppercase(Locale.ROOT)?.let { AIRPORTS[it] }
 
 /**
  * Arc through the flight's airports: each end and stopover uses its own coordinates, its place's, or its IATA code from

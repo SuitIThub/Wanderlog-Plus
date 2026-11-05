@@ -470,7 +470,11 @@ internal fun deadlineRows(snapshot: TripSnapshot, today: String, reservationDays
         .mapIndexed { i, (s, d) ->
             DeadlineRow(d, snapshot.places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft", "Stornofrist bis ${dayLabel(d)}", "deadline-$i")
         }
-    return (res + stays).sortedBy { it.date }
+    // Check-out today (with its time when known) comes first.
+    val out = snapshot.stays.filter { it.checkOut == today }.mapIndexed { i, s ->
+        DeadlineRow(today, snapshot.places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft", de.wanderlogplus.app.ui.design.checkOutText(s) + " (heute)", "checkout-$i")
+    }
+    return out + (res + stays).sortedBy { it.date }
 }
 
 /** "Fristen": open reservations and cancellation deadlines, nearest first. */

@@ -54,6 +54,8 @@ data class StayDraft(
     val regionId: String? = null,
     val checkIn: String = "",
     val checkOut: String = "",
+    val checkInTime: String = "",
+    val checkOutTime: String = "",
     val cancellationDeadline: String = "",
     val cancellationPolicy: String = "",
     val confirmationNumber: String = "",
@@ -63,6 +65,7 @@ data class StayDraft(
 )
 
 private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+private val TIME = Regex("""([01]?\d|2[0-3]):[0-5]\d""")
 
 fun stayDraftOf(snapshot: TripSnapshot, id: String): StayDraft? {
     if (id == NEW_ID) return StayDraft()
@@ -72,6 +75,7 @@ fun stayDraftOf(snapshot: TripSnapshot, id: String): StayDraft? {
         placeId = s.placeId, name = p?.name.orEmpty(), address = p?.address.orEmpty(),
         lat = p?.lat?.takeIf { it != 0.0 }, lng = p?.lng?.takeIf { it != 0.0 },
         regionId = s.regionId, checkIn = s.checkIn, checkOut = s.checkOut,
+        checkInTime = s.checkInTime.orEmpty(), checkOutTime = s.checkOutTime.orEmpty(),
         cancellationDeadline = s.cancellationDeadline?.take(10).orEmpty(), cancellationPolicy = s.cancellationPolicy.orEmpty(),
         confirmationNumber = s.confirmationNumber.orEmpty(), adults = s.adults?.toString().orEmpty(), rooms = s.rooms?.toString().orEmpty(),
         note = s.note,
@@ -83,6 +87,7 @@ fun validateStay(d: StayDraft): String? = when {
     d.name.isBlank() -> "Die Unterkunft braucht einen Namen"
     !DATE.matches(d.checkIn.trim()) || !DATE.matches(d.checkOut.trim()) -> "Check-in und Check-out bitte als JJJJ-MM-TT"
     d.checkOut.trim() <= d.checkIn.trim() -> "Der Check-out muss nach dem Check-in liegen"
+    listOf(d.checkInTime, d.checkOutTime).any { it.isNotBlank() && !TIME.matches(it.trim()) } -> "Uhrzeiten bitte als HH:MM"
     d.cancellationDeadline.isNotBlank() && !DATE.matches(d.cancellationDeadline.trim()) -> "Stornofrist bitte als JJJJ-MM-TT"
     d.adults.isNotBlank() && d.adults.trim().toIntOrNull()?.takeIf { it in 1..20 } == null -> "Erwachsene als Zahl eintragen"
     d.rooms.isNotBlank() && d.rooms.trim().toIntOrNull()?.takeIf { it in 1..20 } == null -> "Zimmer als Zahl eintragen"
@@ -115,6 +120,8 @@ fun stayToSave(snapshot: TripSnapshot, d: StayDraft, existing: Stay?, newPlaceId
         regionId = d.regionId ?: regionNear(snapshot, d.lat, d.lng, existing?.id) ?: base.regionId,
         checkIn = d.checkIn.trim(),
         checkOut = d.checkOut.trim(),
+        checkInTime = d.checkInTime.trim().ifBlank { null }?.padStart(5, '0'),
+        checkOutTime = d.checkOutTime.trim().ifBlank { null }?.padStart(5, '0'),
         cancellationDeadline = d.cancellationDeadline.trim().ifBlank { null },
         cancellationPolicy = d.cancellationPolicy.trim().ifBlank { null },
         confirmationNumber = d.confirmationNumber.trim().ifBlank { null },
@@ -212,6 +219,10 @@ fun StayEditScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(d.checkIn, { d = d.copy(checkIn = it) }, label = { Text("Check-in (JJJJ-MM-TT)") }, singleLine = true, modifier = Modifier.weight(1f).testTag("stay-checkin"))
                 OutlinedTextField(d.checkOut, { d = d.copy(checkOut = it) }, label = { Text("Check-out") }, singleLine = true, modifier = Modifier.weight(1f).testTag("stay-checkout"))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(d.checkInTime, { d = d.copy(checkInTime = it) }, label = { Text("Check-in ab (HH:MM)") }, placeholder = { Text("15:00") }, singleLine = true, modifier = Modifier.weight(1f).testTag("stay-checkin-time"))
+                OutlinedTextField(d.checkOutTime, { d = d.copy(checkOutTime = it) }, label = { Text("Check-out bis") }, placeholder = { Text("10:00") }, singleLine = true, modifier = Modifier.weight(1f).testTag("stay-checkout-time"))
             }
 
             SectionLabel("Buchung")

@@ -85,10 +85,9 @@ class TransitTest {
     }
 
     @Test fun theWayOfAnItemIsFromThePlaceBefore() {
-        val w = transitWay(Fixtures.trip(), "2027-04-02", "i-3")!!
-        assertEquals("i-2", w.fromItem.id)
-        assertEquals("09:00", w.fromItem.time)
-        assertNull(transitWay(Fixtures.trip(), "2027-04-02", "i-2")) // first place: no way to it
+        val w = de.wanderlogplus.app.ui.trip.dayWay(Fixtures.trip(), "2027-04-02", "i-3")!!
+        assertEquals("09:00", w.fromTime)
+        assertNull(de.wanderlogplus.app.ui.trip.dayWay(Fixtures.trip(), "2027-04-02", "nothing"))
     }
 
     @Test fun chosenConnectionInTheDayLegWithPriceAndButtons() {

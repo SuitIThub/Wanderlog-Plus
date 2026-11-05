@@ -78,7 +78,7 @@ class RoutesScreenshotTest {
             }
         }
         rule.waitUntil(3_000) { rule.onAllNodesWithText("25 Min · 1,8 km").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("25 Min · 1,8 km").performClick()
+        rule.onAllNodesWithText("25 Min · 1,8 km")[0].performClick()
         rule.onRoot().recordScreenshot("routes-day-leg-dark")
     }
 }

@@ -12,6 +12,9 @@ import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.Ids
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.*
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import de.wanderlogplus.shared.model.DayLeg
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import de.wanderlogplus.shared.query.PlaceMatch
@@ -35,7 +38,7 @@ class LocalEditor(
     private val onChange: () -> Unit = {},
 ) {
     private companion object {
-        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs")
+        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs", "legs")
     }
 
     private fun isReserved(field: String) = field == "_source" || field == "_sourceId" || field.startsWith("_base.")
@@ -295,6 +298,13 @@ class LocalEditor(
             "size" to JsonPrimitive(size),
         ) + (if (kind != "file") mapOf("kind" to JsonPrimitive(kind)) else emptyMap()),
     )
+
+    /** Mode and connection of a way of [date] that ends at no program item ([DayFlow] key); null [leg] clears it. */
+    fun setDayLeg(snapshot: TripSnapshot, date: String, key: String, leg: DayLeg?) {
+        val current = snapshot.queries()?.dayFor(date)?.legs.orEmpty()
+        val next = if (leg == null) current - key else current + (key to leg)
+        setDayFields(snapshot, date, mapOf("legs" to LEG_JSON.encodeToJsonElement(MapSerializer(String.serializer(), DayLeg.serializer()), next)))
+    }
 
     fun setDayFields(snapshot: TripSnapshot, date: String, values: Map<String, JsonElement>) {
         val bad = values.keys.firstOrNull { it !in DAY_FIELDS }
@@ -727,6 +737,8 @@ sealed interface PlanOp {
         val note: String = "",
     ) : PlanOp
 }
+
+private val LEG_JSON = Json { encodeDefaults = false }
 
 /** Versions kept per day. */
 const val MAX_DAY_VERSIONS = 10
