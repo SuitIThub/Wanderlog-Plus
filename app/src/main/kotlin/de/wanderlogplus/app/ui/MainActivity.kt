@@ -183,6 +183,7 @@ class MainActivity : ComponentActivity() {
                     onPauseOrDispose { }
                 }
                 val tripWeather by container.weather.weather.collectAsState()
+                val flightLive: suspend (String) -> de.wanderlogplus.shared.sync.FlightLive? = remember { { id -> container.syncApi()?.flightLive(id) } }
                 // The repository asks the server only when its weather is older than 3 hours.
                 LaunchedEffect(hasServer) {
                     if (hasServer == true) while (true) {
@@ -194,6 +195,7 @@ class MainActivity : ComponentActivity() {
                     LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs,
                     de.wanderlogplus.app.ui.weather.LocalTripWeather provides tripWeather,
                     de.wanderlogplus.app.ui.places.LocalPlacePhotos provides container.placePhotos,
+                    de.wanderlogplus.app.ui.logistics.LocalFlightLive provides flightLive,
                 ) {
                     AppNavigation(
                         pendingSetup = pending,

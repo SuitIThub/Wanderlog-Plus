@@ -131,14 +131,7 @@ fun LogisticsDetailScreen(
             SectionLabel("Details", color = view.accent)
             InfoCard {
                 view.details.forEach { (label, value) -> DetailRow(label, value) }
-                if (view.liveStatus) {
-                    Text(
-                        "Live-Status: –",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp).testTag("live-status"),
-                    )
-                }
+                if (view.liveStatus && type == EntityType.FLIGHT) FlightLiveCard(id)
             }
 
             SectionLabel("Notiz", color = view.accent)

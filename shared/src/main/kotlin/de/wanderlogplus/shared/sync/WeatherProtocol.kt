@@ -137,3 +137,31 @@ data class PlacePhoto(val name: String, val width: Int = 0, val height: Int = 0,
 
 @Serializable
 data class PlacePhotos(val photos: List<PlacePhoto> = emptyList())
+
+/**
+ * `GET /api/live/flight/{id}`: the live status of a flight (AirLabs). [available] false with [reason] when there is
+ * nothing yet (too early, unknown flight number, other day). Times are local "yyyy-MM-dd HH:mm" at the airport.
+ */
+@Serializable
+data class FlightLive(
+    val available: Boolean = false,
+    val reason: String? = null,
+    /** scheduled, active, en-route, landed, cancelled, diverted, incident. */
+    val status: String? = null,
+    val depScheduled: String? = null,
+    val depEstimated: String? = null,
+    val depActual: String? = null,
+    val depTerminal: String? = null,
+    val depGate: String? = null,
+    val depDelayMinutes: Int? = null,
+    val arrScheduled: String? = null,
+    val arrEstimated: String? = null,
+    val arrActual: String? = null,
+    val arrTerminal: String? = null,
+    val arrGate: String? = null,
+    val arrBaggage: String? = null,
+    val arrDelayMinutes: Int? = null,
+    /** When AirLabs last had news (epoch ms) and when the server asked (epoch ms). */
+    val updatedAt: Long? = null,
+    val fetchedAt: Long = 0,
+)
