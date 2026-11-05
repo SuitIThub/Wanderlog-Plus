@@ -328,7 +328,7 @@ fun AppNavigation(
                 onAddNote = vm::addNote,
                 failureCount = dayFailures,
                 onShowLegs = vm::setShowLegs,
-                onLegMode = vm::setLegMode,
+                onLegMode = { key, mode -> vm.setLegMode(date, key, mode) },
                 onOpenLink = onOpenLink,
                 onAddSuggestionAt = vm::addSuggestionAt,
                 onAddNoteAt = vm::addNoteAt,
@@ -570,7 +570,7 @@ fun AppNavigation(
                     val api = transitApi
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         val s = snap
-                        val way = s?.let { de.wanderlogplus.app.ui.transit.transitWay(it, date, itemId) }
+                        val way = s?.let { de.wanderlogplus.app.ui.trip.dayWay(it, date, itemId) }?.takeIf { it.from != null && it.to != null }
                         if (way == null || api == null) {
                             EmptyHint("Für diesen Weg fehlt eine Kartenposition.", Modifier.padding(24.dp))
                         } else {
@@ -580,20 +580,25 @@ fun AppNavigation(
                                     object : androidx.lifecycle.ViewModelProvider.Factory {
                                         @Suppress("UNCHECKED_CAST")
                                         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
-                                            de.wanderlogplus.app.ui.transit.TransitViewModel(api, way.from, way.to, date, way.fromItem.time, way.toItem.legTransit) as T
+                                            de.wanderlogplus.app.ui.transit.TransitViewModel(
+                                                api,
+                                                de.wanderlogplus.shared.sync.TransitPoint(way.from!!.lat, way.from.lng, way.fromName),
+                                                de.wanderlogplus.shared.sync.TransitPoint(way.to!!.lat, way.to.lng, way.toName),
+                                                date, way.fromTime, way.chosen,
+                                            ) as T
                                     }
                                 },
                             )
                             val state by tvm.state.collectAsState()
                             de.wanderlogplus.app.ui.transit.TransitScreen(
-                                title = "${way.from.name} → ${way.to.name}",
+                                title = "${way.fromName} → ${way.toName}",
                                 state = state,
                                 accent = MaterialTheme.colorScheme.primary,
-                                chosen = way.toItem.legTransit,
+                                chosen = way.chosen,
                                 onEdit = tvm::edit,
                                 onSearch = tvm::search,
-                                onChoose = { r -> vm.setLegTransit(itemId, r); nav.popBackStack() },
-                                onClear = { vm.setLegTransit(itemId, null) },
+                                onChoose = { r -> vm.setLegTransit(date, itemId, r); nav.popBackStack() },
+                                onClear = { vm.setLegTransit(date, itemId, null) },
                                 onBack = { nav.popBackStack() },
                             )
                         }

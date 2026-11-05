@@ -2,6 +2,9 @@ package de.wanderlogplus.app.ui.trip
 
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -254,7 +257,7 @@ class StayInProgramUiTest {
                 DayDetailScreen(snap, "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {})
             }
         }
-        rule.onNodeWithText("Unterkunft", substring = true).assertExists()
+        rule.onNode(hasText("Unterkunft", substring = true) and hasAnyAncestor(hasTestTag("program-row-i-h")), useUnmergedTree = true).assertExists()
     }
 }
 

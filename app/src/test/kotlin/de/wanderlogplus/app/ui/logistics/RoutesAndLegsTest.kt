@@ -3,6 +3,9 @@ package de.wanderlogplus.app.ui.logistics
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -148,11 +151,12 @@ class RoutesAndLegsTest {
             }
         }
         rule.onNodeWithTag("legs-toggle").assertIsDisplayed()
-        // Note i-1 comes first: the only leg leads from the temple (i-2) to the noodle shop (i-3).
+        // Note i-1 comes first: the ways lead from the hotel to the temple (i-2), on to the noodle shop (i-3) and back.
         rule.onNodeWithTag("leg-i-3").assertExists()
-        assertEquals(0, rule.onAllNodesWithTag("leg-i-2").fetchSemanticsNodes().size)
-        rule.waitUntil(3_000) { rule.onAllNodesWithText("25 Min · 1,8 km").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("25 Min · 1,8 km").performClick()
+        rule.onNodeWithTag("leg-i-2").assertExists()
+        rule.onNodeWithTag("leg-night").assertExists()
+        rule.waitUntil(3_000) { rule.onAllNodes(hasText("25 Min · 1,8 km") and hasAnyAncestor(hasTestTag("leg-i-3"))).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(hasText("25 Min · 1,8 km") and hasAnyAncestor(hasTestTag("leg-i-3"))).performClick()
         rule.onNodeWithTag("leg-map").assertExists()
         rule.onNodeWithTag("leg-mode-TRANSIT").performClick()
         assertEquals("i-3" to TravelMode.TRANSIT, mode)

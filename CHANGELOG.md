@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.38.0
+
+- **Tagesablauf von Unterkunft zu Unterkunft:** Der Tag beginnt bei der Unterkunft der letzten Nacht und endet bei der Unterkunft der Nacht. Mit „Wege“ gibt es einen einstellbaren Weg zum ersten Programmpunkt und vom letzten zurück, mit Verkehrsmittel und „Verbindung abfragen“.
+- **Fahrten an ihrer Uhrzeit:** Züge und Flüge stehen im Ablauf zwischen den Programmpunkten, mit Weg zum Abfahrtsbahnhof und vom Zielbahnhof weiter. Was zur Region der alten Unterkunft gehört, steht vor der Fahrt, was zur neuen gehört, danach; ohne Region entscheiden Uhrzeit und Lage.
+- **Check-in und Check-out:** Unterkünfte haben „Check-in ab“ und „Check-out bis“. Der Abreisetag beginnt mit „Check-out bis 10:00“. Am Anreisetag steht „Check-in ab 15:00“ an der Unterkunft im Programm, sonst vor der Nacht, und „erst ab“, wenn sie früher geplant ist. Der Check-out steht auch unter „Fristen“ auf der Heute-Seite.
+- **Warnung:** Reicht ein Weg zum Bahnhof nicht bis zur Abfahrt, sagt die Wege-Zeile das.
+
 ## 0.37.0
 
 - **Chat-Umplanung räumt auf:** Ein neuer Tagesplan aus dem Chat ersetzt den ganzen Tag. Orte, die er weglässt, stehen auf der Plan-Karte als „Entfällt“ (abwählbar), statt still stehen zu bleiben. Notizen bleiben.

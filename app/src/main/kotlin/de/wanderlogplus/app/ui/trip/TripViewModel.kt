@@ -125,13 +125,24 @@ class TripViewModel(
 
     fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
 
-    fun setLegMode(itemId: String, mode: TravelMode) =
-        write { e, _ -> e.set(EntityType.DAY_ITEM, itemId, mapOf("legMode" to JsonPrimitive(mode.name))) }
+    /** Mode of the way [key] of [date]: a program item's id, or a way to a departure or to the night's stay. */
+    fun setLegMode(date: String, key: String, mode: TravelMode) = write { e, s ->
+        if (de.wanderlogplus.shared.query.DayFlow.isDayLegKey(key)) {
+            val old = s.queries()?.dayFor(date)?.legs?.get(key)
+            e.setDayLeg(s, date, key, de.wanderlogplus.shared.model.DayLeg(mode, old?.transit?.takeIf { mode == TravelMode.TRANSIT }))
+        } else {
+            e.set(EntityType.DAY_ITEM, key, mapOf("legMode" to JsonPrimitive(mode.name)))
+        }
+    }
 
-    /** Takes a public-transport connection over for the way to [itemId] (mode becomes ÖPNV); null: found automatically again. */
-    fun setLegTransit(itemId: String, connection: de.wanderlogplus.shared.sync.TransitResult?) = write { e, _ ->
+    /** Takes a public-transport connection over for the way [key] (mode becomes ÖPNV); null: found automatically again. */
+    fun setLegTransit(date: String, key: String, connection: de.wanderlogplus.shared.sync.TransitResult?) = write { e, s ->
+        if (de.wanderlogplus.shared.query.DayFlow.isDayLegKey(key)) {
+            e.setDayLeg(s, date, key, de.wanderlogplus.shared.model.DayLeg(TravelMode.TRANSIT, connection))
+            return@write
+        }
         val value = connection?.let { TRANSIT_JSON.encodeToJsonElement(de.wanderlogplus.shared.sync.TransitResult.serializer(), it) } ?: kotlinx.serialization.json.JsonNull
-        e.set(EntityType.DAY_ITEM, itemId, mapOf("legTransit" to value, "legMode" to JsonPrimitive(TravelMode.TRANSIT.name)))
+        e.set(EntityType.DAY_ITEM, key, mapOf("legTransit" to value, "legMode" to JsonPrimitive(TravelMode.TRANSIT.name)))
     }
 }
 

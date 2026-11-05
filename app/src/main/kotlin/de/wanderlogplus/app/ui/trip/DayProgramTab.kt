@@ -60,14 +60,15 @@ internal fun DayProgramTab(
     attachments: AttachmentActions?,
     showLegs: Boolean = false,
     onShowLegs: ((Boolean) -> Unit)? = null,
-    onLegMode: (itemId: String, mode: TravelMode) -> Unit = { _, _ -> },
+    /** Mode of a way: its key is the program item it leads to, or a way to a departure or to the night's stay. */
+    onLegMode: (key: String, mode: TravelMode) -> Unit = { _, _ -> },
     onOpenLink: ((ExternalLink) -> Unit)? = null,
     /** Opens "Hinzufügen" for a position between items; null hides the ＋ elements. */
     onInsert: ((ItemPosition) -> Unit)? = null,
     /** Opens the full map of the day's route; null hides the button. */
     onOpenMap: (() -> Unit)? = null,
-    /** Opens "Verbindung abfragen" for the way to this item; null hides the button. */
-    onTransitDetails: ((itemId: String) -> Unit)? = null,
+    /** Opens "Verbindung abfragen" for a way (by its key); null hides the button. */
+    onTransitDetails: ((key: String) -> Unit)? = null,
     /** Opens the detail of a program place; null: places are not tappable. */
     onOpenPlace: ((placeId: String) -> Unit)? = null,
     /** Saved versions of the program ("Verlauf"); empty hides the button. */
@@ -95,7 +96,8 @@ internal fun DayProgramTab(
             de.wanderlogplus.app.ui.design.LinkRow(emptyList(), links, onOpenLink, onSetLinks, Modifier.padding(bottom = 4.dp))
         }
         val places = items.count { it.kind == DayItemKind.PLACE }
-        val legsSwitch = onShowLegs != null && places >= 2
+        val flow = remember(snapshot, date, items, movements, stay) { dayFlowFor(snapshot, date) }
+        val legsSwitch = onShowLegs != null && flow.legs.isNotEmpty()
         val mapButton = onOpenMap != null && places >= 1
         val historyButton = onRestoreVersion != null && history.isNotEmpty()
         if (legsSwitch || mapButton || historyButton) {
@@ -124,10 +126,8 @@ internal fun DayProgramTab(
         }
         DayTimeline(
             snapshot = snapshot,
-            date = date,
             items = items,
-            movements = movements,
-            stay = stay,
+            flow = flow,
             accent = accent,
             onOpenItem = onOpenPlace?.let { open -> { item: DayItem -> item.placeId?.takeIf { item.kind == DayItemKind.PLACE }?.let(open) } },
             onOpenAttachment = { a -> attachments?.onOpen?.invoke(a) },
@@ -142,18 +142,21 @@ internal fun DayProgramTab(
                 EmptyHint("Noch nichts geplant – füge Orte aus den Vorschlägen hinzu.", Modifier.testTag("program-empty"))
             },
             insertSlot = onInsert?.let { insert -> { pos -> InsertButton(pos.encode(), onClick = { insert(pos) }) } },
-            legs = if (!showLegs) null else { from, to ->
+            legs = if (!showLegs) null else { leg ->
+                val way = remember(snapshot, date, flow, leg) { dayWay(snapshot, date, flow, leg) }
                 LegRow(
-                    tag = to.id,
-                    from = placeCoords(snapshot, from),
-                    to = placeCoords(snapshot, to),
-                    mode = to.legMode ?: TravelMode.WALK,
-                    onMode = { m -> onLegMode(to.id, m) },
+                    tag = way.key,
+                    from = way.from,
+                    to = way.to,
+                    mode = way.mode,
+                    onMode = { m -> onLegMode(way.key, m) },
                     accent = accent,
                     onOpenLink = onOpenLink,
-                    datetime = de.wanderlogplus.app.ui.transit.transitDateTime(date, from.time),
-                    chosen = to.legTransit,
-                    onTransitDetails = onTransitDetails?.let { open -> { open(to.id) } },
+                    datetime = de.wanderlogplus.app.ui.transit.transitDateTime(date, way.fromTime),
+                    chosen = way.chosen,
+                    onTransitDetails = onTransitDetails?.let { open -> { open(way.key) } },
+                    startTime = way.fromTime,
+                    deadline = way.deadline,
                 )
             },
             modifier = Modifier.testTag("program-list"),

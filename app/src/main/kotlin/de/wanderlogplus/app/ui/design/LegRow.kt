@@ -133,6 +133,9 @@ fun LegRow(
     chosen: de.wanderlogplus.shared.sync.TransitResult? = null,
     /** Opens "Verbindung abfragen" for this way; null hides the button. */
     onTransitDetails: (() -> Unit)? = null,
+    /** Planned start ("HH:mm") and the departure the way leads to: warns when it does not reach it. */
+    startTime: String? = null,
+    deadline: String? = null,
 ) {
     var expanded by rememberSaveable(tag) { mutableStateOf(false) }
     if (from == null || to == null) {
@@ -160,7 +163,12 @@ fun LegRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Icon(modeIcon(mode), contentDescription = modeLabel(mode), tint = accent, modifier = Modifier.size(20.dp))
-                Text(legSummary(result, mode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).testTag("leg-summary"))
+                Column(Modifier.weight(1f)) {
+                    Text(legSummary(result, mode), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("leg-summary"))
+                    de.wanderlogplus.app.ui.trip.deadlineWarning(startTime, (result as? LegResult.Route)?.durationSeconds, deadline)?.let {
+                        Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("leg-deadline"))
+                    }
+                }
                 if (mode == TravelMode.TRANSIT && onTransitDetails != null) {
                     androidx.compose.material3.IconButton(onClick = onTransitDetails, modifier = Modifier.size(36.dp).testTag("leg-transit-open")) {
                         Icon(Icons.Filled.Search, contentDescription = "Verbindung abfragen", modifier = Modifier.size(20.dp))

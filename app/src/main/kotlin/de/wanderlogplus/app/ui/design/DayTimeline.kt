@@ -39,6 +39,10 @@ import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.query.Movement
+import de.wanderlogplus.shared.query.DayFlow
+import de.wanderlogplus.shared.query.DayFlowView
+import de.wanderlogplus.shared.query.FlowEntry
+import de.wanderlogplus.shared.query.FlowLeg
 import de.wanderlogplus.shared.query.isOpenAt
 import de.wanderlogplus.shared.sync.EntityType
 import java.time.LocalDate
@@ -50,23 +54,20 @@ private val HH_MM = DateTimeFormatter.ofPattern("HH:mm")
 private val TextCardShape = RoundedCornerShape(18.dp)
 
 /**
- * Timeline of one day: [movements] first (marker = departure time, route map, ticket chips tagged `ticket-<id>`),
- * then the program [items] (marker = 1-based number; places as large photo cards with an "offen" badge when open at
- * [now], notes as text cards), finally the [stay] as "Nacht" – except on its check-out day ([date]), when nobody
- * sleeps there any more. Without items [emptyProgram] stands in for the program. [movements] are shown in the given
- * order; pass them time-sorted (shared `movementsOn`).
+ * Timeline of one day as its [flow]: last night's stay ("Start", with the check-out on its day), the program [items]
+ * (marker = 1-based number; places as large photo cards with an "offen" badge when open at [now], notes as text
+ * cards) and the day's rides at their place in it (marker = departure time, route map, ticket chips tagged
+ * `ticket-<id>`), finally tonight's stay ("Nacht", with the check-in on its day). [legs] draws the way to an entry above
+ * it. Without items [emptyProgram] stands in for the program.
  *
- * Tags: `<moveTagPrefix><i>`, `<itemTagPrefix><item id>`, `timeline-night`. [itemActions] (e.g. a ⋮ menu) is shown at the
- * end of every program card.
+ * Tags: `<moveTagPrefix><i>`, `<itemTagPrefix><item id>`, `timeline-start`, `timeline-night`. [itemActions] (e.g. a ⋮
+ * menu) is shown at the end of every program card.
  */
 @Composable
 fun DayTimeline(
     snapshot: TripSnapshot,
-    /** The day shown ("yyyy-MM-dd"); decides whether the [stay] still counts as tonight's. */
-    date: String,
     items: List<DayItem>,
-    movements: List<Movement>,
-    stay: Stay?,
+    flow: DayFlowView,
     accent: Color,
     /** Null makes the program cards non-clickable. */
     onOpenItem: ((DayItem) -> Unit)?,
@@ -78,76 +79,115 @@ fun DayTimeline(
     moveTagPrefix: String = "movement-",
     itemActions: (@Composable (DayItem) -> Unit)? = null,
     emptyProgram: (@Composable () -> Unit)? = null,
-    /** The way to a place from the previous place of the program (notes in between are skipped); null shows none. */
-    legs: (@Composable (from: DayItem, to: DayItem) -> Unit)? = null,
+    /** The way to an entry of the [flow], shown above it; null shows none. */
+    legs: (@Composable (FlowLeg) -> Unit)? = null,
     /** A small "insert here" element above the first program item and below every item; null shows none. */
     insertSlot: (@Composable (ItemPosition) -> Unit)? = null,
 ) {
     val dow = now?.let { it.dayOfWeek.value % 7 } // 0 = Sunday
     val time = now?.format(HH_MM)
+    fun stayName(st: Stay) = snapshot.places[st.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft"
+    var rides = 0
+    val shown = flow.entries.mapNotNull { (it as? FlowEntry.Item)?.item?.id }
+    val emptyFirst = items.isEmpty() && emptyProgram != null
     Timeline(modifier, accent = accent) {
-        movements.forEachIndexed { i, m ->
-            item(m.time?.takeIf { it.isNotBlank() } ?: "Fahrt", key = "move-$i") {
-                MoveCard(snapshot, m, accent, onOpenAttachment, available, Modifier.testTag("$moveTagPrefix$i"))
+        flow.entries.forEachIndexed { idx, entry ->
+            val leg: @Composable () -> Unit = { flow.legTo(idx)?.let { l -> legs?.invoke(l) } }
+            // Without a program the hint stands after the start (or first), before rides and the night.
+            if (emptyFirst && idx == (if (flow.entries.first() is FlowEntry.Start) 1 else 0)) {
+                item("Programm", key = "empty") { emptyProgram!!() }
             }
-        }
-        if (items.isEmpty() && emptyProgram != null) {
-            item("Programm", key = "empty") { emptyProgram() }
-        }
-        items.forEachIndexed { i, item ->
-            item((i + 1).toString(), key = "item-${item.id}") {
-              Column {
-                if (i == 0) insertSlot?.invoke(ItemPosition.Start)
-                val tag = Modifier.testTag(itemTagPrefix + item.id)
-                val actions: (@Composable () -> Unit)? = itemActions?.let { a -> { a(item) } }
-                when (item.kind) {
-                    DayItemKind.PLACE -> Column {
-                        val prevPlace = if (legs == null) null else items.subList(0, i).lastOrNull { it.kind == DayItemKind.PLACE }
-                        if (legs != null && prevPlace != null) legs(prevPlace, item)
-                        val place = item.placeId?.let { snapshot.places[it] }
-                        val saved = snapshot.savedPlaces.firstOrNull { it.placeId == item.placeId }
-                        val isStay = item.placeId != null && snapshot.stays.any { it.placeId == item.placeId }
-                        val open = dow != null && time != null && place != null && isOpenAt(place.openingPeriods, dow, time) == true
-                        PhotoCard(
-                            title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
-                            subtitle = listOfNotNull(
-                                item.time?.takeIf { it.isNotBlank() },
-                                if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
-                                place?.rating?.let { ratingLabel(it) },
-                            ).joinToString(" · "),
-                            imageUrl = place?.heroImageUrl(),
-                            placeholderSymbol = if (isStay) "🏨" else categorySymbol(saved?.category),
-                            accent = accent,
-                            style = PhotoCardStyle.Large,
-                            badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
-                            onClick = onOpenItem?.let { open -> { open(item) } },
-                            trailing = actions,
-                            modifier = tag,
-                        )
-                    }
-                    DayItemKind.NOTE -> TextCard(
-                        title = item.text.ifBlank { "Notiz" },
-                        subtitle = item.time?.takeIf { it.isNotBlank() },
-                        onClick = onOpenItem?.let { open -> { open(item) } },
-                        trailing = actions,
-                        modifier = tag,
+            when (entry) {
+                is FlowEntry.Start -> item("Start", key = "start") {
+                    TextCard(
+                        title = stayName(entry.stay),
+                        subtitle = if (entry.checkOut) checkOutText(entry.stay) else "Unterkunft",
+                        titleMaxLines = 2,
+                        modifier = Modifier.testTag("timeline-start"),
                     )
                 }
-                insertSlot?.invoke(ItemPosition.After(item.id))
-              }
+                is FlowEntry.Ride -> {
+                    val i = rides++
+                    item(entry.movement.time?.takeIf { it.isNotBlank() } ?: "Fahrt", key = "move-$i") {
+                        Column {
+                            leg()
+                            MoveCard(snapshot, entry.movement, accent, onOpenAttachment, available, Modifier.testTag("$moveTagPrefix$i"))
+                        }
+                    }
+                }
+                is FlowEntry.Item -> {
+                    val item = entry.item
+                    // Numbered as shown: the flow may put a program item on the other side of a ride.
+                    val i = shown.indexOf(item.id)
+                    item((i + 1).toString(), key = "item-${item.id}") {
+                        Column {
+                            if (i == 0) insertSlot?.invoke(ItemPosition.Start)
+                            val tag = Modifier.testTag(itemTagPrefix + item.id)
+                            val actions: (@Composable () -> Unit)? = itemActions?.let { a -> { a(item) } }
+                            when (item.kind) {
+                                DayItemKind.PLACE -> Column {
+                                    leg()
+                                    val place = item.placeId?.let { snapshot.places[it] }
+                                    val saved = snapshot.savedPlaces.firstOrNull { it.placeId == item.placeId }
+                                    val isStay = item.placeId != null && snapshot.stays.any { it.placeId == item.placeId }
+                                    val open = dow != null && time != null && place != null && isOpenAt(place.openingPeriods, dow, time) == true
+                                    PhotoCard(
+                                        title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
+                                        subtitle = listOfNotNull(
+                                            item.time?.takeIf { it.isNotBlank() },
+                                            if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
+                                            entry.checkIn?.let { checkInText(it, item.time) },
+                                            place?.rating?.let { ratingLabel(it) },
+                                        ).joinToString(" · "),
+                                        imageUrl = place?.heroImageUrl(),
+                                        placeholderSymbol = if (isStay) "🏨" else categorySymbol(saved?.category),
+                                        accent = accent,
+                                        style = PhotoCardStyle.Large,
+                                        badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
+                                        onClick = onOpenItem?.let { open -> { open(item) } },
+                                        trailing = actions,
+                                        modifier = tag,
+                                    )
+                                }
+                                DayItemKind.NOTE -> TextCard(
+                                    title = item.text.ifBlank { "Notiz" },
+                                    subtitle = item.time?.takeIf { it.isNotBlank() },
+                                    onClick = onOpenItem?.let { open -> { open(item) } },
+                                    trailing = actions,
+                                    modifier = tag,
+                                )
+                            }
+                            insertSlot?.invoke(ItemPosition.After(item.id))
+                        }
+                    }
+                }
+                is FlowEntry.Night -> item("Nacht", key = "night") {
+                    Column {
+                        leg()
+                        TextCard(
+                            title = stayName(entry.stay),
+                            subtitle = if (entry.checkIn) checkInText(entry.stay, null) + " · Übernachtung" else "Übernachtung",
+                            titleMaxLines = 2,
+                            modifier = Modifier.testTag("timeline-night"),
+                        )
+                    }
+                }
             }
         }
-        if (stay != null && stay.checkOut != date) {
-            item("Nacht", key = "night") {
-                TextCard(
-                    title = snapshot.places[stay.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft",
-                    subtitle = "Übernachtung",
-                    titleMaxLines = 2,
-                    modifier = Modifier.testTag("timeline-night"),
-                )
-            }
+        if (emptyFirst && flow.entries.size <= (if (flow.entries.firstOrNull() is FlowEntry.Start) 1 else 0)) {
+            item("Programm", key = "empty") { emptyProgram!!() }
         }
     }
+}
+
+/** "Check-out bis 10:00", or just "Check-out". */
+fun checkOutText(stay: Stay): String = stay.checkOutTime?.takeIf { it.isNotBlank() }?.let { "Check-out bis $it" } ?: "Check-out"
+
+/** "Check-in ab 15:00" ("Check-in erst ab 15:00" when [planned] is earlier), or just "Check-in". */
+fun checkInText(stay: Stay, planned: String?): String {
+    val from = stay.checkInTime?.takeIf { it.isNotBlank() } ?: return "Check-in"
+    val early = DayFlow.mins(planned)?.let { p -> DayFlow.mins(from)?.let { p < it } } == true
+    return if (early) "Check-in erst ab $from" else "Check-in ab $from"
 }
 
 /** "Nara → Kyoto": endpoint names, falling back to codes. */

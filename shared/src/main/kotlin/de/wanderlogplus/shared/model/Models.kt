@@ -104,6 +104,9 @@ data class Stay(
     val headerImage: String? = null,
     /** Own links shown as buttons on the page (tickets, booking, info). */
     val links: List<CustomLink> = emptyList(),
+    /** "HH:mm" from which one can check in, and until which one has to check out; null: unknown. */
+    val checkInTime: String? = null,
+    val checkOutTime: String? = null,
 )
 
 @Serializable
@@ -175,6 +178,15 @@ data class Day(
     val history: List<DayVersion> = emptyList(),
     /** Own links shown as buttons on the page (tickets, booking, info). */
     val links: List<CustomLink> = emptyList(),
+    /** Ways of the day that end at no program item: "ride:<TYPE>:<id>" (to a departure) and "night" (to the stay). */
+    val legs: Map<String, DayLeg> = emptyMap(),
+)
+
+/** How a way of the day is travelled; [transit] is a connection picked in "Verbindung abfragen". */
+@Serializable
+data class DayLeg(
+    val mode: de.wanderlogplus.shared.sync.TravelMode? = null,
+    val transit: de.wanderlogplus.shared.sync.TransitResult? = null,
 )
 
 /** A saved state of a day's program: which items, in which order, at which times. */
