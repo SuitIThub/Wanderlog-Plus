@@ -118,3 +118,17 @@ fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? {
     val to = train.arrive.coords(snapshot) ?: return null
     return RouteGeometry(listOf(from) + train.via.mapNotNull { it.coords(snapshot) } + listOf(to), arc = false)
 }
+
+/** One line through all legs of a journey (flight arcs and train lines joined); null when no leg has coordinates. */
+fun routeFor(journey: de.wanderlogplus.client.Journey, snapshot: TripSnapshot): RouteGeometry? {
+    val parts = journey.legs.mapNotNull { l ->
+        when (val m = l.movement) {
+            is de.wanderlogplus.shared.query.Movement.FlightMove -> routeFor(m.flight, snapshot)
+            is de.wanderlogplus.shared.query.Movement.TrainMove -> routeFor(m.train, snapshot)
+        }
+    }
+    if (parts.isEmpty()) return null
+    val stops = parts.flatMap { it.stops }.fold(mutableListOf<LatLngD>()) { acc, p -> if (acc.lastOrNull() != p) acc += p; acc }
+    if (stops.size < 2) return null
+    return RouteGeometry(stops, arc = false, path = parts.flatMap { it.points() })
+}

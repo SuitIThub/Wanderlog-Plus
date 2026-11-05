@@ -356,6 +356,7 @@ private fun JourneyCard(snapshot: TripSnapshot, j: de.wanderlogplus.client.Journ
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
+        RouteMap(remember(snapshot, j) { de.wanderlogplus.app.maps.routeFor(j, snapshot) }, accent, height = 100.dp)
         Column(Modifier.padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
                 "${j.first.depart.name.ifBlank { j.first.depart.code ?: "?" }} → ${j.last.arrive.name.ifBlank { j.last.arrive.code ?: "?" }}",

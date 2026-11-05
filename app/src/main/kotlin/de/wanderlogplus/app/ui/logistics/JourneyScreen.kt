@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Train
@@ -104,6 +106,8 @@ fun JourneyScreen(
     onDissolve: (String) -> Unit,
     modifier: Modifier = Modifier,
     onOpenAttachment: (Attachment) -> Unit = {},
+    /** Moves the leg at an index one up or down; null hides the arrows. */
+    onMoveLeg: ((index: Int, up: Boolean) -> Unit)? = null,
 ) {
     val journey = remember(snapshot, journeyId) { journeys(snapshot).firstOrNull { it.id == journeyId } }
     val accent = MaterialTheme.colorScheme.primary
@@ -131,7 +135,10 @@ fun JourneyScreen(
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             InsertSlot(0) { adding = 0 }
             journey.legs.forEachIndexed { i, leg ->
-                LegCard(snapshot, leg, i, journey.legs.size, onOpen = { onOpenLeg(leg.type, leg.id) }, onLeave = { onLeave(leg.type, leg.id) }, onOpenAttachment = onOpenAttachment)
+                LegCard(
+                    snapshot, leg, i, journey.legs.size, onOpen = { onOpenLeg(leg.type, leg.id) }, onLeave = { onLeave(leg.type, leg.id) },
+                    onOpenAttachment = onOpenAttachment, onMove = onMoveLeg?.let { move -> { up: Boolean -> move(i, up) } },
+                )
                 if (i < journey.legs.lastIndex) {
                     TransferBlock(snapshot, leg, journey.legs[i + 1], i)
                     InsertSlot(i + 1) { adding = i + 1 }
@@ -203,6 +210,7 @@ private fun LegCard(
     onOpen: () -> Unit,
     onLeave: () -> Unit,
     onOpenAttachment: (Attachment) -> Unit,
+    onMove: ((up: Boolean) -> Unit)?,
 ) {
     Card(
         onClick = onOpen,
@@ -239,7 +247,16 @@ private fun LegCard(
                     tickets.take(3).forEach { a -> TextButton(onClick = { onOpenAttachment(a) }) { Text("🎟 " + a.fileName, maxLines = 1) } }
                 }
             }
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                if (onMove != null) {
+                    androidx.compose.material3.IconButton(onClick = { onMove(true) }, enabled = index > 0, modifier = Modifier.testTag("journey-leg-$index-up")) {
+                        Icon(androidx.compose.material.icons.Icons.Filled.ArrowUpward, contentDescription = "Nach oben")
+                    }
+                    androidx.compose.material3.IconButton(onClick = { onMove(false) }, enabled = index < count - 1, modifier = Modifier.testTag("journey-leg-$index-down")) {
+                        Icon(androidx.compose.material.icons.Icons.Filled.ArrowDownward, contentDescription = "Nach unten")
+                    }
+                }
+                Spacer(Modifier.weight(1f))
                 TextButton(onClick = onLeave, modifier = Modifier.testTag("journey-leg-$index-leave")) { Text("Aus Reise entfernen") }
             }
         }

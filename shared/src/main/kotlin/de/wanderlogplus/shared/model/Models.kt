@@ -135,6 +135,8 @@ data class Flight(
     val links: List<CustomLink> = emptyList(),
     /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
     val journeyId: String? = null,
+    /** Position in its journey when sorted by hand; null: by departure time. */
+    val journeyOrder: Int? = null,
 )
 
 @Serializable
@@ -156,6 +158,8 @@ data class Train(
     val links: List<CustomLink> = emptyList(),
     /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
     val journeyId: String? = null,
+    /** Position in its journey when sorted by hand; null: by departure time. */
+    val journeyOrder: Int? = null,
 )
 
 @Serializable

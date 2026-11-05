@@ -92,7 +92,17 @@ private fun Movement.journeyId(): String? = when (this) {
     is Movement.TrainMove -> train.journeyId
 }
 
-private val legOrder: Comparator<JourneyLeg> = compareBy<JourneyLeg> { it.departs?.toString() ?: it.depart.date ?: "9999" }.thenBy { it.id }
+private fun Movement.journeyOrder(): Int? = when (this) {
+    is Movement.FlightMove -> flight.journeyOrder
+    is Movement.TrainMove -> train.journeyOrder
+}
+
+/** A hand-made order first (legs without one after them), else by departure. */
+private val legOrder: Comparator<JourneyLeg> = compareBy<JourneyLeg> { it.movement.journeyOrder() ?: Int.MAX_VALUE }
+    .thenBy { it.departs?.toString() ?: it.depart.date ?: "9999" }.thenBy { it.id }
+
+/** Whether the legs of [j] were sorted by hand. */
+fun hasManualOrder(j: Journey): Boolean = j.legs.any { it.movement.journeyOrder() != null }
 
 /** Every journey of the trip (only ids with at least two legs), by first departure. */
 fun journeys(snapshot: TripSnapshot): List<Journey> =

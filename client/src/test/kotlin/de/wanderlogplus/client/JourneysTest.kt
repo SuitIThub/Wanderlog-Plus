@@ -96,4 +96,24 @@ class JourneysTest {
         assertEquals("LH", second.airlineCode)
         assertNull(second.number)
     }
+
+    @Test fun legsCanBeSortedByHandAndNewLegsGoWhereTheyWereInserted() {
+        val f = fx()
+        val jid = f.editor.joinJourney(f.snapshot(), listOf(EntityType.FLIGHT to "f1", EntityType.FLIGHT to "f2", EntityType.TRAIN to "t1"))
+        f.editor.moveJourneyLeg(f.snapshot(), jid, 2, up = true) // bus before the second flight
+        assertEquals(listOf("f1", "t1", "f2"), journeys(f.snapshot()).single().legs.map { it.id })
+        assertTrue(hasManualOrder(journeys(f.snapshot()).single()))
+
+        // A new leg created between f1 and t1 lands exactly there.
+        f.seedEntity(EntityType.TRAIN, "t9", Train("t9", "JR", Endpoint("Haneda", date = "2027-05-08", time = "09:00"), Endpoint("Tokyo"), journeyId = jid))
+        f.editor.placeInJourney(f.snapshot(), jid, EntityType.TRAIN to "t9", prev = EntityType.FLIGHT to "f1", next = EntityType.TRAIN to "t1")
+        assertEquals(listOf("f1", "t9", "t1", "f2"), journeys(f.snapshot()).single().legs.map { it.id })
+
+        // Joining into a sorted journey keeps the order and puts the newcomer by its time.
+        f.editor.joinJourney(f.snapshot(), listOf(EntityType.FLIGHT to "f1", EntityType.TRAIN to "t2"))
+        assertEquals(listOf("f1", "t9", "t1", "f2", "t2"), journeys(f.snapshot()).single().legs.map { it.id })
+        // Leaving clears the leg's order.
+        f.editor.leaveJourney(f.snapshot(), EntityType.TRAIN, "t9")
+        assertNull(f.snapshot().trains.first { it.id == "t9" }.journeyOrder)
+    }
 }

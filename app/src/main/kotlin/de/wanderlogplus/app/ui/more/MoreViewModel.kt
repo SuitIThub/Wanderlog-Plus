@@ -62,7 +62,17 @@ class MoreViewModel(
 
     /** Writes the changed fields; for [de.wanderlogplus.app.ui.logistics.NEW_ID] creates the entry. */
     fun saveFields(type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) =
-        write { e, _ -> if (de.wanderlogplus.app.ui.logistics.isNewId(id)) e.create(type, after) else e.setChanged(type, id, before, after) }
+        write { e, s ->
+            if (de.wanderlogplus.app.ui.logistics.isNewId(id)) {
+                val newId = e.create(type, after)
+                // A new leg of a journey goes exactly where it was inserted.
+                de.wanderlogplus.app.ui.logistics.parseNewLeg(id)?.let { (jid, prev, next) -> e.placeInJourney(s, jid, type to newId, prev, next) }
+            } else {
+                e.setChanged(type, id, before, after)
+            }
+        }
+
+    fun moveJourneyLeg(journeyId: String, index: Int, up: Boolean) = write { e, s -> e.moveJourneyLeg(s, journeyId, index, up) }
 
     fun joinJourney(legs: List<Pair<EntityType, String>>) = write { e, s -> if (legs.distinct().size >= 2) e.joinJourney(s, legs) }
     fun leaveJourney(type: EntityType, id: String) = write { e, s -> e.leaveJourney(s, type, id) }

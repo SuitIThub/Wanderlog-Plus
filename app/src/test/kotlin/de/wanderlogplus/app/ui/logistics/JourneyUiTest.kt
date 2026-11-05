@@ -74,6 +74,7 @@ class JourneyUiTest {
         assertEquals(Triple(EntityType.TRAIN, EntityType.FLIGHT to "f2", null), added.single())
 
         rule.onNodeWithTag("journey-leg-0-leave").performScrollTo().performClick()
+        rule.onNode(hasTestTag("journey-leg-0-up")).assertDoesNotExist() // no arrows without onMoveLeg
         assertEquals(listOf("f1"), left)
         rule.onNodeWithTag("journey-dissolve").performScrollTo().performClick()
         tap("journey-dissolve-confirm")
@@ -133,5 +134,25 @@ class JourneyUiTest {
             }
         }
         rule.onRoot().recordScreenshot("journey-light")
+    }
+
+    @Test fun arrowsMoveLegsAndTheCardShowsTheRoute() {
+        val moves = mutableListOf<Pair<Int, Boolean>>()
+        rule.setContent {
+            WanderlogPlusTheme {
+                JourneyScreen(snapshot, "J", onBack = {}, onOpenLeg = { _, _ -> }, onAddLeg = { _, _, _ -> }, onJoin = {}, onLeave = { _, _ -> }, onDissolve = {}, onMoveLeg = { i, up -> moves += i to up })
+            }
+        }
+        rule.onNodeWithTag("journey-leg-1-up").performScrollTo().performClick()
+        rule.onNodeWithTag("journey-leg-0-down").performScrollTo().performClick()
+        assertEquals(listOf(1 to true, 0 to false), moves)
+        rule.onNode(hasTestTag("journey-leg-0-up")).assertExists()
+    }
+
+    @Test fun journeyCardHasTheRoutePreview() {
+        val geo = de.wanderlogplus.app.maps.routeFor(de.wanderlogplus.client.journeys(snapshot).single(), snapshot)
+        assertTrue("FRA and HND are known airports", geo != null && geo.stops.size >= 2)
+        rule.setContent { WanderlogPlusTheme { LogisticsScreen(snapshot) } }
+        rule.onNode(hasTestTag("route-fallback") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("journey-J")), useUnmergedTree = true).assertExists()
     }
 }

@@ -379,9 +379,59 @@ class LocalEditor(
         }
         val existing = legs.mapNotNull { (t, i) -> journeyOf(t, i)?.takeIf { it.isNotBlank() } }.firstOrNull()
         val jid = existing ?: Ids.newId()
-        tx.run { legs.distinct().forEach { (t, i) -> if (journeyOf(t, i) != jid) write(t, i, mapOf("journeyId" to JsonPrimitive(jid))) } }
+        val before = existing?.let { j -> journeys(snapshot).firstOrNull { it.id == j } }
+        tx.run {
+            legs.distinct().forEach { (t, i) -> if (journeyOf(t, i) != jid) write(t, i, mapOf("journeyId" to JsonPrimitive(jid))) }
+            // A journey sorted by hand keeps its order; new legs go where their time fits.
+            if (before != null && hasManualOrder(before)) {
+                val order = before.legs.map { it.type to it.id }.toMutableList()
+                val added = legs.distinct().filter { it !in order }.map { r -> r to legOf(movementOf(snapshot, r)) }.sortedBy { it.second.departs }
+                added.forEach { (r, leg) ->
+                    val at = before.legs.indexOfFirst { e -> leg.departs != null && e.departs != null && e.departs > leg.departs }
+                    val pos = if (at < 0) order.size else order.indexOf(before.legs[at].type to before.legs[at].id)
+                    order.add(pos, r)
+                }
+                writeOrder(order)
+            }
+        }
         onChange()
         return jid
+    }
+
+    private fun movementOf(snapshot: TripSnapshot, r: Pair<EntityType, String>): de.wanderlogplus.shared.query.Movement = when (r.first) {
+        EntityType.FLIGHT -> movementOf(snapshot.flights.first { it.id == r.second })
+        else -> movementOf(snapshot.trains.first { it.id == r.second })
+    }
+
+    private fun writeOrder(order: List<Pair<EntityType, String>>) =
+        order.forEachIndexed { i, (t, id) -> write(t, id, mapOf("journeyOrder" to JsonPrimitive(i))) }
+
+    /** Moves the leg at [index] of [journeyId] one up or down; the journey is sorted by hand from then on. */
+    fun moveJourneyLeg(snapshot: TripSnapshot, journeyId: String, index: Int, up: Boolean) {
+        val j = journeys(snapshot).firstOrNull { it.id == journeyId } ?: return
+        val to = if (up) index - 1 else index + 1
+        if (index !in j.legs.indices || to !in j.legs.indices) return
+        val order = j.legs.map { it.type to it.id }.toMutableList()
+        order.add(to, order.removeAt(index))
+        tx.run { writeOrder(order) }
+        onChange()
+    }
+
+    /**
+     * Puts a just-created leg [leg] of [journeyId] right after [prev] (or before [next]): the chosen place in the
+     * journey, written as its order. [snapshot] may be from before the leg was created.
+     */
+    fun placeInJourney(snapshot: TripSnapshot, journeyId: String, leg: Pair<EntityType, String>, prev: Pair<EntityType, String>?, next: Pair<EntityType, String>?) {
+        val j = journeys(snapshot).firstOrNull { it.id == journeyId } ?: return
+        val order = j.legs.map { it.type to it.id }.filter { it != leg }.toMutableList()
+        val pos = when {
+            prev != null && prev in order -> order.indexOf(prev) + 1
+            next != null && next in order -> order.indexOf(next)
+            else -> order.size
+        }
+        order.add(pos, leg)
+        tx.run { writeOrder(order) }
+        onChange()
     }
 
     private fun changedOnly(before: Map<String, JsonElement>, after: Map<String, JsonElement>) = after.filter { (k, v) -> before[k] != v }
@@ -391,8 +441,8 @@ class LocalEditor(
         val j = journeyOf(snapshot, type, id) ?: return
         tx.run {
             val rest = j.legs.filterNot { it.type == type && it.id == id }
-            write(type, id, mapOf("journeyId" to JsonNull))
-            if (rest.size < 2) rest.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull)) }
+            write(type, id, mapOf("journeyId" to JsonNull, "journeyOrder" to JsonNull))
+            if (rest.size < 2) rest.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull, "journeyOrder" to JsonNull)) }
         }
         onChange()
     }
@@ -400,7 +450,7 @@ class LocalEditor(
     /** Dissolves a whole journey (its legs stay). */
     fun dissolveJourney(snapshot: TripSnapshot, journeyId: String) {
         val j = journeys(snapshot).firstOrNull { it.id == journeyId } ?: return
-        tx.run { j.legs.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull)) } }
+        tx.run { j.legs.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull, "journeyOrder" to JsonNull)) } }
         onChange()
     }
 
