@@ -155,6 +155,8 @@ fun PlaceDetailScreen(
     onSetHeaderImage: ((savedPlaceId: String, ref: String?) -> Unit)? = null,
     /** Own links; null hides "Link". */
     onSetLinks: ((savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
+    /** "Ort löschen" in "Ort bearbeiten" (after a confirmation); null hides it. */
+    onDelete: ((savedPlaceId: String) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -163,6 +165,7 @@ fun PlaceDetailScreen(
 
     var tab by rememberSaveable(savedPlaceId) { mutableIntStateOf(TAB_INFO) }
     var editingTags by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
+    var deleting by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var choosingImage by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var editing by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
@@ -308,8 +311,33 @@ fun PlaceDetailScreen(
     }
     if (editingTags) {
         EditSheet("Ort bearbeiten", onDismiss = { editingTags = false }) {
-            PlaceEditForm(snapshot, saved, onSetTags, onSetRegion, onSetCategory, onDone = { editingTags = false })
+            PlaceEditForm(
+                snapshot, saved, onSetTags, onSetRegion, onSetCategory, onDone = { editingTags = false },
+                onDelete = onDelete?.let { { editingTags = false; deleting = true } },
+            )
         }
+    }
+    if (deleting && onDelete != null) {
+        val name = place?.name?.takeIf { it.isNotBlank() } ?: "Ort"
+        val days = remember(snapshot, saved.id) { programDaysOf(snapshot, saved) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { deleting = false },
+            title = { Text("„$name“ löschen?") },
+            text = {
+                Text(
+                    "Der Ort verschwindet aus der Sammlung" +
+                        (if (days > 0) " und aus dem Programm von ${if (days == 1) "einem Tag" else "$days Tagen"}." else ".") +
+                        " Notiz, Recherche und eigene Fotos des Orts gehen dabei verloren.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { deleting = false; onDelete(saved.id) },
+                    modifier = Modifier.testTag("place-delete-confirm"),
+                ) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Abbrechen") } },
+        )
     }
 }
 
@@ -368,6 +396,7 @@ private fun PlaceEditForm(
     onSetRegion: (savedPlaceId: String, regionId: String?) -> Unit,
     onSetCategory: (savedPlaceId: String, category: PlaceCategory) -> Unit,
     onDone: () -> Unit,
+    onDelete: (() -> Unit)? = null,
 ) {
     SectionLabel("Markierungen")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -398,6 +427,17 @@ private fun PlaceEditForm(
         modifier = Modifier.fillMaxWidth(),
     )
     Button(onClick = onDone, modifier = Modifier.fillMaxWidth().testTag("place-edit-done")) { Text("Fertig") }
+    if (onDelete != null) {
+        TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth().testTag("place-delete")) {
+            Text("Ort löschen", color = MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+/** Days whose program has this place (0 when another saved place of the same place keeps them). */
+internal fun programDaysOf(snapshot: TripSnapshot, saved: SavedPlace): Int {
+    if (snapshot.savedPlaces.any { it.id != saved.id && it.placeId == saved.placeId }) return 0
+    return snapshot.dayItems.filter { it.kind == de.wanderlogplus.shared.model.DayItemKind.PLACE && it.placeId == saved.placeId }.map { it.dayId }.distinct().size
 }
 
 /** "Reservierung nötig" with the reason and the "Reserviert" switch. */

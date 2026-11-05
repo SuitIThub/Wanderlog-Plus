@@ -74,6 +74,24 @@ class PlaceEditTest {
         assertEquals(listOf(listOf("🍜"), listOf("🍜", "⭐")), calls)
     }
 
+    @Test fun deleteAsksFirstAndNamesTheDays() {
+        seedPlace(emptyList())
+        seed(EntityType.DAY, "d1", Day("d1", "2027-05-10"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a", placeId = "p1"))
+        var deleted: String? = null
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceDetailScreen(TripSnapshot.from(store.all()), "sv1", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, onDelete = { deleted = it })
+            }
+        }
+        openSheet()
+        rule.onNodeWithTag("place-delete").tap()
+        rule.onNode(hasText("aus dem Programm von einem Tag", substring = true)).assertExists()
+        assertEquals(null, deleted)
+        rule.onNodeWithTag("place-delete-confirm").tap()
+        assertEquals("sv1", deleted)
+    }
+
     @Test fun warnToggleAppendsWarning() {
         seedPlace(listOf("🍜"))
         val calls = mutableListOf<List<String>>()

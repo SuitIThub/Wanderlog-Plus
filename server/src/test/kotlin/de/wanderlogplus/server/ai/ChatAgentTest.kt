@@ -271,16 +271,16 @@ class ChatAgentTest {
               {"action":"add","place":"Nirgendwo"},
               {"action":"add","id":"s-ramen"}]}""",
         )
-        assertTrue(r.startsWith("Plan-Karte gezeigt. Hinweise: ") && "Ramen Ichiran ist schon im Programm (keep nutzen)" in r && "Lage von Nirgendwo nicht gefunden" in r, r)
+        assertTrue(r.startsWith("Plan-Karte gezeigt. Hinweise: ") && "Lage von Nirgendwo nicht gefunden" in r, r)
         assertTrue("Prüfung:\nZeitplan Mittwoch, 19.05.2027" in r, r)
         val plan = t.cards.single().plan!!
         assertEquals(
-            listOf(ChatPlanStep.ADD to "Kiyomizu-dera", ChatPlanStep.KEEP to "Ramen Ichiran", ChatPlanStep.ADD to "Gion Onsen"),
+            listOf(ChatPlanStep.ADD to "Kiyomizu-dera", ChatPlanStep.ADD to "Gion Onsen", ChatPlanStep.KEEP to "Ramen Ichiran"),
             plan.steps.map { it.action to it.title },
-            "the forgotten program item stays, at its place",
+            "adding a program place again keeps it there, once",
         )
-        assertEquals("12:00", plan.steps[1].oldTime)
-        assertEquals(35.0040, plan.steps[2].lat)
+        assertEquals("12:00", plan.steps[2].oldTime)
+        assertEquals(35.0040, plan.steps[1].lat)
         assertEquals("Plan für Mittwoch, 19.05.2027", t.cards.single().title)
         assertTrue(plan.check!!.isNotBlank())
 
@@ -290,6 +290,45 @@ class ChatAgentTest {
         assertEquals("i1", again.steps.first().itemId)
         assertEquals("1 neu · 1 entfällt", t.cards.single().subtitle)
         assertEquals("date fehlt oder ist kein Reisetag.", t.run("show_day_plan", """{"date":"2030-01-01","steps":[]}"""))
+    }
+
+    @Test
+    fun `a day plan drops left out places and never adds known places twice`() {
+        val looked = mutableListOf<String>()
+        val geo = Geocoder { q -> looked += q; null }
+        val day = ChatTrip(
+            trip.trip, trip.regions, trip.places, trip.saved, trip.stays, trip.days,
+            trip.dayItems + DayItem("i2", "d1", "b", placeId = "p-kiyo") +
+                DayItem("i3", "d1", "c", kind = de.wanderlogplus.shared.model.DayItemKind.NOTE, text = "Geld holen"),
+        )
+        val t = ChatTools(day, null, day.dayAnchor("2027-05-19"), geocoder = geo) {}
+        val r = t.run(
+            "show_day_plan",
+            """{"date":"2027-05-19","steps":[
+              {"action":"add","place":"Kiyomizu-dera Temple, Kyoto","time":"09:00"},
+              {"action":"add","place":"Nishiki Markt, Kyoto"},
+              {"action":"add","place":"Hotel Gion, Kyoto"}]}""",
+        )
+        val steps = t.cards.single().plan!!.steps
+        assertEquals(
+            listOf(ChatPlanStep.REMOVE to "i1", ChatPlanStep.KEEP to "i2", ChatPlanStep.KEEP to "i3", ChatPlanStep.ADD to null),
+            steps.map { it.action to it.itemId },
+            "the left-out ramen shop drops where it was, Kiyomizu is the program item, the note stays after it",
+        )
+        assertEquals("09:00", steps[1].time)
+        assertEquals("s-market", steps[3].savedPlaceId, "the saved market, not a new place")
+        assertEquals("nicht im neuen Plan", steps[0].reason)
+        assertTrue("Hotel Gion ist eine Unterkunft" in r && "als entfällt markiert: Ramen Ichiran" in r, r)
+        assertTrue(looked.isEmpty(), "known by name, no lookup: $looked")
+    }
+
+    @Test
+    fun `place names match across spellings`() {
+        assertTrue(de.wanderlogplus.shared.query.PlaceMatch.sameName("Magome", "Magome-juku Post Town"))
+        assertTrue(de.wanderlogplus.shared.query.PlaceMatch.sameName("Ryokan Tsutamura", "Tsutamura"))
+        assertTrue(de.wanderlogplus.shared.query.PlaceMatch.sameName("Kiyomizu-dera", "Kiyomizu Temple"))
+        assertFalse(de.wanderlogplus.shared.query.PlaceMatch.sameName("Gion", "Gion Onsen"))
+        assertFalse(de.wanderlogplus.shared.query.PlaceMatch.same("Magome", 35.52, 137.56, "Magome", 35.0, 135.7))
     }
 
     @Test

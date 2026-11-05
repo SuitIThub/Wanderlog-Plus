@@ -14,6 +14,7 @@ import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.*
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import de.wanderlogplus.shared.query.PlaceMatch
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -545,6 +546,22 @@ class LocalEditor(
         onChange()
     }
 
+    /**
+     * Deletes a saved place from the collection, with its program items on every day (unless another saved place of
+     * the same place still exists, e.g. a duplicate). Returns how many program items went with it.
+     */
+    fun deleteSavedPlace(snapshot: TripSnapshot, savedPlaceId: String): Int {
+        val saved = requireNotNull(snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }) { "Unknown saved place $savedPlaceId" }
+        val twin = snapshot.savedPlaces.any { it.id != saved.id && it.placeId == saved.placeId }
+        val items = if (twin) emptyList() else snapshot.dayItems.filter { it.kind == DayItemKind.PLACE && it.placeId == saved.placeId }
+        tx.run {
+            write(EntityType.SAVED_PLACE, saved.id, mapOf("deleted" to JsonPrimitive(true)))
+            items.forEach { write(EntityType.DAY_ITEM, it.id, mapOf("deleted" to JsonPrimitive(true))) }
+        }
+        onChange()
+        return items.size
+    }
+
     fun removeDayItem(snapshot: TripSnapshot, itemId: String) {
         val item = snapshot.dayItems.firstOrNull { it.id == itemId }
         tx.run {
@@ -589,6 +606,21 @@ class LocalEditor(
                     }
                     is PlanOp.AddFound -> {
                         require(op.name.isNotBlank()) { "A place needs a name" }
+                        fun same(placeId: String?) = placeId?.let { snapshot.places[it] }
+                            ?.let { p -> PlaceMatch.same(op.name, op.lat, op.lng, p.name, p.lat, p.lng) } == true
+                        // A place the trip already knows is used, never created a second time.
+                        current.firstOrNull { it.kind == DayItemKind.PLACE && it.id !in remove && same(it.placeId) }?.let { item ->
+                            if (order.none { it.first == item.id }) order += item.id to op.time
+                            return@forEach
+                        }
+                        snapshot.savedPlaces.firstOrNull { it.status != PlaceStatus.DROPPED && same(it.placeId) }?.let { saved ->
+                            if (!inDay.add(saved.placeId)) return@forEach
+                            val itemId = Ids.newId()
+                            writeNew(EntityType.DAY_ITEM, itemId, mapOf("dayId" to JsonPrimitive(dayId), "kind" to JsonPrimitive(DayItemKind.PLACE.name), "placeId" to JsonPrimitive(saved.placeId)))
+                            write(EntityType.SAVED_PLACE, saved.id, mapOf("status" to JsonPrimitive(PlaceStatus.PLANNED.name)))
+                            order += itemId to op.time
+                            return@forEach
+                        }
                         val placeId = Ids.newId()
                         writeNew(
                             EntityType.PLACE, placeId,

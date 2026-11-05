@@ -14,6 +14,7 @@ import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.Trip
+import de.wanderlogplus.shared.query.PlaceMatch
 import de.wanderlogplus.shared.query.TripQueries
 import de.wanderlogplus.shared.query.isOpenOn
 import de.wanderlogplus.shared.sync.ChatCard
@@ -542,7 +543,7 @@ class ChatTools(
             putJsonObject("date") { put("type", "string"); put("description", "yyyy-MM-dd") }
             putJsonObject("steps") {
                 put("type", "array")
-                put("description", "in Reihenfolge des neuen Ablaufs; jeder bisherige Programmpunkt als keep oder remove")
+                put("description", "in Reihenfolge des neuen Ablaufs (der ganze Tag); jeder bisherige Programmpunkt als keep oder remove – weggelassene Orte entfallen")
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
@@ -838,6 +839,24 @@ class ChatTools(
         items.firstOrNull { it.id == ref }?.let { return it }
         val placeId = t.savedById[ref]?.placeId ?: ref
         return items.firstOrNull { it.kind == DayItemKind.PLACE && it.placeId == placeId }
+            ?: items.firstOrNull { it.kind == DayItemKind.PLACE && t.places[it.placeId]?.name?.let { n -> PlaceMatch.sameName(n, ref) } == true }
+    }
+
+    /** What a place called [names] (at [lat]/[lng] when known) already is: a program item, a saved place or a stay. */
+    private fun known(names: List<String>, lat: Double?, lng: Double?, program: List<DayItem>): Known? {
+        fun hit(placeId: String?): Boolean {
+            val p = placeId?.let { t.places[it] } ?: return false
+            return names.any { n -> PlaceMatch.same(n, lat, lng, p.name, p.lat, p.lng) }
+        }
+        program.firstOrNull { it.kind == DayItemKind.PLACE && hit(it.placeId) }?.let { return Known.Item(it) }
+        t.stays.firstOrNull { hit(it.placeId) }?.let { return Known.Lodging(it) }
+        return t.saved.filter { it.status != PlaceStatus.DROPPED }.firstOrNull { hit(it.placeId) }?.let { Known.Saved(it) }
+    }
+
+    private sealed interface Known {
+        data class Item(val item: DayItem) : Known
+        data class Saved(val saved: SavedPlace) : Known
+        data class Lodging(val stay: Stay) : Known
     }
 
     private fun showDayPlan(args: JsonObject): String {
@@ -866,23 +885,33 @@ class ChatTools(
                 }
                 "add" -> {
                     val id = o.s("id")
-                    val saved = id?.let { t.savedById[it] }
+                    val saved = id?.let { t.savedById[it] ?: t.savedFor(it) }
+                    // "add" of something already in the program means: keep it here (no second copy).
+                    fun keepHere(item: DayItem) {
+                        if (!used.add(item.id)) return
+                        steps += ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, time = time.takeIf { it != item.time }, oldTime = item.time, reason = reason)
+                    }
+                    fun inProgram(placeId: String?) = program.firstOrNull { it.kind == DayItemKind.PLACE && it.placeId == placeId }
                     when {
                         saved != null -> {
-                            if (program.any { it.kind == DayItemKind.PLACE && it.placeId == saved.placeId }) { notes += "${t.places[saved.placeId]?.name} ist schon im Programm (keep nutzen)"; return@forEach }
+                            inProgram(saved.placeId)?.let { keepHere(it); return@forEach }
                             if (!used.add("s:" + saved.id)) return@forEach
                             steps += ChatPlanStep(ChatPlanStep.ADD, t.places[saved.placeId]?.name ?: "Ort", savedPlaceId = saved.id, time = time, reason = reason)
                         }
+                        id != null && day != null && itemFor(day.id, id) != null -> keepHere(itemFor(day.id, id)!!)
                         o.s("place") != null -> {
                             val title = o.s("title") ?: o.s("place")!!
-                            val probe = ChatCard(ChatCard.KIND_WEB, title)
-                            val found = locate(o.s("place")!!, probe, o.s("category"), date) ?: run { notes += "Lage von ${o.s("place")} nicht gefunden"; return@forEach }
-                            val known = found.savedPlaceId
-                            if (known != null) {
-                                if (program.any { it.kind == DayItemKind.PLACE && it.placeId == t.savedById[known]?.placeId }) return@forEach
-                                steps += ChatPlanStep(ChatPlanStep.ADD, t.places[t.savedById[known]?.placeId]?.name ?: title, savedPlaceId = known, time = time, reason = reason)
-                            } else {
-                                steps += ChatPlanStep(
+                            val byName = known(listOfNotNull(o.s("title"), o.s("place")!!.substringBefore(',')), null, null, program)
+                            val found = if (byName != null) null else locate(o.s("place")!!, ChatCard(ChatCard.KIND_WEB, title), o.s("category"), date)
+                            val match = byName ?: found?.let { f -> known(listOf(title), f.lat, f.lng, program) }
+                            when {
+                                match is Known.Item -> keepHere(match.item)
+                                match is Known.Saved -> if (used.add("s:" + match.saved.id)) {
+                                    steps += ChatPlanStep(ChatPlanStep.ADD, t.places[match.saved.placeId]?.name ?: title, savedPlaceId = match.saved.id, time = time, reason = reason)
+                                }
+                                match is Known.Lodging -> notes += "${t.stayName(match.stay)} ist eine Unterkunft der Reise und steht nicht im Programm"
+                                found == null -> notes += "Lage von ${o.s("place")} nicht gefunden"
+                                else -> steps += ChatPlanStep(
                                     ChatPlanStep.ADD, title, lat = found.lat, lng = found.lng, address = found.address,
                                     category = found.category ?: PlaceCategory.SIGHT.name, time = time, reason = reason,
                                 )
@@ -894,11 +923,15 @@ class ChatTools(
                 else -> notes += "unbekannte action"
             }
         }
-        // Items the plan forgot stay where they were: after the step of the item before them.
+        // Places the plan left out are dropped (the plan is the whole new day), shown as "entfällt" where they were, so
+        // the user can still keep them. Notes and the stay's own items stay.
+        val dropped = mutableListOf<String>()
         program.forEachIndexed { idx, item ->
             if (item.id in used) return@forEachIndexed
+            val lodging = item.placeId != null && t.stays.any { it.placeId == item.placeId }
+            val drop = item.kind == DayItemKind.PLACE && !lodging
             val own = item.time?.let { ChatDayCheck.mins(it) }
-            val at = if (own != null) {
+            val at = if (own != null && !drop) {
                 // A fixed time decides: before the first step planned later.
                 fun timeOf(st: ChatPlanStep) = (st.time ?: st.oldTime)?.let { ChatDayCheck.mins(it) }
                 steps.indexOfFirst { st -> st.action != ChatPlanStep.REMOVE && (timeOf(st) ?: -1) > own }.takeIf { it >= 0 } ?: steps.size
@@ -906,9 +939,15 @@ class ChatTools(
                 val before = program.take(idx).lastOrNull { b -> steps.any { it.itemId == b.id } }
                 before?.let { b -> steps.indexOfFirst { it.itemId == b.id } + 1 } ?: 0
             }
-            steps.add(at, ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, oldTime = item.time))
+            if (drop) dropped += itemTitle(item)
+            steps.add(
+                at,
+                if (drop) ChatPlanStep(ChatPlanStep.REMOVE, itemTitle(item), itemId = item.id, oldTime = item.time, reason = "nicht im neuen Plan")
+                else ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, oldTime = item.time),
+            )
             used += item.id
         }
+        if (dropped.isNotEmpty()) notes += "nicht im Plan und daher als entfällt markiert: " + dropped.joinToString(", ") + " (falls sie bleiben sollen: Plan erneut mit keep zeigen)"
         if (steps.none { it.action != ChatPlanStep.REMOVE }) return "Der Plan ist leer."
         val stops = steps.filter { it.action != ChatPlanStep.REMOVE }.mapNotNull { st ->
             val item = st.itemId?.let { id -> program.firstOrNull { it.id == id } }
@@ -990,7 +1029,8 @@ class ChatTools(
         val nearest = known.minByOrNull { it.third } ?: return null
         if (nearest.third > MAX_LOCATE_KM) return null
         val same = t.saved.firstOrNull { s ->
-            s.status != PlaceStatus.DROPPED && t.point(s.placeId)?.let { distanceKm(hit.lat, hit.lng, it.lat, it.lng) < SAME_PLACE_KM } == true
+            val p = t.places[s.placeId]
+            s.status != PlaceStatus.DROPPED && p != null && listOf(card.title, query.substringBefore(',')).any { PlaceMatch.same(it, hit.lat, hit.lng, p.name, p.lat, p.lng) }
         }
         val region = day?.let { t.queries?.regionFor(it) } ?: known.filter { it.second != null }.minByOrNull { it.third }?.second
         return card.copy(
@@ -1006,7 +1046,6 @@ class ChatTools(
         const val MAX_TRANSIT = 3
         const val POINT_HELP = "id eines Orts (hinterlegt oder aus dem Programm), ein Datum yyyy-MM-dd (= Unterkunft dieser Nacht), 'kontext', 'hier' (Standort des Nutzers, falls geteilt) oder 'lat,lng'"
         const val MAX_LOCATE_KM = 60.0
-        const val SAME_PLACE_KM = 0.15
         const val MAX_CARDS = 10
 
         fun worthRank(w: Worth?): Int = when (w) {

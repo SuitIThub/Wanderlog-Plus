@@ -224,6 +224,9 @@ class PlacesViewModel(
     fun setNote(savedPlaceId: String, note: String) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("note" to JsonPrimitive(note))) }
 
+    /** Deletes the place from the collection and from every day's program. */
+    fun delete(savedPlaceId: String) = write { e, s -> e.deleteSavedPlace(s, savedPlaceId) }
+
     fun setStatus(savedPlaceId: String, status: PlaceStatus) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("status" to JsonPrimitive(status.name))) }
 
