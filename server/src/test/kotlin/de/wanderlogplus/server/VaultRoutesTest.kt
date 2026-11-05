@@ -1,6 +1,8 @@
 package de.wanderlogplus.server
 
+import de.wanderlogplus.shared.sync.VAULT_PART_SIZE
 import de.wanderlogplus.shared.sync.VaultImageInfo
+import de.wanderlogplus.shared.sync.VaultKind
 import de.wanderlogplus.shared.sync.VaultScanStatus
 import de.wanderlogplus.shared.sync.VaultScanUpdate
 import de.wanderlogplus.shared.sync.VaultUploadTrigger
@@ -10,6 +12,7 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -24,6 +27,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import org.junit.jupiter.api.io.TempDir
+import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.random.Random
 import kotlin.test.Test
@@ -294,15 +298,24 @@ class VaultRoutesTest {
     fun vaultStateReportsImageAndScanFingerprint() = app {
         val c = jsonClient()
         assertEquals(HttpStatusCode.Unauthorized, c.get("/vault/state").status)
-        assertEquals("""{"images":0,"latest":0,"scanUpdated":0}""", c.get("/vault/state?token=$TOKEN_A").bodyAsText())
+        assertEquals(
+            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false}""",
+            c.get("/vault/state?token=$TOKEN_A").bodyAsText(),
+        )
 
         val info: VaultImageInfo = c.uploadImage(Random(3).nextBytes(256)).body()
         val scan: VaultScanStatus = c.postScan(VaultScanUpdate("running", 10, 5, 1)).body()
         val body = c.get("/vault/state?token=$TOKEN_A").bodyAsText()
-        assertEquals("""{"images":1,"latest":${info.uploadedAt},"scanUpdated":${scan.updatedAt}}""", body)
+        assertEquals(
+            """{"images":1,"latest":${info.uploadedAt},"scanUpdated":${scan.updatedAt},"requests":0,"sessionsProgress":0,"paused":false}""",
+            body,
+        )
 
         // Bob has his own namespace (no images, no scan).
-        assertEquals("""{"images":0,"latest":0,"scanUpdated":0}""", c.get("/vault/state?token=$TOKEN_B").bodyAsText())
+        assertEquals(
+            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false}""",
+            c.get("/vault/state?token=$TOKEN_B").bodyAsText(),
+        )
     }
 
     @Test
@@ -343,5 +356,114 @@ class VaultRoutesTest {
         val c = jsonClient()
         assertEquals(HttpStatusCode.NotFound, c.get("/api/vault/images/..%2F..%2Fwanderlog-plus.db") { authed() }.status)
         assertEquals(HttpStatusCode.NotFound, c.get("/vault/img/..%2F..%2Fwanderlog-plus.db?token=$TOKEN_A").status)
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun Services.seedVideo(ref: String, name: String, seed: Int, durationMs: Long = 1000, videoBytes: Long = 100): VaultImageInfo =
+        vault.addImage(
+            "alice", byteArrayOf(seed.toByte()).inputStream(), name, "image/jpeg", 0.0,
+            kind = VaultKind.VIDEO, videoRef = ref, durationMs = durationMs, videoBytes = videoBytes,
+        )
+
+    @Test
+    fun webPageHasTabsSortAndStatusBar() = appWith { services ->
+        val c = jsonClient()
+        c.postScan(VaultScanUpdate("done", 10, 10, 2, photosOnDevice = 100, videosOnDevice = 7, pendingUploads = 42))
+        services.vault.addImage("alice", byteArrayOf(1).inputStream(), "foto.jpg", "image/jpeg", 0.0)
+        services.seedVideo("ref-1", "urlaub.jpg", seed = 2, durationMs = 390_000, videoBytes = 123_456_789)
+
+        val html = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertTrue(html.contains("tab=videos"))
+        assertTrue(html.contains("sort=size"))
+        assertTrue(html.contains("statusbar"))
+        assertTrue(html.contains("100 Fotos"))
+        assertTrue(html.contains("7 Videos"))
+        assertTrue(html.contains("42 ausstehend"))
+        assertTrue(html.contains("/api/vault/uploads/pause"))
+        // The photos tab hides the video; the videos tab shows it with its duration.
+        assertTrue(!html.contains("urlaub.jpg"))
+        val videos = c.get("/vault?token=$TOKEN_A&tab=videos").bodyAsText()
+        assertTrue(videos.contains("urlaub.jpg"))
+        assertTrue(videos.contains("6:30"))
+    }
+
+    @Test
+    fun webVideoCardStates() = appWith { services ->
+        val c = jsonClient()
+        val plain = services.seedVideo("ref-plain", "plain.jpg", seed = 1)
+        val requested = services.seedVideo("ref-req", "req.jpg", seed = 2)
+        services.vault.requestVideo("alice", "ref-req")
+        val uploading = services.seedVideo("ref-up", "up.jpg", seed = 3)
+        // 42 of 100 parts received, written in the store's internal session format.
+        val sessionId = "b".repeat(32)
+        val sessionsDir = dir.resolve("vault/alice/sessions")
+        Files.createDirectories(sessionsDir)
+        Files.writeString(
+            sessionsDir.resolve("$sessionId.json"),
+            """{"id":"$sessionId","videoRef":"ref-up","fileName":"up.mp4","size":${100 * VAULT_PART_SIZE},"sha256":"${"0".repeat(64)}","videoMimeType":"video/mp4","partSize":$VAULT_PART_SIZE,"receivedParts":[${(0..41).joinToString(",")}],"createdAt":${System.currentTimeMillis()}}""",
+        )
+        val done = services.seedVideo("ref-done", "done.jpg", seed = 4)
+        val content = byteArrayOf(5, 6, 7, 8)
+        val s = services.vault.startVideoSession("alice", "ref-done", "done.mp4", content.size.toLong(), sha256Hex(content), "video/mp4")
+        services.vault.savePart("alice", s.id, 0, content.inputStream())
+        services.vault.completeVideoSession("alice", s.id)
+
+        val html = c.get("/vault?token=$TOKEN_A&tab=videos").bodyAsText()
+        // Not requested: thumbnail badge plus the button that queues the upload.
+        assertTrue(html.contains("Thumbnail"), "thumbnail badge")
+        assertTrue(html.contains("/api/vault/videos/${plain.id}/request"), "request button")
+        // Queued, uploading, done.
+        assertTrue(html.contains("angefordert"), "requested badge")
+        assertTrue(html.contains("lädt 42 %"), "session progress badge")
+        assertTrue(html.contains("/vault/vid/${done.id}"), "playback link")
+        assertTrue(html.contains("geladen ▶"), "done badge")
+        assertTrue(html.contains(uploading.fileName), "uploading card")
+        assertTrue(html.contains(requested.fileName), "requested card")
+    }
+
+    @Test
+    fun webVideoStreamingServesRanges() = appWith { services ->
+        val c = jsonClient()
+        val entry = services.seedVideo("ref-vid", "clip.jpg", seed = 9)
+        val content = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+        val s = services.vault.startVideoSession("alice", "ref-vid", "clip.mp4", content.size.toLong(), sha256Hex(content), "video/mp4")
+        services.vault.savePart("alice", s.id, 0, content.inputStream())
+        services.vault.completeVideoSession("alice", s.id)
+
+        val full = c.get("/vault/vid/${entry.id}?token=$TOKEN_A")
+        assertEquals(HttpStatusCode.OK, full.status)
+        assertEquals(ContentType.Video.MP4, full.contentType()?.withoutParameters())
+        assertContentEquals(content, full.bodyAsBytes())
+
+        // Browsers seek with Range headers; the plugin must answer 206 with a Content-Range.
+        val range = c.get("/vault/vid/${entry.id}?token=$TOKEN_A") { header(HttpHeaders.Range, "bytes=0-3") }
+        assertEquals(HttpStatusCode.PartialContent, range.status)
+        assertTrue(range.headers[HttpHeaders.ContentRange]!!.startsWith("bytes 0-3/10"))
+        assertContentEquals(byteArrayOf(1, 2, 3, 4), range.bodyAsBytes())
+
+        assertEquals(HttpStatusCode.NotFound, c.get("/vault/vid/${"0".repeat(32)}?token=$TOKEN_A").status)
+        assertEquals(HttpStatusCode.Unauthorized, c.get("/vault/vid/${entry.id}").status)
+
+        // An odd stored mime type falls back to a plain binary stream.
+        val odd = services.seedVideo("ref-odd", "odd.jpg", seed = 8)
+        val oddBytes = byteArrayOf(5, 6, 7, 8)
+        val s2 = services.vault.startVideoSession("alice", "ref-odd", "odd.bin", oddBytes.size.toLong(), sha256Hex(oddBytes), "not a mime")
+        services.vault.savePart("alice", s2.id, 0, oddBytes.inputStream())
+        services.vault.completeVideoSession("alice", s2.id)
+        val r2 = c.get("/vault/vid/${odd.id}?token=$TOKEN_A")
+        assertEquals(HttpStatusCode.OK, r2.status)
+        assertEquals(ContentType.Application.OctetStream, r2.contentType()?.withoutParameters())
+    }
+
+    @Test
+    fun webPageBulkDeleteMarkup() = app {
+        val c = jsonClient()
+        val info: VaultImageInfo = c.uploadImage(Random(15).nextBytes(64)).body()
+        val html = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertTrue(html.contains("""name="sel""""))
+        assertTrue(html.contains("""value="${info.id}""""))
+        assertTrue(html.contains("/api/vault/images/bulk-delete"))
     }
 }

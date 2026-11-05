@@ -45,6 +45,7 @@ import io.ktor.server.plugins.PayloadTooLargeException
 import io.ktor.server.plugins.UnsupportedMediaTypeException
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
@@ -153,6 +154,8 @@ fun Application.module(services: Services) {
         // Only method, path, status: never headers, query strings or bodies.
         format { call -> "${call.request.httpMethod.value} ${call.request.path()} -> ${call.response.status()?.value}" }
     }
+    // Range answers (206) for streamed vault videos; browsers seek with Range headers.
+    install(PartialContent)
     install(StatusPages) {
         // Never echo exception messages: they can contain request data.
         exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
