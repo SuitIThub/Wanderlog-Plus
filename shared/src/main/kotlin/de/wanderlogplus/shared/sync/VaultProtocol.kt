@@ -19,6 +19,12 @@ data class VaultScanUpdate(
     val foundImages: Int,
     /** Free-form device label (e.g. "Google Pixel 8"), shown in the web overview. */
     val device: String? = null,
+    /** Photos MediaStore exposes (null when an old app did not report it). */
+    val photosOnDevice: Int? = null,
+    /** Videos MediaStore exposes (null when an old app did not report it). */
+    val videosOnDevice: Int? = null,
+    /** Queue entries still waiting for upload when the report was sent. */
+    val pendingUploads: Int? = null,
 )
 
 /** The server's view of a device's last reported scan; [updatedAt] is server time (epoch millis). */
@@ -31,13 +37,54 @@ data class VaultScanStatus(
     val foundImages: Int,
     val device: String? = null,
     val updatedAt: Long,
+    /** See [VaultScanUpdate.photosOnDevice]. */
+    val photosOnDevice: Int? = null,
+    /** See [VaultScanUpdate.videosOnDevice]. */
+    val videosOnDevice: Int? = null,
+    /** See [VaultScanUpdate.pendingUploads]. */
+    val pendingUploads: Int? = null,
 )
 
-/** Answer of `GET /api/vault/uploads/request`: the web overview asked this device to resume its vault upload queue. */
+/**
+ * Answer of `GET /api/vault/uploads/request`: the web overview asked this device to resume its vault upload
+ * queue ([requested]), uploads are paused until manually resumed ([paused]), and these vault entries
+ * ([videoRefs], the entries' `videoRef` values) should have their full video uploaded.
+ */
 @Serializable
-data class VaultUploadTrigger(val requested: Boolean)
+data class VaultUploadTrigger(
+    val requested: Boolean,
+    val paused: Boolean = false,
+    val videoRefs: List<String> = emptyList(),
+)
 
-/** One image uploaded to the vault; [score] is the classifier's value (0..1, higher = more skin). */
+/** What a vault entry represents: a plain photo backup, or the thumbnail of a device video. */
+enum class VaultKind { PHOTO, VIDEO }
+
+/** Size of one video part in bytes (8 MB); shared by the server store, the routes and the app's part loop. */
+const val VAULT_PART_SIZE = 8L * 1024 * 1024
+
+/**
+ * State of one chunked video upload. [id] is blank when the answer only signals `complete = true`
+ * (the content was already stored, no session was created). [receivedParts] lists the part indices the
+ * server holds, so a resuming client skips them.
+ */
+@Serializable
+data class VaultVideoSession(
+    val id: String,
+    val videoRef: String,
+    val fileName: String,
+    val size: Long,
+    val sha256: String,
+    val partSize: Long,
+    val receivedParts: List<Int>,
+    val complete: Boolean,
+)
+
+/**
+ * One media item in the vault; [score] is a legacy classifier value (0 for plain backups). A [VaultKind.VIDEO]
+ * entry's stored file is the auto-uploaded thumbnail; the full video arrives chunked via a [VaultVideoSession]
+ * once requested, then [hasVideo] flips and `GET /vault/vid/{id}` serves it.
+ */
 @Serializable
 data class VaultImageInfo(
     val id: String,
@@ -48,4 +95,15 @@ data class VaultImageInfo(
     val uploadedAt: Long,
     /** SHA-256 of the content for idempotent re-uploads; null on entries stored before hashes existed. */
     val hash: String? = null,
+    val kind: VaultKind = VaultKind.PHOTO,
+    /** The device's MediaStore uri for videos; links the entry to its upload request and session. */
+    val videoRef: String? = null,
+    val durationMs: Long? = null,
+    /** Size of the full video as last seen on the device (display only; upload sessions declare their own size). */
+    val videoBytes: Long? = null,
+    /** True once the full video was uploaded and is streamable. */
+    val hasVideo: Boolean = false,
+    /** SHA-256 of the full video (set with [hasVideo]). */
+    val videoHash: String? = null,
+    val videoMimeType: String? = null,
 )
