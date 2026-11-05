@@ -183,6 +183,18 @@ class MainActivity : ComponentActivity() {
                     onPauseOrDispose { }
                 }
                 val tripWeather by container.weather.weather.collectAsState()
+                remember {
+                    de.wanderlogplus.app.ui.design.HeaderImages.resolver = { ref ->
+                        when {
+                            ref.startsWith(de.wanderlogplus.app.ui.design.HeaderImages.OWN) ->
+                                container.attachmentFiles.fileFor(ref.removePrefix(de.wanderlogplus.app.ui.design.HeaderImages.OWN))?.toURI()?.toString()
+                            ref.startsWith(de.wanderlogplus.app.ui.design.HeaderImages.GOOGLE) ->
+                                container.placePhotos.cachedFile(ref.removePrefix(de.wanderlogplus.app.ui.design.HeaderImages.GOOGLE), de.wanderlogplus.app.ui.places.PlacePhotoRepository.FULL_WIDTH)?.toURI()?.toString()
+                            else -> null
+                        }
+                    }
+                    true
+                }
                 val flightLive: suspend (String) -> de.wanderlogplus.shared.sync.FlightLive? = remember { { id -> container.syncApi()?.flightLive(id) } }
                 val trainLive: suspend (String) -> de.wanderlogplus.shared.sync.TrainLive? = remember { { id -> container.syncApi()?.trainLive(id) } }
                 // The repository asks the server only when its weather is older than 3 hours.

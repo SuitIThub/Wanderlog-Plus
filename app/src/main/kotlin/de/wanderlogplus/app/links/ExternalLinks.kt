@@ -8,7 +8,7 @@ import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
 import java.net.URLEncoder
 
-enum class LinkKind { NAVIGATE, TRANSIT, WEBSITE, PHONE, TABELOG }
+enum class LinkKind { NAVIGATE, TRANSIT, WEBSITE, PHONE, TABELOG, CUSTOM }
 
 data class ExternalLink(val kind: LinkKind, val label: String, val uri: String)
 

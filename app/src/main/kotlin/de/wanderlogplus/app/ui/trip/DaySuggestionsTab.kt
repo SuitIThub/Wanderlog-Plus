@@ -1,5 +1,6 @@
 package de.wanderlogplus.app.ui.trip
 
+import de.wanderlogplus.app.ui.design.heroImage
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -100,7 +101,7 @@ private fun SuggestionCard(s: Suggestion, dow: Int?, accent: Color, onAdd: () ->
     PhotoCard(
         title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
         subtitle = listOfNotNull(categoryLabel(s.saved.category), s.place?.rating?.let { ratingLabel(it) }).joinToString(" · "),
-        imageUrl = s.place?.heroImageUrl(),
+        imageUrl = s.saved.heroImage(s.place),
         placeholderSymbol = categorySymbol(s.saved.category),
         accent = accent,
         style = PhotoCardStyle.Compact,

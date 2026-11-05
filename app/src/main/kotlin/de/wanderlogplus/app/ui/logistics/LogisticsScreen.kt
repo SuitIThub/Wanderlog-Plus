@@ -1,5 +1,6 @@
 package de.wanderlogplus.app.ui.logistics
 
+import de.wanderlogplus.app.ui.design.heroImage
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Train
@@ -314,7 +315,7 @@ private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntr
             PhotoCard(
                 title = e.name,
                 subtitle = stayPeriod(s),
-                imageUrl = snapshot.places[s.placeId]?.heroImageUrl(),
+                imageUrl = s.heroImage(snapshot.places[s.placeId]),
                 placeholderSymbol = "🏨",
                 accent = region?.let { regionColor(it.color) } ?: fallback,
                 style = PhotoCardStyle.Large,

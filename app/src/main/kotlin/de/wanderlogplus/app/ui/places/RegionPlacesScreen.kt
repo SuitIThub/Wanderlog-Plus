@@ -1,5 +1,6 @@
 package de.wanderlogplus.app.ui.places
 
+import de.wanderlogplus.app.ui.design.heroImage
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -238,7 +239,7 @@ private fun PlaceCard(s: Suggestion, accent: Color, onClick: () -> Unit) {
     PhotoCard(
         title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
         subtitle = s.place?.let(::ratingText),
-        imageUrl = s.place?.heroImageUrl(),
+        imageUrl = s.saved.heroImage(s.place),
         placeholderSymbol = categorySymbol(s.saved.category),
         accent = accent,
         style = PhotoCardStyle.Compact,

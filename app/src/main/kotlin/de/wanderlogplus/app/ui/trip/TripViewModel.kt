@@ -85,6 +85,8 @@ class TripViewModel(
     fun remove(itemId: String) = write { e, s -> e.removeDayItem(s, itemId) }
 
     fun setDayTitle(date: String, title: String) = write { e, s -> e.setDayFields(s, date, mapOf("title" to JsonPrimitive(title))) }
+    fun setDayLinks(date: String, links: List<de.wanderlogplus.shared.model.CustomLink>) =
+        write { e, s -> e.setDayFields(s, date, mapOf("links" to kotlinx.serialization.json.Json.encodeToJsonElement(kotlinx.serialization.builtins.ListSerializer(de.wanderlogplus.shared.model.CustomLink.serializer()), links))) }
     fun setDayNote(date: String, note: String) = write { e, s -> e.setDayFields(s, date, mapOf("note" to JsonPrimitive(note))) }
 
     /** [regionId] null means "Automatisch": JsonNull is written, so the stay's region applies again. */

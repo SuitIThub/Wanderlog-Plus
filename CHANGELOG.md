@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.32.0
+
+- **Eigene Titelbilder:** Bei Orten und Unterkünften öffnet das Bild-Symbol im Kopf „Titelbild“ – Wanderlog-Fotos, eigene Fotos oder Google-Fotos wählen, ein Foto hochladen oder zurück zum Standardbild. Das Bild erscheint im Kopf, in den Ortslisten, in der Logistik und als Tagesbild; es wird synchronisiert und vom Wanderlog-Import nicht überschrieben. Unterkünfte haben dafür jetzt auch einen Fotos-Bereich.
+- **Eigene Links:** Orte, Unterkünfte, Züge, Flüge und Tage können Links bekommen (Name und URL, z. B. Tickets, Buchung, Infos). Sie stehen als Buttons neben Navigation, Website & Co.; „Link“ in der Reihe fügt sie hinzu oder ändert sie. Ohne „https://“ wird es ergänzt.
+
 ## 0.31.0
 
 - **Live-Status für Shinkansen:** Für Züge mit Shinkansen-Nummer (z. B. „Nozomi 21“, auch „Nozomi 21 / Shinano 7“) zeigen Detailansicht und „Nächste Fahrt“, wo der Zug gerade ist und ob er pünktlich ist („Running between KYOTO and SHIN-OSAKA · Delayed 5 min“), dazu den Status der Linie. Abgefragt nur ab 1 Stunde vor Abfahrt bis kurz nach der Ankunft. Quelle: JR Cyberstation über den inoffiziellen Dienst shinkansen-live.vercel.app – kann sich ändern oder wegfallen. Andere Züge (Limited Express, Nahverkehr) haben keinen Live-Status.

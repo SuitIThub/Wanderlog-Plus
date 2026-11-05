@@ -73,6 +73,13 @@ class MoreViewModel(
         else e.setChanged(EntityType.STAY, existing.id, de.wanderlogplus.shared.model.EntityCodec.fields(existing), after)
     }
 
+    /** Own header image of a stay ([ref] null: default). */
+    fun setHeaderImage(type: EntityType, id: String, ref: String?) =
+        write { e, _ -> e.set(type, id, mapOf("headerImage" to (ref?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))) }
+
+    fun setLinks(type: EntityType, id: String, links: List<de.wanderlogplus.shared.model.CustomLink>) =
+        write { e, _ -> e.set(type, id, mapOf("links" to kotlinx.serialization.json.Json.encodeToJsonElement(kotlinx.serialization.builtins.ListSerializer(de.wanderlogplus.shared.model.CustomLink.serializer()), links))) }
+
     fun mergeMoves(type: EntityType, firstId: String, secondId: String) = write { e, s -> e.mergeMoves(s, type, firstId, secondId) }
 
     fun deleteMove(type: EntityType, id: String) = write { e, _ -> e.delete(type, id) }

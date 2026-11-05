@@ -344,6 +344,7 @@ fun AppNavigation(
                 },
                 onAddStayAt = vm::addStayAt,
                 onRestoreVersion = { d, at -> vm.restoreVersion(d, at) },
+                onSetLinks = vm::setDayLinks,
             )
         }
 
@@ -357,6 +358,7 @@ fun AppNavigation(
             PlaceDetailScreen(
                 snap, id, onBack = onBack, onSaveNote = vm::setNote, onSetStatus = vm::setStatus, failureCount = failures, attachments = attachmentActions,
                 onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
+                onSetHeaderImage = vm::setHeaderImage, onSetLinks = vm::setLinks,
                 onSetReserved = vm::setReserved,
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
@@ -391,6 +393,8 @@ fun AppNavigation(
                 onEdit = { t, i -> nav.navigate(logisticsEditRoute(t, i)) },
                 onMerge = vm::mergeMoves,
                 onDelete = { t, i -> vm.deleteMove(t, i); afterDelete() },
+                onSetHeaderImage = vm::setHeaderImage,
+                onSetLinks = vm::setLinks,
             )
         }
 

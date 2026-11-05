@@ -78,6 +78,9 @@ internal fun DayProgramTab(
     weather: de.wanderlogplus.shared.sync.DayWeather? = null,
     /** "Umplanen" on a rainy day; null hides the button. */
     onReplan: (() -> Unit)? = null,
+    /** The day's own links and how to change them (null hides "Link"). */
+    links: List<de.wanderlogplus.shared.model.CustomLink> = emptyList(),
+    onSetLinks: ((List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
 ) {
     var showHistory by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     if (showHistory && onRestoreVersion != null) {
@@ -87,6 +90,9 @@ internal fun DayProgramTab(
         if (weather != null) {
             val outdoor = androidx.compose.runtime.remember(snapshot, date) { de.wanderlogplus.app.ui.weather.outdoorPlacesOn(snapshot, date) }
             de.wanderlogplus.app.ui.weather.DayWeatherCard(weather, Modifier.padding(bottom = 8.dp), outdoor = outdoor, onReplan = onReplan)
+        }
+        if (links.isNotEmpty() || onSetLinks != null) {
+            de.wanderlogplus.app.ui.design.LinkRow(emptyList(), links, onOpenLink, onSetLinks, Modifier.padding(bottom = 4.dp))
         }
         val places = items.count { it.kind == DayItemKind.PLACE }
         val legsSwitch = onShowLegs != null && places >= 2

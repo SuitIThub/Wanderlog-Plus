@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -72,6 +73,8 @@ fun HeroHeader(
     titleMaxLines: Int = 2,
     /** Told whether the title had to be cut (ellipsis), so a screen can show the full text elsewhere. */
     onTitleOverflow: ((Boolean) -> Unit)? = null,
+    /** "Titelbild ändern"; null hides the button. */
+    onChangeImage: (() -> Unit)? = null,
 ) {
     Box(modifier.fillMaxWidth().height(height).testTag("hero")) {
         PhotoOrGradient(imageUrl, accent, "hero-fallback", Modifier.matchParentSize(), gradient = heroGradient(accent))
@@ -81,9 +84,10 @@ fun HeroHeader(
             HeroButton(Icons.AutoMirrored.Filled.ArrowBack, "Zurück", onBack, "hero-back", Modifier.align(Alignment.TopStart))
         }
         val openChat = LocalOpenChat.current
-        if (onEdit != null || openChat != null) {
+        if (onEdit != null || openChat != null || onChangeImage != null) {
             Row(Modifier.align(Alignment.TopEnd)) {
                 if (openChat != null) HeroButton(Icons.AutoMirrored.Filled.Chat, "Reise-Chat", openChat, "hero-chat", Modifier)
+                if (onChangeImage != null) HeroButton(Icons.Filled.Image, "Titelbild ändern", onChangeImage, "hero-image", Modifier)
                 if (onEdit != null) HeroButton(Icons.Filled.Edit, "Bearbeiten", onEdit, "hero-edit", Modifier)
             }
         }

@@ -80,6 +80,10 @@ data class SavedPlace(
     val dossier: PlaceDossier? = null,
     /** The travellers booked it (a reservation or tickets): no more reservation reminders. */
     val reserved: Boolean = false,
+    /** Own header image: "wl:<image key>", "att:<attachment id>" or "g:<Google photo name>"; null: the first place image. */
+    val headerImage: String? = null,
+    /** Own links shown as buttons on the page (tickets, booking, info). */
+    val links: List<CustomLink> = emptyList(),
 )
 
 @Serializable
@@ -96,6 +100,10 @@ data class Stay(
     val cancellationDeadline: String? = null,
     val cancellationPolicy: String? = null,
     val note: String = "",
+    /** Own header image: "wl:<image key>", "att:<attachment id>" or "g:<Google photo name>"; null: the first place image. */
+    val headerImage: String? = null,
+    /** Own links shown as buttons on the page (tickets, booking, info). */
+    val links: List<CustomLink> = emptyList(),
 )
 
 @Serializable
@@ -123,6 +131,8 @@ data class Flight(
     val note: String = "",
     /** Stopovers between [depart] and [arrive], in travel order. */
     val via: List<Endpoint> = emptyList(),
+    /** Own links shown as buttons on the page (tickets, booking, info). */
+    val links: List<CustomLink> = emptyList(),
 )
 
 @Serializable
@@ -140,6 +150,8 @@ data class Train(
     val number: String? = null,
     /** The timetable connection taken over from the transit search (platforms, changes); null when entered by hand. */
     val transit: de.wanderlogplus.shared.sync.TransitResult? = null,
+    /** Own links shown as buttons on the page (tickets, booking, info). */
+    val links: List<CustomLink> = emptyList(),
 )
 
 @Serializable
@@ -153,6 +165,8 @@ data class Day(
     val showLegs: Boolean = false,
     /** Earlier versions of the program (before a chat plan was applied or a version restored), newest last. */
     val history: List<DayVersion> = emptyList(),
+    /** Own links shown as buttons on the page (tickets, booking, info). */
+    val links: List<CustomLink> = emptyList(),
 )
 
 /** A saved state of a day's program: which items, in which order, at which times. */
@@ -255,3 +269,7 @@ data class ExpenseShare(val travelerId: String, val value: Double = 0.0, val rep
 enum class SplitMode { EQUAL, PERCENT, AMOUNT }
 
 enum class PaymentStatus { OPEN, DEPOSIT, PAID }
+
+/** A link of the travellers: [label] shown on the button, [url] opened. */
+@Serializable
+data class CustomLink(val label: String = "", val url: String = "")

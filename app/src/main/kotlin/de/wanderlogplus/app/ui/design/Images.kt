@@ -17,7 +17,7 @@ fun dayHeroImage(snapshot: TripSnapshot, date: String): String? {
     val day = snapshot.queries()?.dayFor(date) ?: snapshot.days.filter { it.date == date }.maxByOrNull { it.id } ?: return null
     return snapshot.dayItemsFor(day.id).asSequence()
         .filter { it.kind == DayItemKind.PLACE }
-        .mapNotNull { item -> item.placeId?.let { snapshot.places[it] }?.heroImageUrl() }
+        .mapNotNull { item -> item.placeId?.let { pid -> snapshot.savedPlaces.firstOrNull { it.placeId == pid }.heroImage(snapshot.places[pid]) } }
         .firstOrNull()
 }
 
