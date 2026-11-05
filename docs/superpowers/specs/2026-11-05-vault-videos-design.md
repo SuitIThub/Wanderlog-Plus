@@ -62,6 +62,10 @@ JSON API (bearer + protocol header, per-user namespace):
   own size limit (~20 MB), not `maxFileBytes`.
 - `POST /api/vault/videos/sessions/{id}/complete` → updated `VaultImageInfo`.
 - `POST /api/vault/videos/{id}/request` / `unrequest` — full-video queue (idempotent).
+  Queue lifecycle: a ref leaves `video-requests.json` when (a) its session completes
+  (server clears it in the `complete` handler) or (b) the app calls `unrequest`
+  (e.g. the source vanished from the device — otherwise the app would re-mirror the
+  ref after every sync and loop).
 - `POST /api/vault/uploads/pause` / `resume`; `GET /api/vault/uploads/request`
   → `{requested, paused, videoRefs}`.
 - `POST /api/vault/images/bulk-delete` `{ids: [...]}` → per-id best-effort delete.
@@ -90,9 +94,9 @@ fine-grained resume/pause).
   ends or pause arrives, then `complete`. At most one active video per pass; chained
   workers continue. `VaultUploadTrigger.check()` parses `{requested, paused, videoRefs}`
   and schedules upload passes only when not paused.
-- **Pause:** the server flag is the truth. Checked at pass start and between parts
-  (one tiny GET per 8 MB — negligible); pause stops the pass cleanly, resume lets the
-  next sync/trigger pick up again. No auto-resume.
+- **Pause:** the server flag is the truth. Checked via `GET /api/vault/uploads/request`
+  at pass start and between parts (one tiny GET per 8 MB — negligible); pause stops
+  the pass cleanly, resume lets the next sync/trigger pick up again. No auto-resume.
 
 ## Web UI (`/vault`)
 
