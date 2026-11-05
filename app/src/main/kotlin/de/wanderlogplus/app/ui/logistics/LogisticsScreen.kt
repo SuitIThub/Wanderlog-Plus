@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -189,6 +190,8 @@ fun LogisticsScreen(
     today: String? = null,
     /** "Hinzufügen" for a train, flight or stay; null hides the button. */
     onAdd: ((EntityType) -> Unit)? = null,
+    /** Opens a journey (several legs); null opens its first leg. */
+    onOpenJourney: ((String) -> Unit)? = null,
 ) {
     val entries = remember(snapshot) { logisticsEntries(snapshot) }
     val moves = remember(entries) { entries.filter { it !is LogisticsEntry.StayEntry } }
@@ -201,7 +204,7 @@ fun LogisticsScreen(
             ScreenTab("Unterkünfte", tab == TAB_STAYS, "tab-stays") { tab = TAB_STAYS }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (tab == TAB_MOVES) MovesTab(snapshot, moves, onOpen) else StaysTab(snapshot, stays, onOpen, today)
+            if (tab == TAB_MOVES) MovesTab(snapshot, moves, onOpen, onOpenJourney) else StaysTab(snapshot, stays, onOpen, today)
             if (onAdd != null) {
                 var menu by remember { mutableStateOf(false) }
                 Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
@@ -232,12 +235,17 @@ fun LogisticsScreen(
 private val ListPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
 
 @Composable
-private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen: (LogisticsEntry) -> Unit) {
+private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen: (LogisticsEntry) -> Unit, onOpenJourney: ((String) -> Unit)?) {
     if (moves.isEmpty()) {
         EmptyHint("Keine Fahrten", Modifier.padding(16.dp).testTag("logistics-empty"))
         return
     }
-    val groups = remember(moves) { moves.groupBy { it.date } }
+    // A journey shows as one card in place of its first leg; its other legs are left out of the list.
+    val journeys = remember(snapshot) { de.wanderlogplus.client.journeys(snapshot) }
+    val firstLeg = remember(journeys) { journeys.associateBy { it.first.type to it.first.id } }
+    val inJourney = remember(journeys) { journeys.flatMap { j -> j.legs.map { it.type to it.id } }.toSet() }
+    val shown = remember(moves, journeys) { moves.filter { (it.type to it.id) !in inJourney || (it.type to it.id) in firstLeg } }
+    val groups = remember(shown) { shown.groupBy { it.date } }
     val accent = MaterialTheme.colorScheme.primary
     LazyColumn(Modifier.fillMaxSize().testTag("logistics-list"), contentPadding = ListPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         groups.forEach { (date, group) ->
@@ -250,7 +258,11 @@ private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen
                     modifier = Modifier.padding(top = 10.dp).testTag("logistics-date-$date"),
                 )
             }
-            items(group, key = { "${it.type}-${it.id}" }) { e -> MoveCard(snapshot, e, accent) { onOpen(e) } }
+            items(group, key = { "${it.type}-${it.id}" }) { e ->
+                val j = firstLeg[e.type to e.id]
+                if (j != null) JourneyCard(snapshot, j, accent) { if (onOpenJourney != null) onOpenJourney(j.id) else onOpen(e) }
+                else MoveCard(snapshot, e, accent) { onOpen(e) }
+            }
         }
     }
 }
@@ -332,4 +344,53 @@ internal fun endpointText(e: Endpoint): String {
     val place = listOf(e.name.takeIf { it.isNotBlank() }, e.code?.takeIf { it.isNotBlank() }?.let { "($it)" }).filterNotNull().joinToString(" ")
     val whenText = listOfNotNull(e.date?.takeIf { it.isNotBlank() }?.let(::dayLabel), e.time?.takeIf { it.isNotBlank() }).joinToString(" ")
     return listOf(place, whenText).filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { "–" }
+}
+
+/** One card for a journey: total route and times, a line per leg and the changes between them. */
+@Composable
+private fun JourneyCard(snapshot: TripSnapshot, j: de.wanderlogplus.client.Journey, accent: Color, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().testTag("journey-${j.id}"),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(start = 14.dp, end = 12.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "${j.first.depart.name.ifBlank { j.first.depart.code ?: "?" }} → ${j.last.arrive.name.ifBlank { j.last.arrive.code ?: "?" }}",
+                style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                listOfNotNull("${j.legs.size} Teilstrecken", j.totalMinutes?.let { "gesamt ${de.wanderlogplus.client.durationText(it)}" }).joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            j.legs.forEachIndexed { i, l ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("journey-${j.id}-leg-$i")) {
+                    androidx.compose.material3.Icon(legIcon(l), contentDescription = null, modifier = Modifier.padding(end = 6.dp).then(Modifier.size(16.dp)), tint = accent)
+                    Text(
+                        legTitle(l) + " · " + listOfNotNull(
+                            l.depart.code ?: l.depart.name.takeIf { it.isNotBlank() },
+                            l.depart.time,
+                        ).joinToString(" ") + " → " + listOfNotNull(l.arrive.code ?: l.arrive.name.takeIf { it.isNotBlank() }, l.arrive.time).joinToString(" "),
+                        style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (i < j.legs.lastIndex) {
+                    val t = de.wanderlogplus.client.transfer(snapshot, l, j.legs[i + 1])
+                    val warn = t.tight || t.overlaps
+                    Text(
+                        when {
+                            t.overlaps -> "Überschneidung"
+                            t.minutes != null -> "Umstieg ${de.wanderlogplus.client.durationText(t.minutes!!)}" + if (t.tight) " – knapp" else ""
+                            else -> "Umstieg"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 22.dp),
+                    )
+                }
+            }
+        }
+    }
 }

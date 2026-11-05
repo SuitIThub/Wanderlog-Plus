@@ -172,23 +172,19 @@ class RoutesAndLegsTest {
 
     // --- logistics: merge, delete, edit
 
-    @Test fun mergeAsksThenJoinsWithNextFlight() {
-        var merged: Triple<EntityType, String, String>? = null
+    @Test fun joinPicksLegsForAJourney() {
+        var joined: List<Pair<EntityType, String>>? = null
         rule.setContent {
             WanderlogPlusTheme {
-                LogisticsDetailScreen(Fixtures.trip(), EntityType.FLIGHT, "fl-1", onBack = {}, onEdit = { _, _ -> }, onMerge = { t, a, b -> merged = Triple(t, a, b) }, onDelete = { _, _ -> })
+                LogisticsDetailScreen(Fixtures.trip(), EntityType.FLIGHT, "fl-1", onBack = {}, onEdit = { _, _ -> }, onJoin = { joined = it }, onDelete = { _, _ -> })
             }
         }
-        rule.onNodeWithTag("move-merge").performClick()
-        rule.onNodeWithText("Zusammenführen?").assertExists()
-        rule.onNodeWithTag("merge-confirm").performSemanticsAction(SemanticsActions.OnClick)
-        assertEquals(Triple(EntityType.FLIGHT, "fl-1", "fl-2"), merged)
-    }
-
-    @Test fun lastLegHasNoMergeButton() {
-        rule.setContent {
-            WanderlogPlusTheme { LogisticsDetailScreen(Fixtures.trip(), EntityType.FLIGHT, "fl-2", onBack = {}, onMerge = { _, _, _ -> }) }
-        }
+        rule.onNodeWithTag("move-join").performClick()
+        rule.onNodeWithText("Zu einer Reise zusammenführen").assertExists()
+        rule.onNodeWithTag("join-fl-2-check").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("join-confirm").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf(EntityType.FLIGHT to "fl-1", EntityType.FLIGHT to "fl-2"), joined)
+        // The old "Mit nächster zusammenführen" is gone.
         assertEquals(0, rule.onAllNodesWithTag("move-merge").fetchSemanticsNodes().size)
     }
 

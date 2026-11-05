@@ -87,6 +87,8 @@ class TransitViewModel(
     date: String,
     time: String?,
     chosen: TransitResult?,
+    /** "depart" or "arrive" for a fresh search (a chosen connection keeps its own). */
+    searchType: String = "depart",
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         TransitScreenState(
@@ -95,7 +97,7 @@ class TransitViewModel(
                 toStation = chosen?.toStation?.nameJa.orEmpty(),
                 date = chosen?.datetime?.take(10) ?: date,
                 time = chosen?.datetime?.drop(11)?.takeIf { normalizeTime(it) != null } ?: normalizeTime(time) ?: "09:00",
-                searchType = chosen?.searchType ?: "depart",
+                searchType = chosen?.searchType ?: searchType,
             ),
         ),
     )

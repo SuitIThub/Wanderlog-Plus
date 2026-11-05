@@ -420,6 +420,22 @@ internal fun NextTripWidget(
             }
         }
         TicketChips(snapshot.attachmentsFor(move.movement.targetType(), move.movement.id()), onOpenAttachment, available)
+        // Part of a journey: what comes next and the change.
+        val journey = androidx.compose.runtime.remember(snapshot, move) { de.wanderlogplus.client.journeyOf(snapshot, move.movement.targetType(), move.movement.id()) }
+        journey?.let { j ->
+            val i = j.indexOf(move.movement.targetType(), move.movement.id())
+            j.legs.getOrNull(i + 1)?.let { next ->
+                val t = de.wanderlogplus.client.transfer(snapshot, j.legs[i], next)
+                Text(
+                    "Danach: " + de.wanderlogplus.app.ui.logistics.legTitle(next) + (next.depart.time?.let { " um $it" } ?: "") +
+                        (t.minutes?.let { " · Umstieg " + de.wanderlogplus.client.durationText(it) + if (t.tight) " (knapp)" else "" } ?: "") +
+                        (listOfNotNull(t.fromSpot, t.toSpot).takeIf { it.size == 2 }?.let { " · " + it.joinToString(" → ") } ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (t.tight || t.overlaps) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("next-trip-after"),
+                )
+            }
+        }
     }
 }
 

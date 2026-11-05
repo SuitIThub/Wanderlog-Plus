@@ -92,6 +92,12 @@ fun LogisticsDetailScreen(
     onSetHeaderImage: ((EntityType, String, String?) -> Unit)? = null,
     /** Own links; null hides "Link". */
     onSetLinks: ((EntityType, String, List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
+    /** Opens the journey this leg belongs to. */
+    onOpenJourney: ((String) -> Unit)? = null,
+    /** "Zu einer Reise zusammenführen…" (this leg plus the picked ones); null hides it. */
+    onJoin: ((List<Pair<EntityType, String>>) -> Unit)? = null,
+    /** "In Teilstrecken aufteilen" for an old merged entry; null hides it. */
+    onSplit: ((EntityType, String) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -136,8 +142,27 @@ fun LogisticsDetailScreen(
             onChangeImage = if (stay != null && onSetHeaderImage != null) ({ choosingImage = true }) else null,
         )
         RouteMap(view.route, view.accent, height = 160.dp)
-        if (type == EntityType.TRAIN || type == EntityType.FLIGHT || type == EntityType.STAY) {
-            MoveActions(snapshot, type, id, onEdit, onMerge, onDelete)
+        if (type == EntityType.TRAIN || type == EntityType.FLIGHT) {
+            val journey = remember(snapshot, type, id) { de.wanderlogplus.client.journeyOf(snapshot, type, id) }
+            journey?.let { j ->
+                val i = j.indexOf(type, id)
+                androidx.compose.material3.Surface(
+                    onClick = { onOpenJourney?.invoke(j.id) },
+                    enabled = onOpenJourney != null,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp).testTag("leg-journey"),
+                ) {
+                    Text(
+                        "Teil der Reise ${j.first.depart.name.ifBlank { j.first.depart.code ?: "?" }} → ${j.last.arrive.name.ifBlank { j.last.arrive.code ?: "?" }} (${i + 1}/${j.legs.size})" +
+                            (if (onOpenJourney != null) " · ansehen" else ""),
+                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(12.dp),
+                    )
+                }
+            }
+            LegActions(snapshot, type, id, journey?.id, onEdit, onJoin, onSplit, onDelete)
+        } else if (type == EntityType.STAY) {
+            MoveActions(snapshot, type, id, onEdit, null, onDelete)
         }
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -378,5 +403,54 @@ internal fun transitSummary(r: de.wanderlogplus.shared.sync.TransitRoute): Strin
         val from = l.from.name.ifBlank { l.from.nameJa }
         val to = l.to.name.ifBlank { l.to.nameJa }
         "$line: $from ${l.departure}" + (l.departurePlatform?.takeIf { it.isNotBlank() }?.let { " (Gleis $it)" } ?: "") + " → $to ${l.arrival}"
+    }
+}
+
+/** Actions of a train/flight: edit, join into a journey (pick legs), split an old merged entry, delete. */
+@Composable
+private fun LegActions(
+    snapshot: TripSnapshot,
+    type: EntityType,
+    id: String,
+    journeyId: String?,
+    onEdit: ((EntityType, String) -> Unit)?,
+    onJoin: ((List<Pair<EntityType, String>>) -> Unit)?,
+    onSplit: ((EntityType, String) -> Unit)?,
+    onDelete: ((EntityType, String) -> Unit)?,
+) {
+    var joining by remember(type, id) { mutableStateOf(false) }
+    var confirmSplit by remember(type, id) { mutableStateOf(false) }
+    val legacy = journeyId == null && when (type) {
+        EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.via?.isNotEmpty() == true
+        EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.via?.isNotEmpty() == true
+        else -> false
+    }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        onEdit?.let { e -> OutlinedButton(onClick = { e(type, id) }, modifier = Modifier.testTag("move-edit")) { Text("Bearbeiten") } }
+        if (onJoin != null) OutlinedButton(onClick = { joining = true }, modifier = Modifier.testTag("move-join")) { Text(if (journeyId != null) "Weitere Fahrt zur Reise" else "Zu Reise zusammenführen") }
+        if (onSplit != null && legacy) OutlinedButton(onClick = { confirmSplit = true }, modifier = Modifier.testTag("move-split")) { Text("In Teilstrecken aufteilen") }
+    }
+    // Delete keeps its confirmation from MoveActions.
+    MoveActions(snapshot, type, id, null, null, onDelete)
+    if (joining && onJoin != null) {
+        val around = de.wanderlogplus.client.legOf(
+            if (type == EntityType.FLIGHT) de.wanderlogplus.client.movementOf(snapshot.flights.first { it.id == id }) else de.wanderlogplus.client.movementOf(snapshot.trains.first { it.id == id }),
+        ).departs
+        JoinDialog(snapshot, journeyId, around, emptySet(), exclude = setOf(type to id), onDismiss = { joining = false }) { picked ->
+            joining = false
+            onJoin(listOf(type to id) + picked)
+        }
+    }
+    if (confirmSplit && onSplit != null) {
+        AlertDialog(
+            onDismissRequest = { confirmSplit = false },
+            title = { Text("In Teilstrecken aufteilen?") },
+            text = { Text("Aus jedem Zwischenhalt wird eine eigene Teilstrecke derselben Reise. Abfahrtszeiten und Nummern der neuen Strecken trägst du danach ein (z. B. per Verbindungssuche).") },
+            confirmButton = { TextButton(onClick = { confirmSplit = false; onSplit(type, id) }, modifier = Modifier.testTag("split-confirm")) { Text("Aufteilen") } },
+            dismissButton = { TextButton(onClick = { confirmSplit = false }) { Text("Abbrechen") } },
+        )
     }
 }
