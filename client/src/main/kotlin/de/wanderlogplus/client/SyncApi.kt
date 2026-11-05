@@ -23,9 +23,11 @@ import de.wanderlogplus.shared.sync.TransitResult
 import de.wanderlogplus.shared.sync.TransitStationNear
 import de.wanderlogplus.shared.sync.TransitStations
 import de.wanderlogplus.shared.sync.VaultImageInfo
+import de.wanderlogplus.shared.sync.VaultKind
 import de.wanderlogplus.shared.sync.VaultScanStatus
 import de.wanderlogplus.shared.sync.VaultScanUpdate
 import de.wanderlogplus.shared.sync.VaultUploadTrigger
+import de.wanderlogplus.shared.sync.VaultVideoSession
 import io.ktor.http.encodeURLPathPart
 import de.wanderlogplus.shared.sync.RouteRequest
 import io.ktor.client.HttpClient
@@ -37,6 +39,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -88,6 +91,21 @@ data class UploadedFile(val hash: String, val size: Long, val duplicate: Boolean
 
 @Serializable
 internal data class WhoAmI(val name: String)
+
+@Serializable
+internal data class VaultVideoSessionRequest(
+    val videoRef: String,
+    val fileName: String,
+    val size: Long,
+    val sha256: String,
+    val videoMimeType: String,
+)
+
+@Serializable
+internal data class VaultBulkDeleteRequest(val ids: List<String>)
+
+@Serializable
+internal data class VaultBulkDeleteResponse(val deleted: Int)
 
 enum class ApiErrorKind { NETWORK, UNAUTHORIZED, PROTOCOL, CURSOR_AHEAD, BAD_REQUEST, CLOCK_DRIFT, NOT_CONFIGURED, SERVER }
 
@@ -390,10 +408,86 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
-    /** The web overview's "Upload fortsetzen" flag (best effort; callers swallow failures, e.g. an old server's 404). */
-    suspend fun vaultUploadRequested(): Boolean = call<VaultUploadTrigger> {
+    /** The full upload trigger: "Upload fortsetzen" flag, sticky pause and the queued video refs. */
+    suspend fun vaultUploadTrigger(): VaultUploadTrigger = call {
         client.get("$base/api/vault/uploads/request") { auth() }
-    }.requested
+    }
+
+    /** The web overview's "Upload fortsetzen" flag (best effort; callers swallow failures, e.g. an old server's 404). */
+    suspend fun vaultUploadRequested(): Boolean = vaultUploadTrigger().requested
+
+    /** Pauses (or resumes) every vault upload of this user on the device; sticky until manually changed. */
+    suspend fun setVaultUploadsPaused(paused: Boolean) {
+        val r = try {
+            client.post("$base/api/vault/uploads/${if (paused) "pause" else "resume"}") { auth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        }
+        if (r.status.value !in 200..299) throw classify(r.status.value, try { r.body<ErrorResponse>() } catch (e: Exception) { null })
+    }
+
+    /** Queues the full video of vault entry [id] for upload from the device. */
+    suspend fun requestVaultVideo(id: String) = postVaultNoBody("$base/api/vault/videos/${id.encodeURLPathPart()}/request")
+
+    /** Removes the full video of vault entry [id] from the upload queue. */
+    suspend fun unrequestVaultVideo(id: String) = postVaultNoBody("$base/api/vault/videos/${id.encodeURLPathPart()}/unrequest")
+
+    private suspend fun postVaultNoBody(url: String) {
+        val r = try {
+            client.post(url) { auth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiException(ApiErrorKind.NETWORK, cause = e)
+        }
+        if (r.status.value !in 200..299) throw classify(r.status.value, try { r.body<ErrorResponse>() } catch (e: Exception) { null })
+    }
+
+    /** Starts (or resumes) the chunked upload of one video; `complete = true` means the bytes are already stored. */
+    suspend fun startVaultVideoSession(videoRef: String, fileName: String, size: Long, sha256: String, videoMimeType: String): VaultVideoSession = call {
+        client.post("$base/api/vault/videos/sessions") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(VaultVideoSessionRequest(videoRef, fileName, size, sha256, videoMimeType))
+        }
+    }
+
+    /** The session with [id], or null when it expired or never existed (the caller re-inits then). */
+    suspend fun vaultVideoSession(id: String): VaultVideoSession? = try {
+        call { client.get("$base/api/vault/videos/sessions/${id.encodeURLPathPart()}") { auth() } }
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
+    }
+
+    /**
+     * Uploads one part of a video session (raw body plus the part's SHA-256 in `X-Part-Sha256`; the server
+     * answers 409 `part_conflict` when the index holds different bytes and 404 `not_found` when the session
+     * is gone). Parts are idempotent per index, so retries are safe.
+     */
+    suspend fun uploadVaultVideoPart(sessionId: String, index: Int, bytes: ByteArray, partSha256: String): VaultVideoSession = call {
+        client.put("$base/api/vault/videos/sessions/${sessionId.encodeURLPathPart()}/parts/$index") {
+            auth()
+            contentType(ContentType.Application.OctetStream)
+            header("X-Part-Sha256", partSha256)
+            setBody(bytes)
+        }
+    }
+
+    /** Assembles and verifies the video on the server; the entry then streams from `/vault/vid/{id}`. */
+    suspend fun completeVaultVideoSession(id: String): VaultImageInfo = call {
+        client.post("$base/api/vault/videos/sessions/${id.encodeURLPathPart()}/complete") { auth() }
+    }
+
+    /** Deletes several vault entries at once; returns how many of them existed. */
+    suspend fun deleteVaultImages(ids: List<String>): Int = call<VaultBulkDeleteResponse> {
+        client.post("$base/api/vault/images/bulk-delete") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(VaultBulkDeleteRequest(ids))
+        }
+    }.deleted
 
     /** Clears the flag after the app has scheduled the upload pass. */
     suspend fun clearVaultUploadRequest() {
@@ -418,8 +512,21 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         if (e.status == 404) null else throw e
     }
 
-    /** Uploads one flagged image to the vault; [score] is the classifier value (0..1). */
-    suspend fun uploadVaultImage(file: File, fileName: String, mimeType: String, score: Double): VaultImageInfo = call {
+    /**
+     * Uploads one media file to the vault; [score] is a legacy classifier value (0 for plain backups).
+     * For videos the file is the thumbnail and [kind] is VIDEO: [videoRef] (the device's MediaStore uri),
+     * [durationMs] and [videoBytes] describe the full video, which follows chunked via a session on request.
+     */
+    suspend fun uploadVaultImage(
+        file: File,
+        fileName: String,
+        mimeType: String,
+        score: Double,
+        kind: VaultKind = VaultKind.PHOTO,
+        videoRef: String? = null,
+        durationMs: Long? = null,
+        videoBytes: Long? = null,
+    ): VaultImageInfo = call {
         client.post("$base/api/vault/images") {
             auth()
             timeout { requestTimeoutMillis = DOWNLOAD_TIMEOUT_MS }
@@ -429,6 +536,10 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
                         append("score", score.toString())
                         append("fileName", fileName)
                         append("mimeType", mimeType)
+                        if (kind == VaultKind.VIDEO) append("kind", "video")
+                        videoRef?.let { append("videoRef", it) }
+                        durationMs?.let { append("durationMs", it.toString()) }
+                        videoBytes?.let { append("videoBytes", it.toString()) }
                         append(
                             "file",
                             InputProvider(file.length()) { file.inputStream().asInput() },
