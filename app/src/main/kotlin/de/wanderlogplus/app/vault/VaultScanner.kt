@@ -8,10 +8,13 @@ import android.provider.MediaStore
 import de.wanderlogplus.app.data.VaultDao
 import de.wanderlogplus.app.data.VaultFoundEntity
 import de.wanderlogplus.app.data.VaultScanStateEntity
+import de.wanderlogplus.client.ApiException
 import de.wanderlogplus.client.SyncApi
+import de.wanderlogplus.shared.sync.VAULT_PART_SIZE
 import de.wanderlogplus.shared.sync.VaultKind
 import de.wanderlogplus.shared.sync.VaultScanStates
 import de.wanderlogplus.shared.sync.VaultScanUpdate
+import de.wanderlogplus.shared.sync.VaultVideoSession
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,6 +36,11 @@ class VaultScanner(
     /** Reads a media item; injectable so tests can skip the content resolver. */
     private val openStream: (Uri) -> java.io.InputStream? = { appContext.contentResolver.openInputStream(it) },
     private val thumbnails: VideoThumbnails = MediaStoreVideoThumbnails(appContext),
+    /** Whole-file length for a video session; never MediaStore's SIZE column (it goes stale). */
+    private val fileLength: (Uri) -> Long? = { uri ->
+        appContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { fd -> fd.length.takeIf { it > 0 } }
+    },
+    private val partSize: Long = VAULT_PART_SIZE,
 ) {
     data class Result(val total: Int, val scanned: Int, val found: Int, val uploaded: Int)
 
@@ -284,7 +292,180 @@ class VaultScanner(
                 tmp.delete()
             }
         }
+        if (!stoppedOnError) {
+            for (video in dao.requestedVideos()) {
+                if (System.currentTimeMillis() >= deadline) break
+                when (drainFullVideo(client, video, deadline)) {
+                    VideoDrain.COMPLETED -> {
+                        uploaded++
+                        break // at most one video per pass
+                    }
+                    VideoDrain.PAUSED -> break
+                    VideoDrain.FAILED -> {
+                        stoppedOnError = true
+                        break
+                    }
+                    VideoDrain.VANISHED -> { /* try the next requested video */ }
+                }
+            }
+        }
         DrainOutcome(uploaded, dao.pendingUploadCount(), stoppedOnError)
+    }
+
+    private enum class VideoDrain { COMPLETED, PAUSED, FAILED, VANISHED }
+
+    /**
+     * Chunked upload of one requested video. Pause is checked before every part; a vanished source is
+     * unrequested so the next sync does not put it back.
+     */
+    private suspend fun drainFullVideo(client: SyncApi, pending: VaultFoundEntity, deadline: Long): VideoDrain {
+        val uri = Uri.parse(pending.uri)
+        val size = fileLength(uri)
+        val hash = if (size != null) sha256Streaming(uri) else null
+        if (size == null || hash == null) {
+            vanishVideo(client, pending.uri)
+            return VideoDrain.VANISHED
+        }
+        var session: VaultVideoSession
+        try {
+            session = client.startVaultVideoSession(pending.uri, pending.fileName, size, hash, pending.mimeType)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return VideoDrain.FAILED
+        }
+        if (session.complete) {
+            dao.deleteVideoRequest(pending.uri)
+            return VideoDrain.COMPLETED
+        }
+        val partCount = ((size + partSize - 1) / partSize).toInt()
+        val received = session.receivedParts.toMutableSet()
+        var i = 0
+        while (i < partCount) {
+            if (System.currentTimeMillis() >= deadline) return VideoDrain.PAUSED
+            val paused = try {
+                client.vaultUploadTrigger().paused
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return VideoDrain.FAILED
+            }
+            if (paused) return VideoDrain.PAUSED
+            if (i in received) {
+                i++
+                continue
+            }
+            val bytes = readPart(uri, i, size)
+            if (bytes == null) {
+                vanishVideo(client, pending.uri)
+                return VideoDrain.VANISHED
+            }
+            val partHash = sha256Bytes(bytes)
+            var attempts = 0
+            while (true) {
+                try {
+                    client.uploadVaultVideoPart(session.id, i, bytes, partHash)
+                    received += i
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ApiException) {
+                    if (e.status == 404) {
+                        session = try {
+                            client.startVaultVideoSession(pending.uri, pending.fileName, size, hash, pending.mimeType)
+                        } catch (e2: CancellationException) {
+                            throw e2
+                        } catch (e2: Exception) {
+                            return VideoDrain.FAILED
+                        }
+                        if (session.complete) {
+                            dao.deleteVideoRequest(pending.uri)
+                            return VideoDrain.COMPLETED
+                        }
+                        received.clear()
+                        received.addAll(session.receivedParts)
+                        break // retry this index against the new session
+                    }
+                    if (e.status == 409 && attempts == 0) {
+                        attempts++
+                        continue
+                    }
+                    return VideoDrain.FAILED
+                } catch (e: Exception) {
+                    return VideoDrain.FAILED
+                }
+            }
+            if (i in received) i++
+        }
+        try {
+            client.completeVaultVideoSession(session.id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return VideoDrain.FAILED
+        }
+        dao.deleteVideoRequest(pending.uri)
+        return VideoDrain.COMPLETED
+    }
+
+    private suspend fun vanishVideo(client: SyncApi, ref: String) {
+        try {
+            client.unrequestVaultVideo(ref)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Best effort: the local row is dropped either way so this pass does not retry a missing file.
+        }
+        dao.deleteVideoRequest(ref)
+    }
+
+    private fun sha256Streaming(uri: Uri): String? {
+        val input = openStream(uri) ?: return null
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        input.use {
+            val buf = ByteArray(8192)
+            while (true) {
+                val r = it.read(buf)
+                if (r < 0) break
+                digest.update(buf, 0, r)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun sha256Bytes(bytes: ByteArray): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        digest.update(bytes)
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun readPart(uri: Uri, index: Int, totalSize: Long): ByteArray? {
+        val start = index * partSize
+        val len = minOf(partSize, totalSize - start).toInt()
+        if (len <= 0) return ByteArray(0)
+        val input = openStream(uri) ?: return null
+        input.use {
+            var skipped = 0L
+            while (skipped < start) {
+                val n = it.skip(start - skipped)
+                if (n > 0) {
+                    skipped += n
+                    continue
+                }
+                val dump = ByteArray(8192)
+                val r = it.read(dump, 0, minOf(dump.size.toLong(), start - skipped).toInt())
+                if (r < 0) return null
+                skipped += r
+            }
+            val buf = ByteArray(len)
+            var off = 0
+            while (off < len) {
+                val r = it.read(buf, off, len - off)
+                if (r < 0) return null
+                off += r
+            }
+            return buf
+        }
     }
 
     /** Copies [uri] to [dest] while computing its SHA-256 (hex); null when the source cannot be opened. */

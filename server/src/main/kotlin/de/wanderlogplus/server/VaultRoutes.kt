@@ -208,7 +208,11 @@ fun Route.vaultApi(services: Services) {
 }
 
 private suspend fun RoutingContext.videoRequest(services: Services, requested: Boolean) {
-    val entry = withContext(Dispatchers.IO) { services.vault.images(call.author()).firstOrNull { it.id == call.parameters["id"] } }
+    val key = call.parameters["id"].orEmpty()
+    val entry = withContext(Dispatchers.IO) {
+        val all = services.vault.images(call.author())
+        all.firstOrNull { it.id == key } ?: all.firstOrNull { it.videoRef == key }
+    }
     if (entry == null || entry.kind != VaultKind.VIDEO || entry.videoRef == null) {
         call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
     } else {
