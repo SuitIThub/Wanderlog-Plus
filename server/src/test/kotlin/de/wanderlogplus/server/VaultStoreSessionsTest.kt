@@ -85,6 +85,29 @@ class VaultStoreSessionsTest {
     }
 
     @Test
+    fun saveScanKeepsPreviousStatsWhenOmitted() {
+        val store = store()
+        store.saveScan(
+            "alice",
+            de.wanderlogplus.shared.sync.VaultScanUpdate(
+                state = "done", totalImages = 3, scannedImages = 3, foundImages = 2,
+                photosOnDevice = 100, videosOnDevice = 7, pendingUploads = 42,
+            ),
+        )
+        store.saveScan(
+            "alice",
+            de.wanderlogplus.shared.sync.VaultScanUpdate(
+                state = "done", totalImages = 3, scannedImages = 3, foundImages = 2,
+                pendingUploads = 10,
+            ),
+        )
+        val scan = store.scan("alice")
+        assertEquals(100, scan!!.photosOnDevice)
+        assertEquals(7, scan.videosOnDevice)
+        assertEquals(10, scan.pendingUploads)
+    }
+
+    @Test
     fun savePartIsIdempotentAndConflicts() {
         val store = store()
         val ref = "r"

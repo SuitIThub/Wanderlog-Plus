@@ -104,23 +104,18 @@ class VaultScanner(
     // -- MediaStore --
 
     /** Full access, or the Android-14 partial pick ("selected photos"): both let [queryImages] read something. */
-    private fun hasMediaPermission(): Boolean {
-        val full = if (Build.VERSION.SDK_INT >= 33) android.Manifest.permission.READ_MEDIA_IMAGES else android.Manifest.permission.READ_EXTERNAL_STORAGE
-        if (androidx.core.content.ContextCompat.checkSelfPermission(appContext, full) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
-        return Build.VERSION.SDK_INT >= 34 &&
-            androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasMediaPermission(): Boolean =
+        VaultMediaAccess.canReadImages(Build.VERSION.SDK_INT, ::permissionGranted)
 
     /**
      * Videos are best-effort: images-only permission must not block the photo backup. On API 33+ this is a
      * separate grant (`READ_MEDIA_VIDEO`); below that, storage access covers both.
      */
-    private fun hasVideoPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return hasMediaPermission()
-        if (androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VIDEO) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
-        return Build.VERSION.SDK_INT >= 34 &&
-            androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == android.content.pm.PackageManager.PERMISSION_GRANTED
-    }
+    private fun hasVideoPermission(): Boolean =
+        VaultMediaAccess.canReadVideos(Build.VERSION.SDK_INT, ::permissionGranted)
+
+    private fun permissionGranted(permission: String): Boolean =
+        androidx.core.content.ContextCompat.checkSelfPermission(appContext, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     private data class MediaItem(
         val uri: Uri,
@@ -243,6 +238,11 @@ class VaultScanner(
         val deadline = System.currentTimeMillis() + MAX_UPLOAD_MILLIS
         for (pending in dao.pendingUploads()) {
             if (System.currentTimeMillis() >= deadline) break
+            when (clientPaused(client)) {
+                true -> { paused = true; break }
+                null -> { stoppedOnError = true; break }
+                false -> {}
+            }
             val tmp = File(appContext.cacheDir, "vault-upload-${UUID.randomUUID()}")
             try {
                 val video = pending.kind == "video"
@@ -287,6 +287,7 @@ class VaultScanner(
                 }
                 dao.markUploaded(pending.uri, System.currentTimeMillis())
                 uploaded++
+                reportQueue(client)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: de.wanderlogplus.client.ApiException) {
@@ -305,7 +306,7 @@ class VaultScanner(
                 tmp.delete()
             }
         }
-        if (!stoppedOnError) {
+        if (!stoppedOnError && !paused) {
             for (video in dao.requestedVideos()) {
                 if (System.currentTimeMillis() >= deadline) break
                 when (drainFullVideo(client, video, deadline)) {
@@ -326,7 +327,35 @@ class VaultScanner(
                 }
             }
         }
+        reportQueue(client)
         DrainOutcome(uploaded, remainingWork(), stoppedOnError, paused)
+    }
+
+    /** Sticky pause from the web UI; null when the trigger cannot be read (treat as a drain error). */
+    private suspend fun clientPaused(client: SyncApi): Boolean? = try {
+        client.vaultUploadTrigger().paused
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Best-effort queue size for the web status bar; omits device counts so the server keeps the last scan's. */
+    private suspend fun reportQueue(client: SyncApi) {
+        val local = dao.scanState() ?: return
+        try {
+            client.postVaultScan(
+                VaultScanUpdate(
+                    local.state, local.total, local.scanned, local.found, device,
+                    pendingUploads = dao.pendingUploadCount(),
+                )
+            )
+            serverUnreachable = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            serverUnreachable = true
+        }
     }
 
     private enum class VideoDrain { COMPLETED, PAUSED, TIMEBOX, FAILED, VANISHED }

@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import de.wanderlogplus.app.data.AppDatabase
 import de.wanderlogplus.app.data.VaultFoundEntity
+import de.wanderlogplus.app.data.VaultScanStateEntity
 import de.wanderlogplus.app.data.VaultVideoRequestEntity
 import de.wanderlogplus.client.SyncApi
 import io.ktor.client.HttpClient
@@ -62,23 +63,33 @@ class VaultScannerDrainTest {
         openStream: (android.net.Uri) -> java.io.InputStream? = { "abc".byteInputStream() },
         fileLength: (android.net.Uri) -> Long? = { null },
         partSize: Long = de.wanderlogplus.shared.sync.VAULT_PART_SIZE,
+        autoTrigger: Boolean = true,
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
-    ): VaultScanner =
-        VaultScanner(
+    ): VaultScanner {
+        val wrapped: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = { req ->
+            if (autoTrigger && req.method == HttpMethod.Get && req.url.encodedPath.endsWith("/uploads/request")) {
+                respond(triggerJson, HttpStatusCode.OK, json)
+            } else {
+                handler(req)
+            }
+        }
+        return VaultScanner(
             appContext = ApplicationProvider.getApplicationContext(),
             dao = db.vault(),
-            api = { SyncApi(HttpClient(MockEngine(handler)), "https://s.example", "tok") },
+            api = { SyncApi(HttpClient(MockEngine(wrapped)), "https://s.example", "tok") },
             openStream = openStream,
             thumbnails = thumbnails,
             fileLength = fileLength,
             partSize = partSize,
         )
+    }
 
     private fun videoScanner(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData) =
         scanner(
             openStream = { java.io.ByteArrayInputStream(videoBytes) },
             fileLength = { 20L },
             partSize = 8,
+            autoTrigger = false,
             handler = handler,
         )
 
@@ -130,6 +141,52 @@ class VaultScannerDrainTest {
         assertEquals(1, out.uploaded)
         assertEquals(1, posts)
         assertEquals(0, db.vault().pendingUploadCount())
+    }
+
+    @Test fun pauseBetweenPhotosStopsCleanly() = runBlocking {
+        seed("content://media/1")
+        seed("content://media/2")
+        seed("content://media/3")
+        var triggerCalls = 0
+        var uploads = 0
+        val out = scanner(autoTrigger = false) { req ->
+            val p = req.url.encodedPath
+            when {
+                p.endsWith("/uploads/request") -> {
+                    triggerCalls++
+                    val paused = triggerCalls > 1
+                    respond("""{"requested":false,"paused":$paused,"videoRefs":[]}""", HttpStatusCode.OK, json)
+                }
+                p.contains("/by-hash/") -> respond("""{"error":"not_found"}""", HttpStatusCode.NotFound, json)
+                p.endsWith("/scan") -> respond("""{"user":"u","state":"done","totalImages":3,"scannedImages":3,"foundImages":3,"updatedAt":1}""", HttpStatusCode.OK, json)
+                else -> { uploads++; respond(infoJson, HttpStatusCode.OK, json) }
+            }
+        }.drainUploads()
+        assertEquals(1, uploads)
+        assertTrue(out.paused)
+        assertFalse(out.stoppedOnError)
+        assertEquals(2, out.remaining)
+    }
+
+    @Test fun drainReportsPendingCount() = runBlocking {
+        db.vault().upsertScanState(VaultScanStateEntity(1, "done", 2, 2, 2, 1))
+        seed("content://media/1")
+        seed("content://media/2")
+        val pendingReports = mutableListOf<String>()
+        scanner { req ->
+            val p = req.url.encodedPath
+            when {
+                p.endsWith("/uploads/request") -> respond(triggerJson, HttpStatusCode.OK, json)
+                p.contains("/by-hash/") -> respond("""{"error":"not_found"}""", HttpStatusCode.NotFound, json)
+                p.endsWith("/scan") -> {
+                    pendingReports += String(req.body.toByteArray())
+                    respond("""{"user":"u","state":"done","totalImages":2,"scannedImages":2,"foundImages":2,"updatedAt":1}""", HttpStatusCode.OK, json)
+                }
+                else -> respond(infoJson, HttpStatusCode.OK, json)
+            }
+        }.drainUploads()
+        assertTrue(pendingReports.any { it.contains("\"pendingUploads\":1") })
+        assertTrue(pendingReports.last().contains("\"pendingUploads\":0"))
     }
 
     @Test fun lostResponseIsRecoveredByHashRecheck() = runBlocking {

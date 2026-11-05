@@ -35,6 +35,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import de.wanderlogplus.app.AppContainer
 import de.wanderlogplus.app.WanderlogPlusApp
+import de.wanderlogplus.app.vault.VaultMediaAccess
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.data.TripZone
 import de.wanderlogplus.app.data.now
@@ -85,9 +86,12 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     /** On grant the first vault scan starts right away (the daily schedule already exists from the Application). */
-    private val mediaPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        val images = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (result[images] == true) (application as WanderlogPlusApp).container.syncScheduler.requestVaultScan()
+    private val mediaPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        val sdk = Build.VERSION.SDK_INT
+        fun granted(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+        if (VaultMediaAccess.canReadImages(sdk, ::granted)) {
+            (application as WanderlogPlusApp).container.syncScheduler.requestVaultScan()
+        }
     }
 
     /** Asks for POST_NOTIFICATIONS (API 33+) only once, so a refusal is never nagged about. */
@@ -105,15 +109,18 @@ class MainActivity : ComponentActivity() {
      * The photo picker used elsewhere needs no permission, so nothing else in the app ever asks.
      */
     private fun requestMediaPermissionOnce() {
-        val images = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(this, images) == PackageManager.PERMISSION_GRANTED) return
-        // Android 14 partial access ("selected photos") is enough for the scanner.
-        if (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED) return
+        val sdk = Build.VERSION.SDK_INT
+        fun granted(p: String) = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+        val access = VaultMediaAccess
+        if (access.canReadImages(sdk, ::granted) && access.canReadVideos(sdk, ::granted)) return
+        val missing = access.missing(sdk, ::granted)
+        if (missing.isEmpty()) return
         val prefs = getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(this, "vault"), MODE_PRIVATE)
-        if (prefs.getBoolean("permissionAsked", false)) return
-        prefs.edit().putBoolean("permissionAsked", true).apply()
-        val needed = if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-        mediaPermission.launch(needed)
+        // A previous version asked only for photos; upgrades must still ask for video once.
+        val flag = if (access.canReadImages(sdk, ::granted)) "permissionAskedVideo" else "permissionAsked"
+        if (prefs.getBoolean(flag, false)) return
+        prefs.edit().putBoolean(flag, true).apply()
+        mediaPermission.launch(missing)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

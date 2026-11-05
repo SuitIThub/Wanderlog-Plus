@@ -39,17 +39,18 @@ class VaultStore(private val dir: Path, private val maxBytes: Long, private val 
 
     @Synchronized
     fun saveScan(user: String, update: VaultScanUpdate): VaultScanStatus {
+        val previous = scan(user)
         val status = VaultScanStatus(
             user = user,
             state = update.state,
             totalImages = update.totalImages.coerceAtLeast(0),
             scannedImages = update.scannedImages.coerceAtLeast(0),
             foundImages = update.foundImages.coerceAtLeast(0),
-            device = update.device?.take(100),
+            device = update.device?.take(100) ?: previous?.device,
             updatedAt = System.currentTimeMillis(),
-            photosOnDevice = update.photosOnDevice?.coerceAtLeast(0),
-            videosOnDevice = update.videosOnDevice?.coerceAtLeast(0),
-            pendingUploads = update.pendingUploads?.coerceAtLeast(0),
+            photosOnDevice = update.photosOnDevice?.coerceAtLeast(0) ?: previous?.photosOnDevice,
+            videosOnDevice = update.videosOnDevice?.coerceAtLeast(0) ?: previous?.videosOnDevice,
+            pendingUploads = update.pendingUploads?.coerceAtLeast(0) ?: previous?.pendingUploads,
         )
         writeJson(scanFile(user), VaultScanStatus.serializer(), status)
         return status

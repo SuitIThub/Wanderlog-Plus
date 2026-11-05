@@ -334,9 +334,10 @@ fun Route.vaultWeb(services: Services) {
         // Sum of received part indices over all open sessions: cheap and change-sensitive.
         val sessionsProgress = withContext(Dispatchers.IO) { services.vault.openVideoSessions(user).sumOf { it.receivedParts.size } }
         val paused = withContext(Dispatchers.IO) { services.vault.uploadPaused(user) }
+        val pending = withContext(Dispatchers.IO) { services.vault.scan(user)?.pendingUploads ?: 0 }
         val latest = images.maxOfOrNull { it.uploadedAt } ?: 0L
         call.respondText(
-            """{"images":${images.size},"latest":$latest,"scanUpdated":$scanUpdated,"requests":${requests.size},"sessionsProgress":$sessionsProgress,"paused":$paused}""",
+            """{"images":${images.size},"latest":$latest,"scanUpdated":$scanUpdated,"requests":${requests.size},"sessionsProgress":$sessionsProgress,"paused":$paused,"pending":$pending}""",
             ContentType.Application.Json,
         )
     }
@@ -451,7 +452,7 @@ private fun vaultPage(
         kotlinx.serialization.json.JsonPrimitive(token),
     )
     // Fingerprint of what the page currently shows; the poll below reloads only when this changes.
-    val initialState = """{"images":${images.size},"latest":${images.maxOfOrNull { it.uploadedAt } ?: 0L},"scanUpdated":${scan?.updatedAt ?: 0L},"requests":${requests.size},"sessionsProgress":${sessions.sumOf { it.receivedParts.size }},"paused":$paused}"""
+    val initialState = """{"images":${images.size},"latest":${images.maxOfOrNull { it.uploadedAt } ?: 0L},"scanUpdated":${scan?.updatedAt ?: 0L},"requests":${requests.size},"sessionsProgress":${sessions.sumOf { it.receivedParts.size }},"paused":$paused,"pending":${scan?.pendingUploads ?: 0}}"""
     val heading = if (tab == "videos") "Videos" else "Bilder"
     return """
 <!DOCTYPE html>

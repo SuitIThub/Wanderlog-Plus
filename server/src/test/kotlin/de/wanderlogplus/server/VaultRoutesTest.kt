@@ -299,21 +299,21 @@ class VaultRoutesTest {
         val c = jsonClient()
         assertEquals(HttpStatusCode.Unauthorized, c.get("/vault/state").status)
         assertEquals(
-            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false}""",
+            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false,"pending":0}""",
             c.get("/vault/state?token=$TOKEN_A").bodyAsText(),
         )
 
         val info: VaultImageInfo = c.uploadImage(Random(3).nextBytes(256)).body()
-        val scan: VaultScanStatus = c.postScan(VaultScanUpdate("running", 10, 5, 1)).body()
+        val scan: VaultScanStatus = c.postScan(VaultScanUpdate("running", 10, 5, 1, pendingUploads = 42)).body()
         val body = c.get("/vault/state?token=$TOKEN_A").bodyAsText()
         assertEquals(
-            """{"images":1,"latest":${info.uploadedAt},"scanUpdated":${scan.updatedAt},"requests":0,"sessionsProgress":0,"paused":false}""",
+            """{"images":1,"latest":${info.uploadedAt},"scanUpdated":${scan.updatedAt},"requests":0,"sessionsProgress":0,"paused":false,"pending":42}""",
             body,
         )
 
         // Bob has his own namespace (no images, no scan).
         assertEquals(
-            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false}""",
+            """{"images":0,"latest":0,"scanUpdated":0,"requests":0,"sessionsProgress":0,"paused":false,"pending":0}""",
             c.get("/vault/state?token=$TOKEN_B").bodyAsText(),
         )
     }

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import de.wanderlogplus.app.data.VaultScanStateEntity
 import de.wanderlogplus.app.ui.design.SurfaceCard
+import de.wanderlogplus.app.vault.VaultMediaAccess
 import de.wanderlogplus.shared.sync.VaultScanStates
 
 const val VAULT_ROUTE = "mehr/bilder-upload"
@@ -45,17 +46,17 @@ fun VaultScanScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val imagePermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-    val needed = if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
-    fun imagesGranted(): Boolean =
-        ContextCompat.checkSelfPermission(context, imagePermission) == PackageManager.PERMISSION_GRANTED ||
-            (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
-    var granted by remember { mutableStateOf(imagesGranted()) }
+    val sdk = Build.VERSION.SDK_INT
+    fun granted(permission: String) = ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+    val needed = VaultMediaAccess.needed(sdk)
+    fun imagesGranted() = VaultMediaAccess.canReadImages(sdk, ::granted)
+    fun videosGranted() = VaultMediaAccess.canReadVideos(sdk, ::granted)
+    var canScan by remember { mutableStateOf(imagesGranted()) }
     var asked by remember { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        granted = result[imagePermission] == true || imagesGranted()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        canScan = imagesGranted()
         asked = true
-        if (granted) onStart()
+        if (canScan) onStart()
     }
 
     Column(
@@ -86,31 +87,39 @@ fun VaultScanScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
-                                "${state.scanned} / $total Bilder",
+                                "${state.scanned} / $total Dateien",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text("Erfasste Bilder: $found", style = MaterialTheme.typography.bodyMedium)
+                        Text("Erfasst: $found", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Davon noch nicht übertragen: $pending",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
-                val partialAccess = Build.VERSION.SDK_INT >= 34 && granted &&
+                val partialAccess = sdk >= 34 && canScan &&
                     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED
                 if (partialAccess) {
                     Text(
-                        "Es ist nur Zugriff auf ausgewählte Fotos erlaubt – der Rest der Galerie wird nicht übertragen.",
+                        "Es ist nur Zugriff auf ausgewählte Fotos und Videos erlaubt – der Rest der Galerie wird nicht übertragen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
                     Button(onClick = { launcher.launch(needed) }) {
-                        Text("Zugriff auf alle Fotos erlauben")
+                        Text("Zugriff auf alle Medien erlauben")
                     }
                 }
-                if (asked && !granted) {
+                val missingVideo = canScan && !videosGranted() && !partialAccess
+                if (missingVideo) {
+                    Text(
+                        "Kein Zugriff auf Videos – ohne die Erlaubnis werden nur Fotos erfasst.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                if (asked && !canScan) {
                     Text(
                         "Ohne Zugriff auf die Bilder kann nichts übertragen werden. Bitte in den App-Einstellungen erlauben.",
                         style = MaterialTheme.typography.bodySmall,
@@ -118,10 +127,19 @@ fun VaultScanScreen(
                     )
                 }
                 Button(
-                    onClick = { if (granted) onStart() else launcher.launch(needed) },
+                    onClick = {
+                        val missing = VaultMediaAccess.missing(sdk, ::granted)
+                        if (missing.isEmpty()) onStart() else launcher.launch(if (canScan) missing else needed)
+                    },
                     modifier = Modifier.testTag("vault-scan-start"),
                 ) {
-                    Text(if (granted) "Upload starten" else "Bilderzugriff erlauben & starten")
+                    Text(
+                        when {
+                            !canScan -> "Bilderzugriff erlauben & starten"
+                            missingVideo -> "Videozugriff erlauben & starten"
+                            else -> "Upload starten"
+                        },
+                    )
                 }
                 if (pending > 0) {
                     Button(onClick = onResume, modifier = Modifier.testTag("vault-upload-resume")) {
