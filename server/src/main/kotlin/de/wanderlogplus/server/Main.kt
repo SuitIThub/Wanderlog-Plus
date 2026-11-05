@@ -32,6 +32,7 @@ fun main() {
         store,
         config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
         config.apifyToken?.let { PhotonStationFinder(PhotonGeocoder()) },
+        elsewhere = TransitousSource(store, OpenMeteoHttp()),
     )
     // The chat asks the same services as the app's day screens (and shares their cache).
     val ways = object : de.wanderlogplus.server.ai.ChatWays {

@@ -132,6 +132,7 @@ fun JourneyScreen(
             ).joinToString(" · "),
             imageUrl = null, accent = accent, height = 120.dp, onBack = onBack, titleMaxLines = 1,
         )
+        de.wanderlogplus.app.maps.RouteMap(remember(snapshot, journey) { de.wanderlogplus.app.maps.routeFor(journey, snapshot) }, accent, height = 160.dp)
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             InsertSlot(0) { adding = 0 }
             journey.legs.forEachIndexed { i, leg ->

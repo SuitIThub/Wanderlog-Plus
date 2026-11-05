@@ -87,7 +87,7 @@ fun TransitScreen(
             StationField("Von", f.fromStation, state.nearFrom, "transit-from") { v -> onEdit { it.copy(fromStation = v) } }
             StationField("Nach", f.toStation, state.nearTo, "transit-to") { v -> onEdit { it.copy(toStation = v) } }
             Text(
-                "Bahnhöfe auf Japanisch, z. B. 京都 oder 中津川. Leer lassen: der nächste Bahnhof wird gesucht.",
+                "In Japan auf Japanisch (z. B. 京都), in Deutschland der Name (z. B. Hannover Kröpcke) – DB, üstra und Nahverkehr inklusive. Leer lassen: der nächste Bahnhof wird gesucht.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

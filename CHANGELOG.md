@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.35.0
+
+- **ÖPNV-Suche auch in Deutschland:** Liegen Start und Ziel nicht in Japan, sucht die Verbindungssuche über Transitous (offene Fahrplandaten) – Deutsche Bahn, üstra und der übrige Nah- und Fernverkehr in einer Auskunft, mit Gleis/Bahnsteig und Umstiegen, ohne Umschalten. Bahnhöfe gibt man mit ihrem Namen ein (z. B. „Hannover Kröpcke“). Fahrpläne gibt es dort meist erst einige Wochen im Voraus; vorher sagt die Suche das.
+- **Routenvorschau im Reise-Detail:** unter dem Kopf die durchgehende Route aller Teilstrecken.
+- Benötigt das Server-Update.
+
 ## 0.34.0
 
 - **Teilstrecken sortieren:** Im Reise-Detail verschieben Pfeile eine Teilstrecke nach oben oder unten; die Reihenfolge wird gespeichert (ohne sie gilt die Abfahrtszeit). Eine über „＋ Teilstrecke“ eingefügte Strecke landet genau an der gewählten Stelle.
