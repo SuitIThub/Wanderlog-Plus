@@ -91,6 +91,8 @@ class Services(
     val photos: PlacePhotosService = PlacePhotosService(store, config.dataDir.resolve("place-photos"), null),
     /** Live status of flights (AirLabs). */
     val flightLive: FlightLiveService = FlightLiveService(store, null, null),
+    /** Live status of Shinkansen. */
+    val trainLive: TrainLiveService = TrainLiveService(store, null),
 )
 
 @Serializable
@@ -264,6 +266,10 @@ fun Application.module(services: Services) {
                 val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
                 val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
+            }
+            get("/api/live/train/{id}") {
+                val id = call.parameters["id"].orEmpty()
+                call.respond(withContext(Dispatchers.IO) { services.trainLive.forTrain(id) })
             }
             get("/api/live/flight/{id}") {
                 val id = call.parameters["id"].orEmpty()

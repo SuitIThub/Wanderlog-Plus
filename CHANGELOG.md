@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.31.0
+
+- **Live-Status für Shinkansen:** Für Züge mit Shinkansen-Nummer (z. B. „Nozomi 21“, auch „Nozomi 21 / Shinano 7“) zeigen Detailansicht und „Nächste Fahrt“, wo der Zug gerade ist und ob er pünktlich ist („Running between KYOTO and SHIN-OSAKA · Delayed 5 min“), dazu den Status der Linie. Abgefragt nur ab 1 Stunde vor Abfahrt bis kurz nach der Ankunft. Quelle: JR Cyberstation über den inoffiziellen Dienst shinkansen-live.vercel.app – kann sich ändern oder wegfallen. Andere Züge (Limited Express, Nahverkehr) haben keinen Live-Status.
+
 ## 0.30.0
 
 - **Live-Status für Flüge** (AirLabs): In der Flug-Detailansicht und in „Nächste Fahrt“ stehen Status (planmäßig, in der Luft, gelandet, annulliert), Verspätung, geplante und erwartete Zeiten, Terminal, Gate und Gepäckband. Abgefragt wird erst ab etwa 24 Stunden vor Abflug, dann stündlich, ab 3 Stunden vorher alle 10 Minuten, in der Luft alle 20 Minuten; nach der Landung nicht mehr. Der Server speichert alles zwischen, damit das Monatskontingent reicht.

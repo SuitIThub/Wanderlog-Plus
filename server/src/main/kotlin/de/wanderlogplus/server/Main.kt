@@ -57,6 +57,7 @@ fun main() {
         weather = weather,
         rates = RatesService(store, OpenMeteoHttp()),
         flightLive = FlightLiveService(store, OpenMeteoHttp(), config.airlabsKey),
+        trainLive = TrainLiveService(store, OpenMeteoHttp()),
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
         chats = ChatService(
             store,

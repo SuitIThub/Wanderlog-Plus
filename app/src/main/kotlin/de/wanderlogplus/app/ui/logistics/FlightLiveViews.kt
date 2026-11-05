@@ -121,3 +121,55 @@ fun FlightLiveCard(flightId: String, modifier: Modifier = Modifier) {
         }
     }
 }
+
+/** Asks the server for a train's Shinkansen live status (by train id); null local: none. */
+val LocalTrainLive = compositionLocalOf<(suspend (trainId: String) -> de.wanderlogplus.shared.sync.TrainLive?)?> { null }
+
+/** The live status of [trainId], refreshed every 2 minutes while shown. */
+@Composable
+fun rememberTrainLive(trainId: String): de.wanderlogplus.shared.sync.TrainLive? {
+    val source = LocalTrainLive.current
+    val live by produceState<de.wanderlogplus.shared.sync.TrainLive?>(null, source, trainId) {
+        if (source == null) return@produceState
+        while (true) {
+            value = try { source(trainId) ?: value } catch (e: CancellationException) { throw e } catch (e: Exception) { value }
+            delay(2 * 60_000L)
+        }
+    }
+    return live
+}
+
+/** "Nozomi 21: Running between KYOTO and NAGOYA · On time". */
+fun de.wanderlogplus.shared.sync.TrainLive.shortLine(): String? =
+    if (!available) null else trains.joinToString(" / ") { e -> listOf(e.name, e.status).filter { it.isNotBlank() }.joinToString(": ") }
+
+@Composable
+private fun toneColor(tone: String): Color = when (tone) {
+    "success" -> Color(0xFF2E7D32)
+    "warning" -> Color(0xFFE08A00)
+    "danger", "error" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
+/** Live status of the Shinkansen of a train in its detail page (tag `train-live`). */
+@Composable
+fun TrainLiveCard(trainId: String, modifier: Modifier = Modifier) {
+    if (LocalTrainLive.current == null) return
+    val live = rememberTrainLive(trainId) ?: return
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = modifier.fillMaxWidth().padding(top = 6.dp).testTag("train-live")) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (!live.available) {
+                Text(live.reason ?: "Noch kein Live-Status.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            live.trains.forEach { e ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(e.name, fontWeight = FontWeight.SemiBold)
+                    Text(e.status, fontWeight = FontWeight.SemiBold, color = toneColor(e.tone))
+                }
+                if (e.detail.isNotBlank()) Text(e.detail + (e.updatedAt.takeIf { it.isNotBlank() }?.let { " (Stand $it)" } ?: ""), style = MaterialTheme.typography.bodyMedium)
+            }
+            live.lineStatus?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text("Quelle: JR Cyberstation (über shinkansen-live)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
