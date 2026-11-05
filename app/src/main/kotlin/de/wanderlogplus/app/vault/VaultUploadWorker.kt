@@ -6,11 +6,12 @@ import androidx.work.WorkerParameters
 import de.wanderlogplus.app.WanderlogPlusApp
 
 /**
- * Drains the vault upload queue without scanning. Chains itself (via
+ * Drains the vault upload queue (photo/thumbnail bodies, then at most one requested full video) without
+ * scanning. A sticky pause on the server stops the video loop between parts; this worker still runs when
+ * scheduled so a resume can pick up immediately. Chains itself (via
  * [de.wanderlogplus.app.sync.SyncScheduler.requestVaultUploads]) when only the time-box stopped the pass –
- * a network/server error instead returns [Result.retry] so WorkManager's backoff rides out the outage
- * (a stalled upload alone can block for minutes through its request timeout). After [MAX_ERROR_RETRIES]
- * attempts it gives up; the next scan or app start resumes the queue.
+ * a network/server error instead returns [Result.retry] so WorkManager's backoff rides out the outage.
+ * After [MAX_ERROR_RETRIES] attempts it gives up; the next scan, resume trigger or app start continues.
  */
 class VaultUploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {

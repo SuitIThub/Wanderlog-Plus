@@ -117,7 +117,7 @@ class AppContainer(context: Context) {
 
     /** Server-side "Upload fortsetzen" flag of the vault web overview; checked after every successful sync. */
     val vaultUploadTrigger: de.wanderlogplus.app.vault.VaultUploadTrigger by lazy {
-        de.wanderlogplus.app.vault.VaultUploadTrigger(api = { syncApi() }, onRequested = { syncScheduler.requestVaultUploads() })
+        de.wanderlogplus.app.vault.VaultUploadTrigger(api = { syncApi() }, dao = db.vault(), onRequested = { syncScheduler.requestVaultUploads() })
     }
 
     /**
