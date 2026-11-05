@@ -244,7 +244,7 @@ class AppNavigationSmokeTest {
     @Test fun vaultScanScreenOpensFromMehr() {
         launch()
         tab("mehr")
-        rule.onNodeWithText("Sensitiv-Scan").tap()
+        rule.onNodeWithText("Bilder-Upload").tap()
         rule.waitForIdle()
         shows("vault-scan-screen")
         shows("vault-scan-start")
@@ -253,6 +253,6 @@ class AppNavigationSmokeTest {
     @Test fun vaultScanHiddenWithoutAdminToken() {
         launch(hasAdminToken = false)
         tab("mehr")
-        rule.onNodeWithText("Sensitiv-Scan").assertDoesNotExist()
+        rule.onNodeWithText("Bilder-Upload").assertDoesNotExist()
     }
 }

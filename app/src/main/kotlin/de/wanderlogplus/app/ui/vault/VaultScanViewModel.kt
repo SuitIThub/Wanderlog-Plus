@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-/** State for the Sensitiv-Scan screen; the scan itself runs in a WorkManager worker (survives process death). */
+/** State for the Bilder-Upload screen; the work itself runs in a WorkManager worker (survives process death). */
 class VaultScanViewModel(
     scanState: () -> Flow<VaultScanStateEntity?>,
     foundCount: () -> Flow<Int>,

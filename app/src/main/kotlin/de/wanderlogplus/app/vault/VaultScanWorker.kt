@@ -6,8 +6,9 @@ import androidx.work.WorkerParameters
 import de.wanderlogplus.app.WanderlogPlusApp
 
 /**
- * Runs one vault scan. Always "success": failures live in the scan state row (visible in the app and,
- * when reachable, on the server's web overview) – an unreachable server is not worth a retry loop.
+ * Runs one vault pass (enumerate new images, upload the queue). Always "success": failures live in the state
+ * row (visible in the app and, when reachable, on the server's web overview) – an unreachable server is not
+ * worth a retry loop.
  */
 class VaultScanWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {

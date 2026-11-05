@@ -2,8 +2,6 @@ package de.wanderlogplus.app.vault
 
 import android.content.ContentUris
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -20,14 +18,14 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Walks the device's images, scores each with [classifier] (on-device only) and stores the flagged ones.
- * Every server call is best effort: an unreachable server never fails the scan, it only skips the report
+ * Walks the device's images and queues every not-yet-seen one for upload to the vault (no classification:
+ * the vault is a plain full backup, already queued/transferred images are skipped via the local table).
+ * Every server call is best effort: an unreachable server never fails the pass, it only skips the report
  * or leaves uploads queued for the next run. Cancellation is the only exception that escapes [run].
  */
 class VaultScanner(
     private val appContext: Context,
     private val dao: VaultDao,
-    private val classifier: SensitiveClassifier = SkinRatioClassifier(),
     private val api: suspend () -> SyncApi?,
     private val device: String = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" "),
     /** Reads a media item; injectable so tests can skip the content resolver. */
@@ -43,12 +41,9 @@ class VaultScanner(
         var found = 0
         var uploaded = 0
         var galleryTotal = 0
-        var scored = 0
-        var decodeFailed = 0
-        var maxScore = 0.0
 
         suspend fun publish(state: String) {
-            publish(state, total, scanned, found, galleryTotal, scored, decodeFailed, maxScore)
+            publish(state, total, scanned, found, galleryTotal)
         }
 
         try {
@@ -58,29 +53,18 @@ class VaultScanner(
             total = items.size
             publish(VaultScanStates.RUNNING)
             for (item in items) {
-                if (item.uri.toString() in known) {
-                    scanned++
-                    continue
-                }
-                val score = scoreOf(item.uri)
-                if (score == null) {
-                    decodeFailed++
-                } else {
-                    scored++
-                    if (score > maxScore) maxScore = score
-                    if (classifier.flagged(score)) {
-                        dao.insertFound(
-                            VaultFoundEntity(
-                                uri = item.uri.toString(),
-                                fileName = item.fileName,
-                                mimeType = item.mimeType,
-                                score = score,
-                                foundAt = System.currentTimeMillis(),
-                                uploadedAt = null,
-                            )
+                if (item.uri.toString() !in known) {
+                    dao.insertFound(
+                        VaultFoundEntity(
+                            uri = item.uri.toString(),
+                            fileName = item.fileName,
+                            mimeType = item.mimeType,
+                            score = 0.0,
+                            foundAt = System.currentTimeMillis(),
+                            uploadedAt = null,
                         )
-                        found++
-                    }
+                    )
+                    found++
                 }
                 scanned++
                 if (scanned % PROGRESS_EVERY == 0) publish(VaultScanStates.RUNNING)
@@ -124,20 +108,16 @@ class VaultScanner(
             val nameCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
             val mimeCol = c.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
             while (c.moveToNext()) {
-                val mime = c.getString(mimeCol).orEmpty()
-                if (mime !in SUPPORTED_MIME) continue
                 out += MediaItem(
                     uri = ContentUris.withAppendedId(collection, c.getLong(idCol)),
                     fileName = c.getString(nameCol)?.take(200)?.ifBlank { "image" } ?: "image",
-                    mimeType = mime,
+                    // Rarely null in MediaStore; the server insists on an image/* type.
+                    mimeType = c.getString(mimeCol)?.take(100)?.ifBlank { "image/jpeg" } ?: "image/jpeg",
                 )
             }
         }
         return out
     }
-
-    /** Downscaled-decode and score; null when the image is undecodable or tiny (icons). */
-    private fun scoreOf(uri: Uri): Double? = scoreStream(classifier) { appContext.contentResolver.openInputStream(uri) }
 
     // -- Upload (queued, best effort) --
 
@@ -255,11 +235,8 @@ class VaultScanner(
         scanned: Int,
         found: Int,
         galleryTotal: Int,
-        scored: Int,
-        decodeFailed: Int,
-        maxScore: Double,
     ) {
-        dao.upsertScanState(VaultScanStateEntity(1, state, total, scanned, found, System.currentTimeMillis(), galleryTotal, scored, decodeFailed, maxScore))
+        dao.upsertScanState(VaultScanStateEntity(1, state, total, scanned, found, System.currentTimeMillis(), galleryTotal))
         // Intermediate reports are skipped while the server is down; the final state always gets one attempt.
         if (!serverUnreachable || state != VaultScanStates.RUNNING) report(state, total, scanned, found)
     }
@@ -292,51 +269,10 @@ class VaultScanner(
     }
 
     companion object {
-        /** Decode target for the classifier (longest side in px). */
-        const val SAMPLE_SIDE = 224
-
-        /** Images smaller than this (longest side) are icons/thumbnails, not photos. */
-        const val MIN_SIDE = 64
-
         /** Room/server progress cadence (every Nth image). */
         const val PROGRESS_EVERY = 5
 
         /** Max time spent uploading per worker run; a chained follow-up gets a fresh ~10-minute window. */
         const val MAX_UPLOAD_MILLIS = 3 * 60 * 1000L
-
-        /**
-         * Downscaled-decode (~[SAMPLE_SIDE] px on the longest side) plus classifier score; null when undecodable
-         * or tiny. In the companion (with a stream factory) so unit tests can run the real decode path.
-         */
-        internal fun scoreStream(classifier: SensitiveClassifier = SkinRatioClassifier(), openStream: () -> java.io.InputStream?): Double? {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            val probe = openStream() ?: return null
-            // decodeStream with inJustDecodeBounds returns null BY DESIGN (it only fills bounds):
-            // keep it out of any elvis chain, or every single image scores null.
-            probe.use { BitmapFactory.decodeStream(it, null, bounds) }
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-            val longest = maxOf(bounds.outWidth, bounds.outHeight)
-            if (longest < MIN_SIDE) return null
-            var sample = 1
-            while (longest / (sample * 2) >= SAMPLE_SIDE) sample *= 2
-            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-            val bitmap = openStream()?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
-            try {
-                val w = bitmap.width
-                val h = bitmap.height
-                if (w <= 0 || h <= 0) return null
-                val pixels = IntArray(w * h)
-                bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-                return classifier.score(pixels, w, h)
-            } finally {
-                bitmap.recycle()
-            }
-        }
-
-        /**
-         * HEIC/HEIF is the default photo format on many phones (Samsung & co.) – without it whole galleries were
-         * skipped. Formats a device cannot decode (e.g. HEIC below API 28, AVIF below 31) simply score null.
-         */
-        val SUPPORTED_MIME = setOf("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/avif")
     }
 }

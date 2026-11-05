@@ -79,7 +79,7 @@ class Services(
     val ai: AiJobs = AiJobs(store, null, ToolReelMedia(), config.dataDir.resolve("ai-work")),
     val transit: TransitService = TransitService(store, null, null),
     val tokens: TokenService = TokenService(config, store),
-    /** Sensitive-media vault: per-user namespace, addressed by random ids (see [vaultApi]/[vaultWeb]). */
+    /** Media vault (full image backup): per-user namespace, addressed by random ids (see [vaultApi]/[vaultWeb]). */
     val vault: VaultStore = VaultStore.forConfig(config),
     /** The trip chat (assistant with the saved places and web search). */
     val chats: ChatService = ChatService(store, null),

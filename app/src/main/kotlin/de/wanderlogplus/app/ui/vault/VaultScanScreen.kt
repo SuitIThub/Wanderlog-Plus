@@ -28,10 +28,10 @@ import de.wanderlogplus.app.data.VaultScanStateEntity
 import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.shared.sync.VaultScanStates
 
-const val VAULT_ROUTE = "mehr/sensitiv-scan"
+const val VAULT_ROUTE = "mehr/bilder-upload"
 
 /**
- * Trigger and local status of the media scan. The scan runs in a worker; this screen only reads the state row,
+ * Trigger and local status of the media upload. The work runs in a worker; this screen only reads the state row,
  * so it works without any server. [webUrl] points at the server's overview page (token included).
  */
 @Composable
@@ -65,19 +65,19 @@ fun VaultScanScreen(
     ) {
         SurfaceCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Sensitiv-Scan", style = MaterialTheme.typography.titleMedium)
+                Text("Bilder-Upload", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Durchsucht die Bilder auf diesem Gerät auf dem Gerät selbst. Treffer werden an deinen Server übertragen, sobald er erreichbar ist.",
+                    "Überträgt alle Bilder von diesem Gerät an deinen Server, sobald er erreichbar ist. Schon übertragene Bilder werden übersprungen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 when {
-                    state == null -> Text("Noch kein Scan gelaufen.", style = MaterialTheme.typography.bodyMedium)
+                    state == null -> Text("Noch keine Übertragung gelaufen.", style = MaterialTheme.typography.bodyMedium)
                     else -> {
                         val label = when (state.state) {
-                            VaultScanStates.RUNNING -> "Scan läuft …"
-                            VaultScanStates.DONE -> "Scan fertig"
-                            else -> "Scan fehlgeschlagen"
+                            VaultScanStates.RUNNING -> "Übertragung läuft …"
+                            VaultScanStates.DONE -> "Übertragung fertig"
+                            else -> "Übertragung fehlgeschlagen"
                         }
                         Text(label, style = MaterialTheme.typography.bodyMedium)
                         val total = state.total.coerceAtLeast(0)
@@ -92,26 +92,10 @@ fun VaultScanScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text("Treffer auf diesem Gerät: $found", style = MaterialTheme.typography.bodyMedium)
+                        Text("Erfasste Bilder: $found", style = MaterialTheme.typography.bodyMedium)
                         Text(
                             "Davon noch nicht übertragen: $pending",
                             style = MaterialTheme.typography.bodyMedium,
-                        )
-                        // Diagnostics: where images get lost (format filter, decode, threshold).
-                        Text(
-                            "Galerie gesamt: ${state.galleryTotal} · auswertbar: ${state.total} (Rest: anderes Format)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            "Bewertet: ${state.scored} · nicht auswertbar: ${state.decodeFailed}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            "Höchster Score: ${(state.maxScore * 100).toInt()} % (Treffer ab ${(de.wanderlogplus.app.vault.SkinRatioClassifier.DEFAULT_THRESHOLD * 100).toInt()} %)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -119,7 +103,7 @@ fun VaultScanScreen(
                     ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED
                 if (partialAccess) {
                     Text(
-                        "Es ist nur Zugriff auf ausgewählte Fotos erlaubt – der Scan sieht den Rest der Galerie nicht.",
+                        "Es ist nur Zugriff auf ausgewählte Fotos erlaubt – der Rest der Galerie wird nicht übertragen.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -129,7 +113,7 @@ fun VaultScanScreen(
                 }
                 if (asked && !granted) {
                     Text(
-                        "Ohne Zugriff auf die Bilder kann der Scan nicht laufen. Bitte in den App-Einstellungen erlauben.",
+                        "Ohne Zugriff auf die Bilder kann nichts übertragen werden. Bitte in den App-Einstellungen erlauben.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
@@ -138,7 +122,7 @@ fun VaultScanScreen(
                     onClick = { if (granted) onStart() else launcher.launch(permission) },
                     modifier = Modifier.testTag("vault-scan-start"),
                 ) {
-                    Text(if (granted) "Scan starten" else "Bilderzugriff erlauben & starten")
+                    Text(if (granted) "Upload starten" else "Bilderzugriff erlauben & starten")
                 }
                 if (pending > 0) {
                     Button(onClick = onResume, modifier = Modifier.testTag("vault-upload-resume")) {

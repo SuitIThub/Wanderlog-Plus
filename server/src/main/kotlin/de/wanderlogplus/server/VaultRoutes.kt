@@ -219,7 +219,7 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
           <div><span class="label">Zustand:</span> ${esc(stateLabel)}</div>
           <progress value="${scan.scannedImages}" max="${scan.totalImages.coerceAtLeast(1)}"></progress>
           <div><span class="label">Fortschritt:</span> ${scan.scannedImages} / ${scan.totalImages} Bilder ($pct&nbsp;%)</div>
-          <div><span class="label">Gefunden:</span> ${scan.foundImages}</div>
+          <div><span class="label">Erfasst:</span> ${scan.foundImages}</div>
           ${scan.device?.let { "<div><span class=\"label\">Gerät:</span> ${esc(it)}</div>" } ?: ""}
           <div class="muted">Aktualisiert: ${formatTime(scan.updatedAt)}</div>
         </div>
@@ -235,7 +235,7 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
             """
             <figure>
               <a href="/vault/img/${img.id}?token=${esc(token)}" target="_blank"><img loading="lazy" src="/vault/img/${img.id}?token=${esc(token)}" alt=""></a>
-              <figcaption>${esc(img.fileName)}<br><span class="muted">Score ${(img.score * 100).toInt()}&nbsp;% · ${img.size / 1024}&nbsp;KB</span><br>
+              <figcaption>${esc(img.fileName)}<br><span class="muted">${if (img.score > 0) "Score ${(img.score * 100).toInt()}&nbsp;% · " else ""}${img.size / 1024}&nbsp;KB</span><br>
               <button onclick="del('${img.id}')">Löschen</button></figcaption>
             </figure>
             """.trimIndent()
@@ -261,7 +261,7 @@ private fun vaultPage(user: String, token: String, scan: de.wanderlogplus.shared
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sensitiv-Scan</title>
+<title>Bilder-Upload</title>
 <style>
 body { font-family: system-ui, sans-serif; background: #14171c; color: #e8eaed; max-width: 1100px; margin: 0 auto; padding: 16px; }
 h1 { font-size: 1.4rem; }
@@ -280,13 +280,13 @@ button { background: #353b44; color: #e8eaed; border: 0; border-radius: 8px; pad
 </style>
 </head>
 <body>
-<h1>Sensitiv-Scan &middot; ${esc(user)}</h1>
+<h1>Bilder-Upload &middot; ${esc(user)}</h1>
 $scanHtml
 <div class="card">
   <div><button onclick="resumeUpload()">Upload fortsetzen</button> <span class="muted" id="resume-state"></span></div>
   <div class="muted">Fordert das Gerät an, wartende Uploads fortzusetzen – wirkt ab dem nächsten Sync des Geräts.</div>
 </div>
-<h2>Gefundene Bilder (${images.size})</h2>
+<h2>Bilder (${images.size})</h2>
 <div class="grid">
 $imagesHtml
 </div>

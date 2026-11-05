@@ -229,9 +229,20 @@ class VaultRoutesTest {
         val page = c.get("/vault?token=$TOKEN_A")
         assertEquals(HttpStatusCode.OK, page.status)
         val html = page.bodyAsText()
-        assertTrue(html.contains("Sensitiv-Scan"))
+        assertTrue(html.contains("Bilder-Upload"))
         assertTrue(html.contains("42 / 42"))
         assertTrue(html.contains("Pixel"))
+    }
+
+    @Test
+    fun webPageShowsScoreOnlyWhenKnown() = app {
+        val c = jsonClient()
+        c.uploadImage(Random(13).nextBytes(128), score = "0.9", fileName = "scored.jpg")
+        c.uploadImage(Random(14).nextBytes(128), score = "0", fileName = "plain.jpg")
+        val html = c.get("/vault?token=$TOKEN_A").bodyAsText()
+        assertTrue(html.contains("Score 90"))
+        // Score 0 means "not scored" (full-backup upload) and stays hidden.
+        assertTrue(!html.contains("Score 0"))
     }
 
     @Test
@@ -315,7 +326,7 @@ class VaultRoutesTest {
         assertEquals(VAULT_PAGE_SIZE, p1.split("<figure>").size - 1)
         assertTrue(p1.contains("Seite 1 von 2"))
         assertTrue(p1.contains("page=2"))
-        assertTrue(p1.contains("Gefundene Bilder ($total)"))
+        assertTrue(p1.contains("Bilder ($total)"))
         assertTrue(p1.contains("img-%03d.jpg".format(total - 1)))
         assertTrue(!p1.contains("img-000.jpg"))
         val p2 = c.get("/vault?token=$TOKEN_A&page=2").bodyAsText()

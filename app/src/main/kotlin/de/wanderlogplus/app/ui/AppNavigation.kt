@@ -201,9 +201,9 @@ fun AppNavigation(
     onPendingSetupConsumed: () -> Unit = {},
     /** Reel analyses (Mehr → Reels); null hides the screens. */
     reelsViewModelFactory: ViewModelProvider.Factory? = null,
-    /** Media scan (Mehr → Sensitiv-Scan); null hides the row. */
+    /** Media upload (Mehr → Bilder-Upload); null hides the row. */
     vaultScanViewModelFactory: ViewModelProvider.Factory? = null,
-    /** An admin token is stored; together with [vaultScanViewModelFactory] it shows the Sensitiv-Scan row. */
+    /** An admin token is stored; together with [vaultScanViewModelFactory] it shows the Bilder-Upload row. */
     hasAdminToken: Boolean = false,
     /** A reel job started from the share sheet: shown once, then [onPendingReelConsumed]. */
     pendingReelJob: String? = null,

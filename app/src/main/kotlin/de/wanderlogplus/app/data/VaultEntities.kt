@@ -31,7 +31,7 @@ data class VaultScanStateEntity(
     val updatedAt: Long,
     /** Diagnostics: every image MediaStore exposes, regardless of format ([total] is the scoreable subset). */
     val galleryTotal: Int = 0,
-    /** Actually decoded and scored; [decodeFailed] could not be read (unsupported format, broken file). */
+    /** Legacy diagnostics from the classifier era (always 0 since the vault uploads everything). */
     val scored: Int = 0,
     val decodeFailed: Int = 0,
     /** Highest classifier score of the whole run (0..1) – shows how far below the threshold everything was. */
