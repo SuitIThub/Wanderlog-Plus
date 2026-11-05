@@ -45,18 +45,17 @@ fun VaultScanScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-    var granted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED ||
-                (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED),
-        )
-    }
+    val imagePermission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    val needed = if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    fun imagesGranted(): Boolean =
+        ContextCompat.checkSelfPermission(context, imagePermission) == PackageManager.PERMISSION_GRANTED ||
+            (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED)
+    var granted by remember { mutableStateOf(imagesGranted()) }
     var asked by remember { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
-        granted = ok
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        granted = result[imagePermission] == true || imagesGranted()
         asked = true
-        if (ok) onStart()
+        if (granted) onStart()
     }
 
     Column(
@@ -67,7 +66,7 @@ fun VaultScanScreen(
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Bilder-Upload", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Überträgt alle Bilder von diesem Gerät an deinen Server, sobald er erreichbar ist. Schon übertragene Bilder werden übersprungen.",
+                    "Überträgt alle Bilder und Video-Vorschaubilder von diesem Gerät an deinen Server, sobald er erreichbar ist. Schon übertragene Dateien werden übersprungen.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -107,7 +106,7 @@ fun VaultScanScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    Button(onClick = { launcher.launch(permission) }) {
+                    Button(onClick = { launcher.launch(needed) }) {
                         Text("Zugriff auf alle Fotos erlauben")
                     }
                 }
@@ -119,7 +118,7 @@ fun VaultScanScreen(
                     )
                 }
                 Button(
-                    onClick = { if (granted) onStart() else launcher.launch(permission) },
+                    onClick = { if (granted) onStart() else launcher.launch(needed) },
                     modifier = Modifier.testTag("vault-scan-start"),
                 ) {
                     Text(if (granted) "Upload starten" else "Bilderzugriff erlauben & starten")

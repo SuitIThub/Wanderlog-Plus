@@ -85,8 +85,9 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     /** On grant the first vault scan starts right away (the daily schedule already exists from the Application). */
-    private val mediaPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) (application as WanderlogPlusApp).container.syncScheduler.requestVaultScan()
+    private val mediaPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        val images = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (result[images] == true) (application as WanderlogPlusApp).container.syncScheduler.requestVaultScan()
     }
 
     /** Asks for POST_NOTIFICATIONS (API 33+) only once, so a refusal is never nagged about. */
@@ -104,14 +105,15 @@ class MainActivity : ComponentActivity() {
      * The photo picker used elsewhere needs no permission, so nothing else in the app ever asks.
      */
     private fun requestMediaPermissionOnce() {
-        val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) return
+        val images = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(this, images) == PackageManager.PERMISSION_GRANTED) return
         // Android 14 partial access ("selected photos") is enough for the scanner.
         if (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED) return
         val prefs = getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(this, "vault"), MODE_PRIVATE)
         if (prefs.getBoolean("permissionAsked", false)) return
         prefs.edit().putBoolean("permissionAsked", true).apply()
-        mediaPermission.launch(permission)
+        val needed = if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO) else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        mediaPermission.launch(needed)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

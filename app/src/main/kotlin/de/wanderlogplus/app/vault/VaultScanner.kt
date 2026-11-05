@@ -9,6 +9,7 @@ import de.wanderlogplus.app.data.VaultDao
 import de.wanderlogplus.app.data.VaultFoundEntity
 import de.wanderlogplus.app.data.VaultScanStateEntity
 import de.wanderlogplus.client.SyncApi
+import de.wanderlogplus.shared.sync.VaultKind
 import de.wanderlogplus.shared.sync.VaultScanStates
 import de.wanderlogplus.shared.sync.VaultScanUpdate
 import kotlinx.coroutines.CancellationException
@@ -18,10 +19,11 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Walks the device's images and queues every not-yet-seen one for upload to the vault (no classification:
- * the vault is a plain full backup, already queued/transferred images are skipped via the local table).
- * Every server call is best effort: an unreachable server never fails the pass, it only skips the report
- * or leaves uploads queued for the next run. Cancellation is the only exception that escapes [run].
+ * Walks the device's photos and videos and queues every not-yet-seen one for upload to the vault.
+ * Photos go up as-is; videos contribute a JPEG thumbnail (the full file follows only when the web UI
+ * queues it). Already queued/transferred items are skipped via the local table. Every server call is
+ * best effort: an unreachable server never fails the pass, it only skips the report or leaves uploads
+ * queued for the next run. Cancellation is the only exception that escapes [run].
  */
 class VaultScanner(
     private val appContext: Context,
@@ -30,6 +32,7 @@ class VaultScanner(
     private val device: String = listOf(Build.MANUFACTURER, Build.MODEL).filter { it.isNotBlank() }.joinToString(" "),
     /** Reads a media item; injectable so tests can skip the content resolver. */
     private val openStream: (Uri) -> java.io.InputStream? = { appContext.contentResolver.openInputStream(it) },
+    private val thumbnails: VideoThumbnails = MediaStoreVideoThumbnails(appContext),
 ) {
     data class Result(val total: Int, val scanned: Int, val found: Int, val uploaded: Int)
 
@@ -41,15 +44,21 @@ class VaultScanner(
         var found = 0
         var uploaded = 0
         var galleryTotal = 0
+        var photosOnDevice = 0
+        var videosOnDevice = 0
 
         suspend fun publish(state: String) {
-            publish(state, total, scanned, found, galleryTotal)
+            publish(state, total, scanned, found, galleryTotal, photosOnDevice, videosOnDevice)
         }
 
         try {
             val known = dao.foundUris().toHashSet()
             galleryTotal = countAllImages()
-            val items = queryImages()
+            val photos = queryImages()
+            val videos = if (hasVideoPermission()) queryVideos() else emptyList()
+            photosOnDevice = photos.size
+            videosOnDevice = videos.size
+            val items = photos + videos
             total = items.size
             publish(VaultScanStates.RUNNING)
             for (item in items) {
@@ -62,6 +71,9 @@ class VaultScanner(
                             score = 0.0,
                             foundAt = System.currentTimeMillis(),
                             uploadedAt = null,
+                            kind = item.kind,
+                            durationMs = item.durationMs,
+                            sizeBytes = item.sizeBytes,
                         )
                     )
                     found++
@@ -91,7 +103,25 @@ class VaultScanner(
             androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
-    private data class MediaItem(val uri: Uri, val fileName: String, val mimeType: String)
+    /**
+     * Videos are best-effort: images-only permission must not block the photo backup. On API 33+ this is a
+     * separate grant (`READ_MEDIA_VIDEO`); below that, storage access covers both.
+     */
+    private fun hasVideoPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return hasMediaPermission()
+        if (androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VIDEO) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
+        return Build.VERSION.SDK_INT >= 34 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private data class MediaItem(
+        val uri: Uri,
+        val fileName: String,
+        val mimeType: String,
+        val kind: String = "photo",
+        val durationMs: Long? = null,
+        val sizeBytes: Long? = null,
+    )
 
     private val collection: Uri
         get() = if (Build.VERSION.SDK_INT >= 29) {
@@ -113,6 +143,42 @@ class VaultScanner(
                     fileName = c.getString(nameCol)?.take(200)?.ifBlank { "image" } ?: "image",
                     // Rarely null in MediaStore; the server insists on an image/* type.
                     mimeType = c.getString(mimeCol)?.take(100)?.ifBlank { "image/jpeg" } ?: "image/jpeg",
+                )
+            }
+        }
+        return out
+    }
+
+    private val videoCollection: Uri
+        get() = if (Build.VERSION.SDK_INT >= 29) {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
+
+    private fun queryVideos(): List<MediaItem> {
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DISPLAY_NAME,
+            MediaStore.Video.Media.MIME_TYPE,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.SIZE,
+        )
+        val out = ArrayList<MediaItem>()
+        appContext.contentResolver.query(videoCollection, projection, null, null, MediaStore.Video.Media._ID)?.use { c ->
+            val idCol = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+            val nameCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+            val mimeCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.MIME_TYPE)
+            val durCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+            val sizeCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+            while (c.moveToNext()) {
+                out += MediaItem(
+                    uri = ContentUris.withAppendedId(videoCollection, c.getLong(idCol)),
+                    fileName = c.getString(nameCol)?.take(200)?.ifBlank { "video" } ?: "video",
+                    mimeType = c.getString(mimeCol)?.take(100)?.ifBlank { "video/mp4" } ?: "video/mp4",
+                    kind = "video",
+                    durationMs = c.getLong(durCol).takeIf { it > 0 },
+                    sizeBytes = c.getLong(sizeCol).takeIf { it > 0 },
                 )
             }
         }
@@ -158,9 +224,15 @@ class VaultScanner(
             if (System.currentTimeMillis() >= deadline) break
             val tmp = File(appContext.cacheDir, "vault-upload-${UUID.randomUUID()}")
             try {
-                val hash = copyHashing(Uri.parse(pending.uri), tmp)
+                val video = pending.kind == "video"
+                val hash = if (video) {
+                    val bytes = thumbnails.thumbnail(Uri.parse(pending.uri))
+                    if (bytes == null) null else stageBytes(bytes, tmp)
+                } else {
+                    copyHashing(Uri.parse(pending.uri), tmp)
+                }
                 if (hash == null) {
-                    // The source vanished from the device: drop it from the queue instead of retrying forever.
+                    // The source vanished from the device (or the thumbnail could not be decoded): drop it.
                     dao.markUploaded(pending.uri, System.currentTimeMillis())
                     continue
                 }
@@ -172,7 +244,17 @@ class VaultScanner(
                     continue
                 }
                 try {
-                    client.uploadVaultImage(tmp, pending.fileName, pending.mimeType, pending.score)
+                    if (video) {
+                        client.uploadVaultImage(
+                            tmp, pending.fileName, "image/jpeg", pending.score,
+                            kind = VaultKind.VIDEO,
+                            videoRef = pending.uri,
+                            durationMs = pending.durationMs,
+                            videoBytes = pending.sizeBytes,
+                        )
+                    } else {
+                        client.uploadVaultImage(tmp, pending.fileName, pending.mimeType, pending.score)
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -223,6 +305,14 @@ class VaultScanner(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    /** Writes [bytes] to [dest] and returns their SHA-256 hex (same digest the by-hash pre-check uses). */
+    private fun stageBytes(bytes: ByteArray, dest: File): String {
+        dest.writeBytes(bytes)
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        digest.update(bytes)
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     // -- Progress --
 
     /** Set once a report fails: intermediate updates stop (a connect timeout would otherwise stall the scan). */
@@ -235,10 +325,12 @@ class VaultScanner(
         scanned: Int,
         found: Int,
         galleryTotal: Int,
+        photosOnDevice: Int,
+        videosOnDevice: Int,
     ) {
         dao.upsertScanState(VaultScanStateEntity(1, state, total, scanned, found, System.currentTimeMillis(), galleryTotal))
         // Intermediate reports are skipped while the server is down; the final state always gets one attempt.
-        if (!serverUnreachable || state != VaultScanStates.RUNNING) report(state, total, scanned, found)
+        if (!serverUnreachable || state != VaultScanStates.RUNNING) report(state, total, scanned, found, photosOnDevice, videosOnDevice)
     }
 
     /** Every image MediaStore exposes (any format); limited by the granted photo access. */
@@ -249,7 +341,7 @@ class VaultScanner(
     }
 
     /** Fire-and-forget: any failure (offline, auth, server) is swallowed by design. */
-    private suspend fun report(state: String, total: Int, scanned: Int, found: Int) {
+    private suspend fun report(state: String, total: Int, scanned: Int, found: Int, photosOnDevice: Int, videosOnDevice: Int) {
         val client = try {
             api() ?: return
         } catch (e: CancellationException) {
@@ -258,7 +350,14 @@ class VaultScanner(
             return
         }
         try {
-            client.postVaultScan(VaultScanUpdate(state, total, scanned, found, device))
+            client.postVaultScan(
+                VaultScanUpdate(
+                    state, total, scanned, found, device,
+                    photosOnDevice = photosOnDevice,
+                    videosOnDevice = videosOnDevice,
+                    pendingUploads = dao.pendingUploadCount(),
+                )
+            )
             serverUnreachable = false
         } catch (e: CancellationException) {
             throw e

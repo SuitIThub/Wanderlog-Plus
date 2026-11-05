@@ -9,6 +9,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
@@ -43,16 +44,27 @@ class VaultScannerDrainTest {
 
     @After fun tearDown() { db.close() }
 
-    private fun scanner(handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData): VaultScanner =
+    private val thumbHash = "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81"
+
+    private fun scanner(
+        thumbnails: VideoThumbnails = VideoThumbnails { null },
+        handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
+    ): VaultScanner =
         VaultScanner(
             appContext = ApplicationProvider.getApplicationContext(),
             dao = db.vault(),
             api = { SyncApi(HttpClient(MockEngine(handler)), "https://s.example", "tok") },
             openStream = { "abc".byteInputStream() },
+            thumbnails = thumbnails,
         )
 
     private fun seed(uri: String = "content://media/1") =
         db.vault().insertFound(VaultFoundEntity(uri, "a.jpg", "image/jpeg", 0.9, foundAt = 1, uploadedAt = null))
+
+    private fun seedVideo(uri: String = "content://video/1") =
+        db.vault().insertFound(
+            VaultFoundEntity(uri, "clip.mp4", "video/mp4", 0.0, foundAt = 1, uploadedAt = null, kind = "video", durationMs = 6500, sizeBytes = 123456),
+        )
 
     @Test fun serverAlreadyHasHashSkipsUpload() = runBlocking {
         seed()
@@ -127,5 +139,42 @@ class VaultScannerDrainTest {
         assertFalse(out.stoppedOnError)
         assertEquals(1, hashChecks) // permanent rejections are not re-checked
         assertEquals(0, db.vault().pendingUploadCount()) // but dropped so the queue is not blocked
+    }
+
+    @Test fun videoThumbnailIsUploadedWithMetadata() = runBlocking {
+        seedVideo()
+        var hashPath = ""
+        var body = ""
+        val out = scanner(thumbnails = VideoThumbnails { byteArrayOf(1, 2, 3) }) { req ->
+            when {
+                req.url.encodedPath.contains("/by-hash/") -> {
+                    hashPath = req.url.encodedPath
+                    respond("""{"error":"not_found"}""", HttpStatusCode.NotFound, json)
+                }
+                else -> {
+                    body = String(req.body.toByteArray())
+                    respond(infoJson, HttpStatusCode.OK, json)
+                }
+            }
+        }.drainUploads()
+        assertEquals(1, out.uploaded)
+        assertTrue("hash $hashPath", hashPath.endsWith("/by-hash/$thumbHash"))
+        assertTrue(body.contains("name=kind\r\n") && body.contains("\r\n\r\nvideo\r\n"))
+        assertTrue(body.contains("name=videoRef\r\n") && body.contains("\r\n\r\ncontent://video/1\r\n"))
+        assertTrue(body.contains("name=durationMs\r\n") && body.contains("\r\n\r\n6500\r\n"))
+        assertTrue(body.contains("name=videoBytes\r\n") && body.contains("\r\n\r\n123456\r\n"))
+        assertEquals(0, db.vault().pendingUploadCount())
+    }
+
+    @Test fun nullThumbnailDropsWithoutPost() = runBlocking {
+        seedVideo()
+        var posts = 0
+        val out = scanner(thumbnails = VideoThumbnails { null }) { req ->
+            if (req.method == HttpMethod.Post) posts++
+            respond(infoJson, HttpStatusCode.OK, json)
+        }.drainUploads()
+        assertEquals(0, out.uploaded)
+        assertEquals(0, posts)
+        assertEquals(0, db.vault().pendingUploadCount())
     }
 }
