@@ -403,6 +403,13 @@ internal fun NextTripWidget(
                 }
                 Text(prefix + move.movement.timesLine(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 move.movement.platform()?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-platform")) }
+                (move.movement as? Movement.TrainMove)?.let { tm ->
+                    if (de.wanderlogplus.app.ui.logistics.LocalTrainLive.current != null) {
+                        de.wanderlogplus.app.ui.logistics.rememberTrainLive(tm.train.id)?.shortLine()?.let {
+                            Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-live"))
+                        }
+                    }
+                }
                 (move.movement as? Movement.FlightMove)?.let { fm ->
                     if (de.wanderlogplus.app.ui.logistics.LocalFlightLive.current != null) {
                         de.wanderlogplus.app.ui.logistics.rememberFlightLive(fm.flight.id)?.shortLine()?.let {

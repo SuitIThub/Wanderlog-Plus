@@ -132,6 +132,7 @@ fun LogisticsDetailScreen(
             InfoCard {
                 view.details.forEach { (label, value) -> DetailRow(label, value) }
                 if (view.liveStatus && type == EntityType.FLIGHT) FlightLiveCard(id)
+                if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
 
             SectionLabel("Notiz", color = view.accent)

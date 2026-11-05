@@ -165,3 +165,21 @@ data class FlightLive(
     val updatedAt: Long? = null,
     val fetchedAt: Long = 0,
 )
+
+/** One Shinkansen of [TrainLive]: "Nozomi 21", "Running between KYOTO and NAGOYA", "On time" / "Delayed 10 min". */
+@Serializable
+data class TrainLiveEntry(val name: String, val status: String = "", val detail: String = "", val tone: String = "", val updatedAt: String = "")
+
+/**
+ * `GET /api/live/train/{id}`: live status of the Shinkansen of a train (JR Cyberstation via shinkansen-live), with
+ * the status of their line; [available] false with [reason] outside the time around the ride or for other trains.
+ */
+@Serializable
+data class TrainLive(
+    val available: Boolean = false,
+    val reason: String? = null,
+    val trains: List<TrainLiveEntry> = emptyList(),
+    /** e.g. "Tokaido, Sanyo Shinkansen: Delayed". */
+    val lineStatus: String? = null,
+    val fetchedAt: Long = 0,
+)

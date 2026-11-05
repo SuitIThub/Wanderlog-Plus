@@ -63,4 +63,22 @@ class FlightLiveTest {
         assertEquals(null, FlightLive(reason = "x").shortLine())
         assertEquals("07:00", liveTimes("2027-05-08 07:00", "2027-05-08 07:00", null))
     }
+
+    @Test fun trainDetailShowsTheShinkansenStatus() {
+        val train = de.wanderlogplus.shared.model.Train("t1", "JR Shinkansen", Endpoint("Kyoto", date = "2027-05-22", time = "08:12"), Endpoint("Hakata"), number = "Nozomi 21")
+        val snap = snapshot.copy(trains = listOf(train))
+        val live = de.wanderlogplus.shared.sync.TrainLive(
+            true, trains = listOf(de.wanderlogplus.shared.sync.TrainLiveEntry("Nozomi 21", "Delayed 5 min", "Running between KYOTO and SHIN-OSAKA", "warning", "08:31")),
+            lineStatus = "Tokaido, Sanyo Shinkansen: Delayed",
+        )
+        rule.setContent {
+            WanderlogPlusTheme {
+                CompositionLocalProvider(LocalTrainLive provides { _ -> live }) { LogisticsDetailScreen(snap, EntityType.TRAIN, "t1", onBack = {}) }
+            }
+        }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("train-live"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNode(hasText("Delayed 5 min"), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Running between KYOTO and SHIN-OSAKA (Stand 08:31)"), useUnmergedTree = true).assertExists()
+        assertEquals("Nozomi 21: Delayed 5 min", live.shortLine())
+    }
 }
