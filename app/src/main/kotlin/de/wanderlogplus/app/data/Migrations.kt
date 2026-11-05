@@ -24,3 +24,13 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("ALTER TABLE `vault_scan_state` ADD COLUMN `maxScore` REAL NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Existing rows are plain photo backups; video metadata arrives with newly scanned rows.
+        db.execSQL("ALTER TABLE `vault_found` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'photo'")
+        db.execSQL("ALTER TABLE `vault_found` ADD COLUMN `durationMs` INTEGER")
+        db.execSQL("ALTER TABLE `vault_found` ADD COLUMN `sizeBytes` INTEGER")
+        db.execSQL("CREATE TABLE IF NOT EXISTS `vault_video_requests` (`ref` TEXT NOT NULL, `requestedAt` INTEGER NOT NULL, PRIMARY KEY(`ref`))")
+    }
+}

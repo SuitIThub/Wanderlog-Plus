@@ -26,4 +26,19 @@ class MigrationTest {
         db.query("SELECT COUNT(*) FROM outbox").use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
         db.query("SELECT COUNT(*) FROM pending_upload").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
     }
+
+    @Test fun migrate4To5KeepsRowsAndAddsVideoColumns() {
+        helper.createDatabase("mig", 4).apply {
+            execSQL("INSERT INTO vault_found (uri, fileName, mimeType, score, foundAt, uploadedAt) VALUES ('content://img/1','a.jpg','image/jpeg',0.0,7,NULL)")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate("mig", 5, true, MIGRATION_4_5)
+        db.query("SELECT kind, durationMs, sizeBytes FROM vault_found WHERE uri = 'content://img/1'").use {
+            it.moveToFirst()
+            assertEquals("photo", it.getString(0))
+            assertEquals(true, it.isNull(1))
+            assertEquals(true, it.isNull(2))
+        }
+        db.query("SELECT COUNT(*) FROM vault_video_requests").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+    }
 }

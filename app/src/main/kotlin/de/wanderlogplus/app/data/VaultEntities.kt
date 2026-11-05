@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
-/** One media image the classifier flagged; [uploadedAt] is null until the file reached the server. */
+/** One media item queued for the vault; [uploadedAt] is null until the file reached the server. */
 @Entity(tableName = "vault_found")
 data class VaultFoundEntity(
     @PrimaryKey val uri: String,
@@ -17,6 +17,18 @@ data class VaultFoundEntity(
     val score: Double,
     val foundAt: Long,
     val uploadedAt: Long?,
+    /** "photo" or "video" (a video row's uploaded file is the thumbnail; the video itself follows on request). */
+    val kind: String = "photo",
+    val durationMs: Long? = null,
+    /** MediaStore's size hint for display only – upload sessions measure the real length themselves. */
+    val sizeBytes: Long? = null,
+)
+
+/** A full video the web UI asked this device to upload; deleted once the upload completes. */
+@Entity(tableName = "vault_video_requests")
+data class VaultVideoRequestEntity(
+    @PrimaryKey val ref: String,
+    val requestedAt: Long,
 )
 
 /** The last scan's progress (single row, [id] is always 1) so the UI works without the server. */
@@ -70,4 +82,17 @@ interface VaultDao {
 
     @Query("SELECT COUNT(*) FROM vault_found WHERE uploadedAt IS NULL")
     fun observePendingCount(): Flow<Int>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertVideoRequest(req: VaultVideoRequestEntity): Long
+
+    @Query("DELETE FROM vault_video_requests WHERE ref = :ref")
+    fun deleteVideoRequest(ref: String)
+
+    @Query("SELECT ref FROM vault_video_requests")
+    fun videoRequestRefs(): List<String>
+
+    /** Queue entries whose media row still exists locally (requests for vanished rows are dropped by the drain). */
+    @Query("SELECT f.* FROM vault_found f JOIN vault_video_requests r ON r.ref = f.uri")
+    fun requestedVideos(): List<VaultFoundEntity>
 }

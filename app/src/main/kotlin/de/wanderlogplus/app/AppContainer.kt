@@ -6,6 +6,7 @@ import de.wanderlogplus.app.data.AppDatabase
 import de.wanderlogplus.app.data.MIGRATION_1_2
 import de.wanderlogplus.app.data.MIGRATION_2_3
 import de.wanderlogplus.app.data.MIGRATION_3_4
+import de.wanderlogplus.app.data.MIGRATION_4_5
 import de.wanderlogplus.app.data.PendingUploadEntity
 import de.wanderlogplus.app.data.ServerSettings
 import de.wanderlogplus.app.files.AttachmentFiles
@@ -57,7 +58,7 @@ class AppContainer(context: Context) {
 
     val db: AppDatabase by lazy {
         Room.databaseBuilder(appContext, AppDatabase::class.java, AppProfile.databaseName(appContext))
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
     }
     val store: RoomEntityStore by lazy { RoomEntityStore(db) }
