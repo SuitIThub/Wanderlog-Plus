@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.34.0
+
+- **Teilstrecken sortieren:** Im Reise-Detail verschieben Pfeile eine Teilstrecke nach oben oder unten; die Reihenfolge wird gespeichert (ohne sie gilt die Abfahrtszeit). Eine über „＋ Teilstrecke“ eingefügte Strecke landet genau an der gewählten Stelle.
+- **Routenvorschau für Reisen:** Die Reise-Karte in der Logistik zeigt wieder die Karte – als durchgehende Route über alle Teilstrecken.
+
 ## 0.33.0
 
 - **Reisen aus Teilstrecken:** Zusammenführen löscht nichts mehr – Züge, Flüge und ÖPNV-Fahrten werden zu einer Reise gruppiert und behalten ihre eigenen Nummern, Zeiten, Gleise, Tickets und ihr eigenes Live-Tracking.

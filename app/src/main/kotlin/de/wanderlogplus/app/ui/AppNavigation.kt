@@ -411,6 +411,7 @@ fun AppNavigation(
                 onLeave = vm::leaveJourney,
                 onDissolve = { j -> vm.dissolveJourney(j); onBack?.invoke() },
                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
+                onMoveLeg = { i, up -> vm.moveJourneyLeg(journeyId, i, up) },
             )
         }
 
