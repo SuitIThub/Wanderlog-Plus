@@ -92,6 +92,9 @@ interface VaultDao {
     @Query("SELECT ref FROM vault_video_requests")
     fun videoRequestRefs(): List<String>
 
+    @Query("SELECT COUNT(*) FROM vault_video_requests")
+    fun videoRequestCount(): Int
+
     /** Queue entries whose media row still exists locally (requests for vanished rows are dropped by the drain). */
     @Query("SELECT f.* FROM vault_found f JOIN vault_video_requests r ON r.ref = f.uri")
     fun requestedVideos(): List<VaultFoundEntity>

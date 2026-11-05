@@ -197,14 +197,26 @@ class VaultScanner(
 
     /**
      * @param uploaded reached the server in this pass.
-     * @param remaining still queued afterwards (time-box hit or aborted).
+     * @param remaining still queued afterwards (pending photo/thumbnail bodies plus remaining full-video requests).
      * @param stoppedOnError true when a network/server error ended the pass – chaining another pass right away
      *   would just fail again; false when only the time-box stopped it (a follow-up worker should continue).
+     * @param paused sticky server pause stopped the video loop. Callers must not chain a follow-up worker;
+     *   resume arrives via the next sync trigger.
      */
-    data class DrainOutcome(val uploaded: Int, val remaining: Int, val stoppedOnError: Boolean)
+    data class DrainOutcome(
+        val uploaded: Int,
+        val remaining: Int,
+        val stoppedOnError: Boolean,
+        val paused: Boolean = false,
+    )
 
-    /** Queue size for follow-up scheduling; cheap COUNT query. */
+    /** Photo/thumbnail queue size (UI). */
     suspend fun pendingUploadCount(): Int = withContext(Dispatchers.IO) { dao.pendingUploadCount() }
+
+    /** Photo/thumbnail bodies plus queued full-video requests – what a follow-up worker still has to do. */
+    suspend fun queuedWorkCount(): Int = withContext(Dispatchers.IO) { remainingWork() }
+
+    private fun remainingWork(): Int = dao.pendingUploadCount() + dao.videoRequestCount()
 
     /**
      * Uploads the queue until it is empty, the server complains, or [MAX_UPLOAD_MILLIS] is up. The time-box
@@ -219,14 +231,15 @@ class VaultScanner(
      */
     suspend fun drainUploads(): DrainOutcome = withContext(Dispatchers.IO) {
         val client = try {
-            api() ?: return@withContext DrainOutcome(0, dao.pendingUploadCount(), stoppedOnError = true)
+            api() ?: return@withContext DrainOutcome(0, remainingWork(), stoppedOnError = true)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            return@withContext DrainOutcome(0, dao.pendingUploadCount(), stoppedOnError = true)
+            return@withContext DrainOutcome(0, remainingWork(), stoppedOnError = true)
         }
         var uploaded = 0
         var stoppedOnError = false
+        var paused = false
         val deadline = System.currentTimeMillis() + MAX_UPLOAD_MILLIS
         for (pending in dao.pendingUploads()) {
             if (System.currentTimeMillis() >= deadline) break
@@ -300,7 +313,11 @@ class VaultScanner(
                         uploaded++
                         break // at most one video per pass
                     }
-                    VideoDrain.PAUSED -> break
+                    VideoDrain.PAUSED -> {
+                        paused = true
+                        break
+                    }
+                    VideoDrain.TIMEBOX -> break
                     VideoDrain.FAILED -> {
                         stoppedOnError = true
                         break
@@ -309,10 +326,10 @@ class VaultScanner(
                 }
             }
         }
-        DrainOutcome(uploaded, dao.pendingUploadCount(), stoppedOnError)
+        DrainOutcome(uploaded, remainingWork(), stoppedOnError, paused)
     }
 
-    private enum class VideoDrain { COMPLETED, PAUSED, FAILED, VANISHED }
+    private enum class VideoDrain { COMPLETED, PAUSED, TIMEBOX, FAILED, VANISHED }
 
     /**
      * Chunked upload of one requested video. Pause is checked before every part; a vanished source is
@@ -342,7 +359,7 @@ class VaultScanner(
         val received = session.receivedParts.toMutableSet()
         var i = 0
         while (i < partCount) {
-            if (System.currentTimeMillis() >= deadline) return VideoDrain.PAUSED
+            if (System.currentTimeMillis() >= deadline) return VideoDrain.TIMEBOX
             val paused = try {
                 client.vaultUploadTrigger().paused
             } catch (e: CancellationException) {

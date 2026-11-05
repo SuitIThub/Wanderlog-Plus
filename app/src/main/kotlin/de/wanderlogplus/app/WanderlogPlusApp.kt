@@ -27,7 +27,7 @@ class WanderlogPlusApp : Application() {
             val neverScanned = withContext(Dispatchers.IO) { container.db.vault().scanState() == null }
             if (neverScanned) container.syncScheduler.requestVaultScan()
             // Resume a possibly interrupted upload backlog (e.g. the worker window ended mid-queue); no-op when empty.
-            if (withContext(Dispatchers.IO) { container.db.vault().pendingUploadCount() } > 0) {
+            if (container.vaultScanner.queuedWorkCount() > 0) {
                 container.syncScheduler.requestVaultUploads()
             }
         }

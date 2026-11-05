@@ -18,6 +18,7 @@ class VaultUploadWorker(context: Context, params: WorkerParameters) : CoroutineW
         val container = (applicationContext as WanderlogPlusApp).container
         val outcome = container.vaultScanner.drainUploads()
         return when {
+            outcome.paused -> Result.success() // sticky pause: resume arrives via the next sync trigger
             outcome.remaining == 0 -> Result.success()
             !outcome.stoppedOnError -> {
                 container.syncScheduler.requestVaultUploads()

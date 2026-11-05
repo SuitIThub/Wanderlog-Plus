@@ -282,6 +282,25 @@ class VaultScannerDrainTest {
         }.drainUploads()
         assertEquals(1, puts)
         assertFalse(out.stoppedOnError)
+        assertTrue(out.paused)
+        assertEquals(1, out.remaining) // still queued: the worker must not chain while paused
+        assertEquals(1, db.vault().videoRequestRefs().size)
+    }
+
+    @Test fun remainingIncludesQueuedVideosSoWorkersChain() = runBlocking {
+        queueFullVideo("content://video/1")
+        queueFullVideo("content://video/2")
+        val out = videoScanner { req ->
+            val p = req.url.encodedPath
+            when {
+                p.endsWith("/uploads/request") -> respond(triggerJson, HttpStatusCode.OK, json)
+                p.endsWith("/sessions") && req.method == HttpMethod.Post -> session(complete = true, id = "")
+                else -> respond("""{"error":"not_found"}""", HttpStatusCode.NotFound, json)
+            }
+        }.drainUploads()
+        assertEquals(1, out.uploaded)
+        assertEquals(1, out.remaining)
+        assertFalse(out.paused)
         assertEquals(1, db.vault().videoRequestRefs().size)
     }
 
