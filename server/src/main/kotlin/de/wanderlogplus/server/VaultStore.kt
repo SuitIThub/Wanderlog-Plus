@@ -367,10 +367,12 @@ class VaultStore(private val dir: Path, private val maxBytes: Long, private val 
     /**
      * Streams one part to disk (at most [partSize] + 64 KB headroom, else [FileTooLarge]) and records its
      * index. Idempotent per index: the same bytes again are a no-op, different bytes throw [PartConflict].
-     * Lock-free like [addImage] except the fast metadata commit; a janitor deleting the session between the
-     * existence check and the commit surfaces as [SessionGone] and cleans the temp file.
+     * [expectedHash] (the client's `X-Part-Sha256`) guards against wire corruption: a mismatch throws
+     * [BadInput] before anything is recorded. Lock-free like [addImage] except the fast metadata commit;
+     * a janitor deleting the session between the existence check and the commit surfaces as [SessionGone]
+     * and cleans the temp file.
      */
-    fun savePart(user: String, sessionId: String, index: Int, input: InputStream): VaultVideoSession {
+    fun savePart(user: String, sessionId: String, index: Int, input: InputStream, expectedHash: String? = null): VaultVideoSession {
         val session = loadSession(user, sessionId) ?: throw SessionGone()
         if (index < 0 || index >= session.partCount()) throw BadInput()
         val partDir = partDir(user, session.id)
@@ -397,6 +399,10 @@ class VaultStore(private val dir: Path, private val maxBytes: Long, private val 
         } catch (e: Exception) {
             Files.deleteIfExists(tmp)
             throw e
+        }
+        if (expectedHash != null && expectedHash != hash) {
+            Files.deleteIfExists(tmp)
+            throw BadInput()
         }
         return commitPart(user, sessionId, index, tmp, size, hash)
     }

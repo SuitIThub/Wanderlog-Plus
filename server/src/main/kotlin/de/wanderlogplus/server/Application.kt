@@ -158,6 +158,8 @@ fun Application.module(services: Services) {
         exception<PushRejected> { call, e -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.code, e.message)) }
         exception<ImportNotConfigured> { call, _ -> call.respond(HttpStatusCode.BadRequest, ErrorResponse("import_not_configured")) }
         exception<FileTooLarge> { call, _ -> call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("file_too_large")) }
+        exception<PartConflict> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("part_conflict")) }
+        exception<SessionGone> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) }
         exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
         exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
         exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }

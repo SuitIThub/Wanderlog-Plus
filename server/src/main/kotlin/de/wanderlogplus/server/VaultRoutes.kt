@@ -2,6 +2,7 @@ package de.wanderlogplus.server
 
 import de.wanderlogplus.shared.sync.ErrorResponse
 import de.wanderlogplus.shared.sync.VaultImageInfo
+import de.wanderlogplus.shared.sync.VaultKind
 import de.wanderlogplus.shared.sync.VaultScanStates
 import de.wanderlogplus.shared.sync.VaultScanUpdate
 import de.wanderlogplus.shared.sync.VaultUploadTrigger
@@ -13,18 +14,23 @@ import io.ktor.http.content.forEachPart
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.request.contentLength
+import io.ktor.server.request.header
 import io.ktor.server.request.receive
 import io.ktor.server.request.receiveMultipart
+import io.ktor.server.request.receiveStream
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.RoutingContext
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
+import io.ktor.server.routing.put
 import io.ktor.server.routing.route
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -59,6 +65,10 @@ fun Route.vaultApi(services: Services) {
             var score = 0.0
             var fileName = "image"
             var mimeType = "image/jpeg"
+            var kind = VaultKind.PHOTO
+            var videoRef: String? = null
+            var durationMs: Long? = null
+            var videoBytes: Long? = null
             val multipart = call.receiveMultipart(formFieldLimit = services.config.maxFileBytes + VAULT_MULTIPART_HEADROOM)
             try {
                 multipart.forEachPart { part ->
@@ -68,7 +78,9 @@ fun Route.vaultApi(services: Services) {
                                 if (stored != null) throw BadInput()
                                 if (!mimeType.startsWith("image/")) throw BadInput()
                                 stored = withContext(Dispatchers.IO) {
-                                    part.provider().toInputStream().use { services.vault.addImage(call.author(), it, fileName, mimeType, score) }
+                                    part.provider().toInputStream().use {
+                                        services.vault.addImage(call.author(), it, fileName, mimeType, score, kind, videoRef, durationMs, videoBytes)
+                                    }
                                 }
                             }
                             part is PartData.FormItem && part.name == "score" ->
@@ -77,6 +89,15 @@ fun Route.vaultApi(services: Services) {
                                 fileName = part.value.take(200).ifBlank { "image" }
                             part is PartData.FormItem && part.name == "mimeType" ->
                                 mimeType = part.value.take(100).ifBlank { "image/jpeg" }
+                            // A video entry stores its thumbnail here; the full video follows chunked on request.
+                            part is PartData.FormItem && part.name == "kind" ->
+                                kind = if (part.value == "video") VaultKind.VIDEO else VaultKind.PHOTO
+                            part is PartData.FormItem && part.name == "videoRef" ->
+                                videoRef = part.value.take(500).ifBlank { null }
+                            part is PartData.FormItem && part.name == "durationMs" ->
+                                durationMs = part.value.toLongOrNull()?.coerceAtLeast(0)
+                            part is PartData.FormItem && part.name == "videoBytes" ->
+                                videoBytes = part.value.toLongOrNull()?.coerceAtLeast(0)
                         }
                     } finally {
                         part.dispose()
@@ -87,6 +108,12 @@ fun Route.vaultApi(services: Services) {
                 throw e
             }
             call.respond(stored ?: throw BadInput())
+        }
+        post("/images/bulk-delete") {
+            val req = call.receive<BulkDeleteRequest>()
+            if (req.ids.size > 1000) throw BadInput()
+            val deleted = withContext(Dispatchers.IO) { req.ids.count { services.vault.deleteImage(call.author(), it) } }
+            call.respond(BulkDeleteResponse(deleted))
         }
         get("/images") {
             call.respond(withContext(Dispatchers.IO) { services.vault.images(call.author()) }.sortedByDescending { it.uploadedAt })
@@ -120,14 +147,93 @@ fun Route.vaultApi(services: Services) {
             call.respond(HttpStatusCode.NoContent)
         }
         get("/uploads/request") {
-            call.respond(VaultUploadTrigger(withContext(Dispatchers.IO) { services.vault.uploadRequested(call.author()) }))
+            call.respond(
+                withContext(Dispatchers.IO) {
+                    VaultUploadTrigger(
+                        requested = services.vault.uploadRequested(call.author()),
+                        paused = services.vault.uploadPaused(call.author()),
+                        videoRefs = services.vault.videoRequests(call.author()).sorted(),
+                    )
+                },
+            )
         }
         post("/uploads/request/clear") {
             withContext(Dispatchers.IO) { services.vault.clearUploadRequest(call.author()) }
             call.respond(HttpStatusCode.NoContent)
         }
+        // Sticky pause: uploads stop (after the in-flight part) until the web UI resumes them manually.
+        post("/uploads/pause") {
+            withContext(Dispatchers.IO) { services.vault.setUploadPaused(call.author(), true) }
+            call.respond(HttpStatusCode.NoContent)
+        }
+        post("/uploads/resume") {
+            withContext(Dispatchers.IO) { services.vault.setUploadPaused(call.author(), false) }
+            call.respond(HttpStatusCode.NoContent)
+        }
+        // Chunked, resumable upload of one requested video (parts are idempotent per index).
+        post("/videos/sessions") {
+            val req = call.receive<VideoSessionRequest>()
+            val hash = req.sha256.lowercase()
+            if (req.videoRef.isBlank() || req.fileName.isBlank() || req.size <= 0 || !VAULT_HASH_RE.matches(hash)) throw BadInput()
+            call.respond(
+                withContext(Dispatchers.IO) {
+                    services.vault.startVideoSession(call.author(), req.videoRef, req.fileName, req.size, hash, req.videoMimeType)
+                },
+            )
+        }
+        get("/videos/sessions/{id}") {
+            val session = withContext(Dispatchers.IO) { services.vault.videoSession(call.author(), call.parameters["id"].orEmpty()) }
+            if (session == null) call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) else call.respond(session)
+        }
+        put("/videos/sessions/{id}/parts/{n}") {
+            val index = call.parameters["n"]?.toIntOrNull() ?: throw BadInput()
+            val partHash = call.request.header("X-Part-Sha256")?.lowercase()
+            if (partHash == null || !VAULT_HASH_RE.matches(partHash)) throw BadInput()
+            val updated = withContext(Dispatchers.IO) {
+                call.receiveStream().use { services.vault.savePart(call.author(), call.parameters["id"].orEmpty(), index, it, partHash) }
+            }
+            call.respond(updated)
+        }
+        post("/videos/sessions/{id}/complete") {
+            call.respond(withContext(Dispatchers.IO) { services.vault.completeVideoSession(call.author(), call.parameters["id"].orEmpty()) })
+        }
+        // Queue/dequeue the full video of a vault entry (the id is the entry id, the queue keys by its videoRef).
+        post("/videos/{id}/request") {
+            videoRequest(services, requested = true)
+        }
+        post("/videos/{id}/unrequest") {
+            videoRequest(services, requested = false)
+        }
     }
 }
+
+private suspend fun RoutingContext.videoRequest(services: Services, requested: Boolean) {
+    val entry = withContext(Dispatchers.IO) { services.vault.images(call.author()).firstOrNull { it.id == call.parameters["id"] } }
+    if (entry == null || entry.kind != VaultKind.VIDEO || entry.videoRef == null) {
+        call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found"))
+    } else {
+        withContext(Dispatchers.IO) {
+            if (requested) services.vault.requestVideo(call.author(), entry.videoRef!!) else services.vault.unrequestVideo(call.author(), entry.videoRef!!)
+        }
+        call.respond(HttpStatusCode.NoContent)
+    }
+}
+
+/** Body of `POST /api/vault/videos/sessions`; the hash is normalized to lowercase before validation. */
+@Serializable
+private data class VideoSessionRequest(
+    val videoRef: String = "",
+    val fileName: String = "",
+    val size: Long = 0,
+    val sha256: String = "",
+    val videoMimeType: String = "application/octet-stream",
+)
+
+@Serializable
+private data class BulkDeleteRequest(val ids: List<String> = emptyList())
+
+@Serializable
+private data class BulkDeleteResponse(val deleted: Int)
 
 private fun contentTypeOf(mimeType: String?): ContentType =
     try {
