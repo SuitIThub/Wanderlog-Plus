@@ -133,6 +133,8 @@ data class Flight(
     val via: List<Endpoint> = emptyList(),
     /** Own links shown as buttons on the page (tickets, booking, info). */
     val links: List<CustomLink> = emptyList(),
+    /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
+    val journeyId: String? = null,
 )
 
 @Serializable
@@ -152,6 +154,8 @@ data class Train(
     val transit: de.wanderlogplus.shared.sync.TransitResult? = null,
     /** Own links shown as buttons on the page (tickets, booking, info). */
     val links: List<CustomLink> = emptyList(),
+    /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
+    val journeyId: String? = null,
 )
 
 @Serializable

@@ -6,6 +6,9 @@ import de.wanderlogplus.shared.model.DayVersion
 import de.wanderlogplus.shared.model.DayVersionItem
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.EntityCodec
+import de.wanderlogplus.shared.model.Endpoint
+import de.wanderlogplus.shared.model.Flight
+import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.Ids
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.sync.*
@@ -361,6 +364,83 @@ class LocalEditor(
             write(type, secondId, mapOf("deleted" to JsonPrimitive(true)))
         }
         onChange()
+    }
+
+    /**
+     * Groups the trains/flights [legs] into one journey: an existing journey among them is extended, else a new one is
+     * made. Returns the journey id. Nothing is deleted; every leg keeps its data.
+     */
+    fun joinJourney(snapshot: TripSnapshot, legs: List<Pair<EntityType, String>>): String {
+        require(legs.distinct().size >= 2) { "A journey needs two legs" }
+        fun journeyOf(type: EntityType, id: String): String? = when (type) {
+            EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.journeyId
+            EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.journeyId
+            else -> throw IllegalArgumentException("Only trains and flights form journeys")
+        }
+        val existing = legs.mapNotNull { (t, i) -> journeyOf(t, i)?.takeIf { it.isNotBlank() } }.firstOrNull()
+        val jid = existing ?: Ids.newId()
+        tx.run { legs.distinct().forEach { (t, i) -> if (journeyOf(t, i) != jid) write(t, i, mapOf("journeyId" to JsonPrimitive(jid))) } }
+        onChange()
+        return jid
+    }
+
+    private fun changedOnly(before: Map<String, JsonElement>, after: Map<String, JsonElement>) = after.filter { (k, v) -> before[k] != v }
+
+    /** Takes a leg out of its journey; a journey left with one leg is dissolved. */
+    fun leaveJourney(snapshot: TripSnapshot, type: EntityType, id: String) {
+        val j = journeyOf(snapshot, type, id) ?: return
+        tx.run {
+            val rest = j.legs.filterNot { it.type == type && it.id == id }
+            write(type, id, mapOf("journeyId" to JsonNull))
+            if (rest.size < 2) rest.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull)) }
+        }
+        onChange()
+    }
+
+    /** Dissolves a whole journey (its legs stay). */
+    fun dissolveJourney(snapshot: TripSnapshot, journeyId: String) {
+        val j = journeys(snapshot).firstOrNull { it.id == journeyId } ?: return
+        tx.run { j.legs.forEach { write(it.type, it.id, mapOf("journeyId" to JsonNull)) } }
+        onChange()
+    }
+
+    /**
+     * Splits an old merged train/flight (one entry with stopovers) into legs start→stop 1→…→destination, all in one new
+     * journey. A stop's time becomes the arrival of the leg before it; the next leg's departure time stays open. The
+     * first leg keeps number, booking, note and attachments. Returns the journey id.
+     */
+    fun splitLegacy(snapshot: TripSnapshot, type: EntityType, id: String): String {
+        val jid = Ids.newId()
+        fun stop(e: Endpoint, asArrival: Boolean) = if (asArrival) e else e.copy(time = null)
+        tx.run {
+            when (type) {
+                EntityType.TRAIN -> {
+                    val t = requireNotNull(snapshot.trains.firstOrNull { it.id == id }) { "Unknown leg" }
+                    require(t.via.isNotEmpty()) { "Nothing to split" }
+                    val points = listOf(t.depart) + t.via + t.arrive
+                    val legs = points.zipWithNext()
+                    val first = t.copy(arrive = legs[0].second, via = emptyList(), journeyId = jid, transit = null)
+                    changedOnly(EntityCodec.fields(t), EntityCodec.fields(first)).let { write(EntityType.TRAIN, id, it) }
+                    legs.drop(1).forEach { (a, b) ->
+                        writeNew(EntityType.TRAIN, Ids.newId(), EntityCodec.fields(Train("", carrier = t.carrier, depart = stop(a, false), arrive = b, journeyId = jid)))
+                    }
+                }
+                EntityType.FLIGHT -> {
+                    val f = requireNotNull(snapshot.flights.firstOrNull { it.id == id }) { "Unknown leg" }
+                    require(f.via.isNotEmpty()) { "Nothing to split" }
+                    val points = listOf(f.depart) + f.via + f.arrive
+                    val legs = points.zipWithNext()
+                    val first = f.copy(arrive = legs[0].second, via = emptyList(), journeyId = jid)
+                    changedOnly(EntityCodec.fields(f), EntityCodec.fields(first)).let { write(EntityType.FLIGHT, id, it) }
+                    legs.drop(1).forEach { (a, b) ->
+                        writeNew(EntityType.FLIGHT, Ids.newId(), EntityCodec.fields(Flight("", airline = f.airline, airlineCode = f.airlineCode, depart = stop(a, false), arrive = b, journeyId = jid)))
+                    }
+                }
+                else -> throw IllegalArgumentException("Only trains and flights can be split")
+            }
+        }
+        onChange()
+        return jid
     }
 
     private fun mergedText(a: String?, b: String?, sep: String): String? {
