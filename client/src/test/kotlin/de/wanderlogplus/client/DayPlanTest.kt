@@ -64,6 +64,41 @@ class DayPlanTest {
         assertEquals(listOf("Garten", "Tempel", "Onsen am Fluss", "Notiz"), f.snapshot().let { s -> s.dayItemsFor(dayId).map { i -> if (i.kind == DayItemKind.NOTE) "Notiz" else s.places[i.placeId]?.name } })
     }
 
+    @Test fun aFoundPlaceTheTripKnowsIsNotCreatedAgain() {
+        val f = fx()
+        f.seedEntity(EntityType.PLACE, "p4", Place("p4", name = "Magome-juku", lat = 35.5258, lng = 137.5667))
+        f.seedEntity(EntityType.SAVED_PLACE, "s4", SavedPlace("s4", "p4", status = PlaceStatus.IDEA))
+        val temple = f.editor.addSuggestionToDay(f.snapshot(), date, "s1")
+        f.editor.applyDayPlan(
+            f.snapshot(), date,
+            ops = listOf(
+                PlanOp.AddFound("Magome", 35.5262, 137.5671, null, PlaceCategory.SIGHT, time = "10:00"),
+                PlanOp.AddFound("Tempel", 35.0, 135.7, null, PlaceCategory.SIGHT, time = "14:00"),
+            ),
+            remove = emptySet(), label = "Vor Chat-Plan", now = 1,
+        )
+        val snap = f.snapshot()
+        assertEquals(4, snap.savedPlaces.size, "no new saved place")
+        assertEquals(listOf("p4" to "10:00", "p1" to "14:00"), snap.dayItemsFor(dayId).map { it.placeId to it.time })
+        assertEquals(temple, snap.dayItemsFor(dayId).last().id)
+        assertEquals(PlaceStatus.PLANNED, snap.savedPlaces.first { it.id == "s4" }.status)
+    }
+
+    @Test fun deletingASavedPlaceTakesItsProgramItemsAlong() {
+        val f = fx()
+        f.editor.addSuggestionToDay(f.snapshot(), date, "s1")
+        f.editor.addSuggestionToDay(f.snapshot(), "2027-05-04", "s1")
+        f.editor.addSuggestionToDay(f.snapshot(), date, "s2")
+        assertEquals(2, f.editor.deleteSavedPlace(f.snapshot(), "s1"))
+        val snap = f.snapshot()
+        assertNull(snap.savedPlaces.firstOrNull { it.id == "s1" })
+        assertEquals(listOf("p2"), snap.dayItems.map { it.placeId })
+        // A duplicate goes alone: the other saved place still uses the program items.
+        f.seedEntity(EntityType.SAVED_PLACE, "s2b", SavedPlace("s2b", "p2", status = PlaceStatus.IDEA))
+        assertEquals(0, f.editor.deleteSavedPlace(f.snapshot(), "s2b"))
+        assertEquals(listOf("p2"), f.snapshot().dayItems.map { it.placeId })
+    }
+
     @Test fun historyKeepsTheLastVersionsOnly() {
         val f = fx()
         f.editor.addSuggestionToDay(f.snapshot(), date, "s1")

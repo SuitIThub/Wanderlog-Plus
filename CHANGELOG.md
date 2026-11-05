@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.37.0
+
+- **Chat-Umplanung räumt auf:** Ein neuer Tagesplan aus dem Chat ersetzt den ganzen Tag. Orte, die er weglässt, stehen auf der Plan-Karte als „Entfällt“ (abwählbar), statt still stehen zu bleiben. Notizen bleiben.
+- **Keine doppelten Orte mehr:** Bevor der Chat einen Ort neu anlegt, prüft er Programm, Sammlung und Unterkünfte nach Name und Lage („Magome“ = „Magome-juku“). Ein schon geplanter Ort wird verschoben statt kopiert, eine Unterkunft nie als neuer Ort angelegt. Die App prüft das beim Übernehmen noch einmal.
+- **Ort löschen:** Im ✎ eines Orts gibt es „Ort löschen“ (mit Rückfrage). Der Ort verschwindet aus der Sammlung und aus dem Programm aller Tage; ein Wanderlog-Import holt ihn nicht zurück.
+- Benötigt das Server-Update.
+
 ## 0.36.1
 
 - **Videozugriff nach dem Update:** Wenn die Fotos-Erlaubnis schon da war, fragt „Upload starten“ jetzt den Videozugriff an – sonst blieben Videos unsichtbar.
