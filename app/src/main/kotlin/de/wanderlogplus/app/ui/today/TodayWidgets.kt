@@ -54,6 +54,7 @@ import de.wanderlogplus.app.ui.dayLabel
 import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.routeTitle
 import de.wanderlogplus.app.ui.design.timesLine
+import de.wanderlogplus.app.ui.logistics.platformText
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Attachment
@@ -132,6 +133,9 @@ private fun Movement.id() = when (this) {
     is Movement.FlightMove -> flight.id
     is Movement.TrainMove -> train.id
 }
+
+/** "Gleis 14" of a train with a chosen connection. */
+private fun Movement.platform(): String? = (this as? Movement.TrainMove)?.train?.platformText()
 
 private fun Movement.label(): String = when (this) {
     is Movement.FlightMove -> "Flug"
@@ -293,7 +297,7 @@ private fun FocusStep(
                 Icon(s.movement.icon(), contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text(s.movement.routeTitle(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Text(s.movement.timesLine(), style = MaterialTheme.typography.bodyMedium)
+            Text(s.movement.timesLine() + (s.movement.platform()?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
             TicketChips(snapshot.attachmentsFor(s.movement.targetType(), s.movement.id()), onOpenAttachment, available)
         }
         is DayStep.Note -> Text(stepName(s), style = MaterialTheme.typography.titleMedium)
@@ -397,6 +401,7 @@ internal fun NextTripWidget(
                     else -> dayLabel(day.toString()) + " · "
                 }
                 Text(prefix + move.movement.timesLine(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                move.movement.platform()?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-platform")) }
             }
         }
         TicketChips(snapshot.attachmentsFor(move.movement.targetType(), move.movement.id()), onOpenAttachment, available)

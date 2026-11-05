@@ -48,7 +48,7 @@ fun formProblem(f: TransitForm): String? = when {
 }
 
 /** The request for a form: stations by name when filled in, else found near the two places; always fresh data. */
-fun requestFor(f: TransitForm, from: TransitPoint, to: TransitPoint): TransitRequest = TransitRequest(
+fun requestFor(f: TransitForm, from: TransitPoint?, to: TransitPoint?): TransitRequest = TransitRequest(
     from = from,
     to = to,
     fromStation = f.fromStation.trim().ifBlank { null },
@@ -81,8 +81,9 @@ fun transitError(e: ApiException): String = when {
  */
 class TransitViewModel(
     private val api: suspend () -> SyncApi?,
-    private val from: TransitPoint,
-    private val to: TransitPoint,
+    /** Where the way starts and ends; null when unknown (the stations are typed in then). */
+    private val from: TransitPoint?,
+    private val to: TransitPoint?,
     date: String,
     time: String?,
     chosen: TransitResult?,
@@ -108,8 +109,8 @@ class TransitViewModel(
     private suspend fun loadStations() {
         val a = api() ?: return
         try {
-            val nf = a.transitStations(from.lat, from.lng)
-            val nt = a.transitStations(to.lat, to.lng)
+            val nf = from?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
+            val nt = to?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
             _state.update { s ->
                 s.copy(
                     nearFrom = nf,
@@ -131,7 +132,11 @@ class TransitViewModel(
 
     fun search() {
         val form = _state.value.form
-        formProblem(form)?.let { msg -> _state.update { it.copy(message = msg) }; return }
+        (formProblem(form) ?: when {
+            form.fromStation.isBlank() && from == null -> "Abfahrtsbahnhof eintragen (auf Japanisch, z. B. 京都)."
+            form.toStation.isBlank() && to == null -> "Zielbahnhof eintragen (auf Japanisch, z. B. 奈良)."
+            else -> null
+        })?.let { msg -> _state.update { it.copy(message = msg) }; return }
         searching?.cancel()
         _state.update { it.copy(searching = true, message = null) }
         searching = viewModelScope.launch {

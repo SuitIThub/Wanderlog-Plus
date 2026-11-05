@@ -60,8 +60,18 @@ class MoreViewModel(
         }
     }
 
+    /** Writes the changed fields; for [de.wanderlogplus.app.ui.logistics.NEW_ID] creates the entry. */
     fun saveFields(type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) =
-        write { e, _ -> e.setChanged(type, id, before, after) }
+        write { e, _ -> if (id == de.wanderlogplus.app.ui.logistics.NEW_ID) e.create(type, after) else e.setChanged(type, id, before, after) }
+
+    /** Saves a stay (a picked hotel becomes a new place first); [existing] null creates it. */
+    fun saveStay(existing: de.wanderlogplus.shared.model.Stay?, draft: de.wanderlogplus.app.ui.logistics.StayDraft) = write { e, s ->
+        val save = de.wanderlogplus.app.ui.logistics.stayToSave(s, draft, existing, de.wanderlogplus.shared.model.Ids.newId())
+        save.newPlace?.let { p -> e.create(EntityType.PLACE, de.wanderlogplus.shared.model.EntityCodec.fields(p), p.id) }
+        val after = de.wanderlogplus.shared.model.EntityCodec.fields(save.stay)
+        if (existing == null) e.create(EntityType.STAY, after)
+        else e.setChanged(EntityType.STAY, existing.id, de.wanderlogplus.shared.model.EntityCodec.fields(existing), after)
+    }
 
     fun mergeMoves(type: EntityType, firstId: String, secondId: String) = write { e, s -> e.mergeMoves(s, type, firstId, secondId) }
 

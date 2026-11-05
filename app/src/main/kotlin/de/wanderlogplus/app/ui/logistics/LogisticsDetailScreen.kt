@@ -115,7 +115,7 @@ fun LogisticsDetailScreen(
             onTitleOverflow = { titleCut = it },
         )
         RouteMap(view.route, view.accent, height = 160.dp)
-        if (type == EntityType.TRAIN || type == EntityType.FLIGHT) {
+        if (type == EntityType.TRAIN || type == EntityType.FLIGHT || type == EntityType.STAY) {
             MoveActions(snapshot, type, id, onEdit, onMerge, onDelete)
         }
 
@@ -200,9 +200,11 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 route = routeFor(t, snapshot),
                 details = listOfNotNull(
                     "Strecke" to Movement.TrainMove(t).routeTitle(),
+                    t.number?.takeIf { it.isNotBlank() }?.let { "Zug" to it },
                     viaDetail(t.via),
-                    "Abfahrt" to endpointText(t.depart),
+                    "Abfahrt" to endpointText(t.depart) + (t.platformText()?.let { " · $it" } ?: ""),
                     "Ankunft" to endpointText(t.arrive),
+                    t.transit?.routes?.firstOrNull()?.let { r -> "Verbindung" to transitSummary(r) },
                 ) + booking(t.confirmationNumber, t.travelerNames),
                 note = t.note,
                 liveStatus = true,
@@ -305,7 +307,7 @@ private fun MoveActions(
     if (confirmDelete && onDelete != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(if (type == EntityType.FLIGHT) "Flug löschen?" else "Fahrt löschen?") },
+            title = { Text(when (type) { EntityType.FLIGHT -> "Flug löschen?"; EntityType.STAY -> "Unterkunft löschen?"; else -> "Fahrt löschen?" }) },
             text = { Text("„${legLabel(snapshot, type, id)}“ wird entfernt. Ein Wanderlog-Import stellt sie nicht wieder her.") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; onDelete(type, id) }, modifier = Modifier.testTag("delete-confirm")) { Text("Löschen") }
@@ -338,5 +340,21 @@ private fun DetailRow(label: String, value: String) {
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** "Gleis 14" of the first ride of the chosen connection; null without one. */
+fun de.wanderlogplus.shared.model.Train.platformText(): String? =
+    transit?.routes?.firstOrNull()?.legs?.firstOrNull { !it.walk }?.departurePlatform?.takeIf { it.isNotBlank() }?.let { "Gleis $it" }
+
+/** "Kyoto 08:12 → Nagoya 08:47 (Gleis 14) → Nakatsugawa 09:40": the rides of a connection. */
+internal fun transitSummary(r: de.wanderlogplus.shared.sync.TransitRoute): String {
+    val rides = r.legs.filter { !it.walk }
+    if (rides.isEmpty()) return "${r.departure}–${r.arrival}"
+    return rides.joinToString("\n") { l ->
+        val line = l.line.ifBlank { l.lineJa }
+        val from = l.from.name.ifBlank { l.from.nameJa }
+        val to = l.to.name.ifBlank { l.to.nameJa }
+        "$line: $from ${l.departure}" + (l.departurePlatform?.takeIf { it.isNotBlank() }?.let { " (Gleis $it)" } ?: "") + " → $to ${l.arrival}"
     }
 }

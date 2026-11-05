@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,9 @@ import de.wanderlogplus.client.GeoPlace
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Endpoint
+import de.wanderlogplus.shared.model.Flight
+import de.wanderlogplus.shared.model.Train
+import de.wanderlogplus.shared.sync.TransitResult
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -52,6 +56,9 @@ import kotlinx.serialization.json.JsonElement
 const val LOGISTICS_EDIT_ROUTE = "logistik-edit/{type}/{id}"
 
 fun logisticsEditRoute(type: EntityType, id: String) = "logistik-edit/${type.name.lowercase()}/${android.net.Uri.encode(id)}"
+
+/** Id in an edit route for an entry that does not exist yet ("Hinzufügen"). */
+const val NEW_ID = "new"
 
 /** Searches places by name, biased towards a coordinate; throws on failure. */
 typealias PlaceSearch = suspend (query: String, near: Pair<Double, Double>?) -> List<GeoPlace>
@@ -63,7 +70,38 @@ data class MoveDraft(
     val depart: Endpoint,
     val via: List<Endpoint>,
     val arrive: Endpoint,
+    val bookingNumber: String = "",
+    val note: String = "",
+    /** Trains: the connection taken over from the transit search. */
+    val transit: TransitResult? = null,
 )
+
+/**
+ * The draft filled from a timetable connection (first route): stations and times of the first and last ride, the
+ * changes as stopovers (with the departure there), the lines as operator and the numbered trains ("Nozomi 21") as
+ * number. Walks between stations are left out.
+ */
+fun draftFromTransit(d: MoveDraft, r: TransitResult): MoveDraft {
+    val route = r.routes.firstOrNull() ?: return d
+    val rides = route.legs.filter { !it.walk }
+    if (rides.isEmpty()) return d
+    val date = route.date.ifBlank { r.datetime.take(10) }.takeIf { it.isNotBlank() }
+    fun Endpoint.at(st: de.wanderlogplus.shared.sync.TransitStation, time: String) =
+        copy(name = st.name.ifBlank { st.nameJa }, code = null, placeId = null, lat = st.lat, lng = st.lng, date = date, time = time.takeIf { it.isNotBlank() })
+    // "JR Shinkansen Nozomi 15" → ("JR Shinkansen", "Nozomi 15"); lines without a numbered train keep their name.
+    val numbered = Regex("""^(.*?)\s*([A-Z][a-z]+ \d+)$""")
+    fun split(line: String): Pair<String, String?> =
+        numbered.find(line.trim())?.let { m -> m.groupValues[1].trim().ifBlank { line.trim() } to m.groupValues[2] } ?: (line.trim() to null)
+    val parts = rides.map { split(it.line.ifBlank { it.lineJa }) }
+    return d.copy(
+        operator = parts.map { it.first }.filter { it.isNotBlank() }.distinct().joinToString(" → ").ifBlank { d.operator },
+        number = parts.mapNotNull { it.second }.distinct().joinToString(" / ").ifBlank { d.number },
+        depart = d.depart.at(rides.first().from, rides.first().departure),
+        via = rides.drop(1).map { Endpoint().at(it.from, it.departure) },
+        arrive = d.arrive.at(rides.last().to, rides.last().arrival),
+        transit = r,
+    )
+}
 
 private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
 private val TIME = Regex("""\d{2}:\d{2}""")
@@ -78,30 +116,50 @@ fun validateDraft(d: MoveDraft): String? {
     return null
 }
 
-/** Draft of the train/flight [id], or null when it does not exist. */
-fun draftOf(snapshot: TripSnapshot, type: EntityType, id: String): MoveDraft? = when (type) {
-    EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let { MoveDraft(it.carrier.orEmpty(), "", it.depart, it.via, it.arrive) }
-    EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let { MoveDraft(it.airline.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive) }
+/** Draft of the train/flight [id] (empty for [NEW_ID]), or null when it does not exist. */
+fun draftOf(snapshot: TripSnapshot, type: EntityType, id: String): MoveDraft? = when {
+    id == NEW_ID && (type == EntityType.TRAIN || type == EntityType.FLIGHT) -> MoveDraft("", "", Endpoint(), emptyList(), Endpoint())
+    type == EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let {
+        MoveDraft(it.carrier.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, it.transit)
+    }
+    type == EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let {
+        MoveDraft(it.airline.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note)
+    }
     else -> null
 }
 
-/** The stored fields of [id] before and after applying [d]; empty maps for an unknown entry. */
+/**
+ * The stored fields of [id] before and after applying [d]; for [NEW_ID] "before" is empty and "after" holds every
+ * field of the new entry. Empty maps for an unknown entry.
+ */
 fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDraft): Pair<Map<String, JsonElement>, Map<String, JsonElement>> {
     fun Endpoint.clean() = copy(date = date?.trim()?.ifBlank { null }, time = time?.trim()?.ifBlank { null }, name = name.trim())
+    val isNew = id == NEW_ID
     return when (type) {
-        EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let { t ->
-            EntityCodec.fields(t) to EntityCodec.fields(
-                t.copy(carrier = d.operator.trim().ifBlank { null }, depart = d.depart.clean(), via = d.via.map { it.clean() }, arrive = d.arrive.clean()),
+        EntityType.TRAIN -> (if (isNew) Train("") else snapshot.trains.firstOrNull { it.id == id })?.let { t ->
+            (if (isNew) emptyMap() else EntityCodec.fields(t)) to EntityCodec.fields(
+                t.copy(
+                    carrier = d.operator.trim().ifBlank { null },
+                    number = d.number.trim().ifBlank { null },
+                    depart = d.depart.clean(),
+                    via = d.via.map { it.clean() },
+                    arrive = d.arrive.clean(),
+                    confirmationNumber = d.bookingNumber.trim().ifBlank { null },
+                    note = d.note.trim(),
+                    transit = d.transit,
+                ),
             )
         }
-        EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let { f ->
-            EntityCodec.fields(f) to EntityCodec.fields(
+        EntityType.FLIGHT -> (if (isNew) Flight("") else snapshot.flights.firstOrNull { it.id == id })?.let { f ->
+            (if (isNew) emptyMap() else EntityCodec.fields(f)) to EntityCodec.fields(
                 f.copy(
                     airline = d.operator.trim().ifBlank { null },
                     number = d.number.trim().ifBlank { null },
                     depart = d.depart.clean(),
                     via = d.via.map { it.clean() },
                     arrive = d.arrive.clean(),
+                    confirmationNumber = d.bookingNumber.trim().ifBlank { null },
+                    note = d.note.trim(),
                 ),
             )
         }
@@ -131,6 +189,8 @@ fun LogisticsEditScreen(
     onSave: (type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) -> Unit,
     search: PlaceSearch?,
     modifier: Modifier = Modifier,
+    /** The timetable search for trains ("Verbindung suchen"); null hides it. */
+    transitApi: (suspend () -> de.wanderlogplus.client.SyncApi?)? = null,
 ) {
     val initial = remember(type, id) { type?.let { draftOf(snapshot, it, id) } }
     if (type == null || initial == null) {
@@ -143,6 +203,12 @@ fun LogisticsEditScreen(
     var draft by remember(type, id) { mutableStateOf(initial) }
     var searching by remember(type, id) { mutableStateOf<SearchTarget?>(null) }
     var error by remember(type, id) { mutableStateOf<String?>(null) }
+    var transitOpen by remember(type, id) { mutableStateOf(false) }
+
+    if (transitOpen && transitApi != null) {
+        TransitPanel(snapshot, draft, transitApi, onPick = { r -> draft = draftFromTransit(draft, r); transitOpen = false }, onCancel = { transitOpen = false }, modifier = modifier)
+        return
+    }
 
     val target = searching
     if (target != null && search != null) {
@@ -170,7 +236,12 @@ fun LogisticsEditScreen(
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Abbrechen") }
             Text(
-                if (type == EntityType.FLIGHT) "Flug bearbeiten" else "Fahrt bearbeiten",
+                when {
+                    id == NEW_ID && type == EntityType.FLIGHT -> "Neuer Flug"
+                    id == NEW_ID -> "Neuer Zug"
+                    type == EntityType.FLIGHT -> "Flug bearbeiten"
+                    else -> "Fahrt bearbeiten"
+                },
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -190,6 +261,20 @@ fun LogisticsEditScreen(
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("edit-error")) }
+            if (type == EntityType.TRAIN && transitApi != null) {
+                OutlinedButton(onClick = { transitOpen = true }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("edit-transit")) {
+                    Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                    Text(if (draft.transit != null) "Andere Verbindung suchen" else "Verbindung suchen (ÖPNV)")
+                }
+                draft.transit?.routes?.firstOrNull()?.let { r ->
+                    Text(
+                        "Übernommen: ${r.departure}–${r.arrival}, " + (if (r.transfers == 0) "ohne Umstieg" else "${r.transfers}× umsteigen") +
+                            r.legs.firstOrNull { !it.walk }?.departurePlatform?.let { " · Gleis $it" }.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("edit-transit-chosen"),
+                    )
+                }
+            }
             SectionLabel(if (type == EntityType.FLIGHT) "Airline" else "Gesellschaft")
             OutlinedTextField(
                 draft.operator, { draft = draft.copy(operator = it) },
@@ -197,13 +282,11 @@ fun LogisticsEditScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("edit-operator"),
             )
-            if (type == EntityType.FLIGHT) {
-                OutlinedTextField(
-                    draft.number, { draft = draft.copy(number = it) },
-                    label = { Text("Flugnummer") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("edit-number"),
-                )
-            }
+            OutlinedTextField(
+                draft.number, { draft = draft.copy(number = it) },
+                label = { Text(if (type == EntityType.FLIGHT) "Flugnummer (z. B. NH 7)" else "Zugnummer (z. B. Nozomi 21)") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("edit-number"),
+            )
 
             SectionLabel(if (type == EntityType.FLIGHT) "Abflug" else "Abfahrt")
             EndpointFields("depart", draft.depart, { draft = draft.copy(depart = it) }, search?.let { { searching = SearchTarget.Depart } })
@@ -235,6 +318,18 @@ fun LogisticsEditScreen(
 
             SectionLabel(if (type == EntityType.FLIGHT) "Landung" else "Ankunft")
             EndpointFields("arrive", draft.arrive, { draft = draft.copy(arrive = it) }, search?.let { { searching = SearchTarget.Arrive } })
+
+            SectionLabel("Buchung")
+            OutlinedTextField(
+                draft.bookingNumber, { draft = draft.copy(bookingNumber = it) },
+                label = { Text("Buchungsnummer") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("edit-booking"),
+            )
+            OutlinedTextField(
+                draft.note, { draft = draft.copy(note = it) },
+                label = { Text("Notiz") }, minLines = 2,
+                modifier = Modifier.fillMaxWidth().testTag("edit-note"),
+            )
             androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 24.dp))
         }
     }
@@ -280,7 +375,7 @@ private fun EndpointFields(tag: String, e: Endpoint, onChange: (Endpoint) -> Uni
 
 /** Full-screen place search: type a name, pick a hit (OpenStreetMap via Photon). */
 @Composable
-private fun PlaceSearchPanel(
+internal fun PlaceSearchPanel(
     search: PlaceSearch,
     near: Pair<Double, Double>?,
     onPick: (GeoPlace) -> Unit,
@@ -325,4 +420,43 @@ private fun PlaceSearchPanel(
             }
         }
     }
+}
+
+/** "Verbindung suchen" inside the edit screen: the timetable search seeded with the draft's stations and time. */
+@Composable
+private fun TransitPanel(
+    snapshot: TripSnapshot,
+    draft: MoveDraft,
+    api: suspend () -> de.wanderlogplus.client.SyncApi?,
+    onPick: (TransitResult) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier,
+) {
+    fun point(e: Endpoint) = e.coords(snapshot)?.let { de.wanderlogplus.shared.sync.TransitPoint(it.lat, it.lng, e.name) }
+    val from = point(draft.depart)
+    val to = point(draft.arrive)
+    val date = draft.depart.date?.takeIf { it.isNotBlank() } ?: java.time.LocalDate.now().toString()
+    val vm: de.wanderlogplus.app.ui.transit.TransitViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        key = "edit-transit-${draft.depart.name}-${draft.arrive.name}-$date",
+        factory = remember(from, to, date) {
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                    de.wanderlogplus.app.ui.transit.TransitViewModel(api, from, to, date, draft.depart.time, draft.transit) as T
+            }
+        },
+    )
+    val state by vm.state.collectAsState()
+    de.wanderlogplus.app.ui.transit.TransitScreen(
+        title = listOf(draft.depart.name, draft.arrive.name).filter { it.isNotBlank() }.joinToString(" → ").ifBlank { "Neue Fahrt" },
+        state = state,
+        accent = MaterialTheme.colorScheme.primary,
+        chosen = null,
+        onEdit = vm::edit,
+        onSearch = vm::search,
+        onChoose = onPick,
+        onClear = {},
+        onBack = onCancel,
+        modifier = modifier,
+    )
 }
