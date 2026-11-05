@@ -410,17 +410,51 @@ class VaultRoutesTest {
         services.vault.savePart("alice", s.id, 0, content.inputStream())
         services.vault.completeVideoSession("alice", s.id)
 
-        val html = c.get("/vault?token=$TOKEN_A&tab=videos").bodyAsText()
-        // Not requested: thumbnail badge plus the button that queues the upload.
-        assertTrue(html.contains("Thumbnail"), "thumbnail badge")
-        assertTrue(html.contains("/api/vault/videos/${plain.id}/request"), "request button")
-        // Queued, uploading, done.
-        assertTrue(html.contains("angefordert"), "requested badge")
-        assertTrue(html.contains("lädt 42 %"), "session progress badge")
-        assertTrue(html.contains("/vault/vid/${done.id}"), "playback link")
-        assertTrue(html.contains("geladen ▶"), "done badge")
-        assertTrue(html.contains(uploading.fileName), "uploading card")
-        assertTrue(html.contains(requested.fileName), "requested card")
+        val thumbs = c.get("/vault?token=$TOKEN_A&tab=videos&group=thumbnail").bodyAsText()
+        assertTrue(thumbs.contains("Thumbnail"), "thumbnail badge")
+        assertTrue(thumbs.contains("/api/vault/videos/${plain.id}/request"), "request button")
+        val queued = c.get("/vault?token=$TOKEN_A&tab=videos&group=queued").bodyAsText()
+        assertTrue(queued.contains("angefordert"), "requested badge")
+        assertTrue(queued.contains("lädt 42 %"), "session progress badge")
+        assertTrue(queued.contains(uploading.fileName), "uploading card")
+        assertTrue(queued.contains(requested.fileName), "requested card")
+        val loaded = c.get("/vault?token=$TOKEN_A&tab=videos&group=loaded").bodyAsText()
+        assertTrue(loaded.contains("/vault/vid/${done.id}"), "playback link")
+        assertTrue(loaded.contains("geladen ▶"), "done badge")
+    }
+
+    @Test
+    fun webVideosAreGroupedByStatus() = appWith { services ->
+        val c = jsonClient()
+        services.seedVideo("ref-plain", "plain.jpg", seed = 1)
+        services.seedVideo("ref-req", "req.jpg", seed = 2)
+        services.vault.requestVideo("alice", "ref-req")
+        val done = services.seedVideo("ref-done", "done.jpg", seed = 4)
+        val content = byteArrayOf(5, 6, 7, 8)
+        val s = services.vault.startVideoSession("alice", "ref-done", "done.mp4", content.size.toLong(), sha256Hex(content), "video/mp4")
+        services.vault.savePart("alice", s.id, 0, content.inputStream())
+        services.vault.completeVideoSession("alice", s.id)
+
+        val videos = c.get("/vault?token=$TOKEN_A&tab=videos").bodyAsText()
+        assertTrue(videos.contains("group=queued"), "queued group link")
+        assertTrue(videos.contains("group=thumbnail"), "thumbnail group link")
+        assertTrue(videos.contains("group=loaded"), "loaded group link")
+
+        val thumbs = c.get("/vault?token=$TOKEN_A&tab=videos&group=thumbnail").bodyAsText()
+        assertTrue(thumbs.contains("plain.jpg"))
+        assertTrue(!thumbs.contains("req.jpg"))
+        assertTrue(!thumbs.contains("done.jpg"))
+
+        val queued = c.get("/vault?token=$TOKEN_A&tab=videos&group=queued").bodyAsText()
+        assertTrue(queued.contains("req.jpg"))
+        assertTrue(!queued.contains("plain.jpg"))
+        assertTrue(!queued.contains("done.jpg"))
+
+        val loaded = c.get("/vault?token=$TOKEN_A&tab=videos&group=loaded").bodyAsText()
+        assertTrue(loaded.contains("done.jpg"))
+        assertTrue(loaded.contains("/vault/vid/${done.id}"))
+        assertTrue(!loaded.contains("plain.jpg"))
+        assertTrue(!loaded.contains("req.jpg"))
     }
 
     @Test

@@ -315,10 +315,11 @@ fun Route.vaultWeb(services: Services) {
         val page = call.request.queryParameters["page"]?.toIntOrNull() ?: 1
         val tab = if (call.request.queryParameters["tab"] == "videos") "videos" else "photos"
         val sort = call.request.queryParameters["sort"]?.takeIf { it in setOf("date", "size", "name") } ?: "date"
+        val group = call.request.queryParameters["group"]?.takeIf { it in setOf("thumbnail", "queued", "loaded") } ?: "thumbnail"
         val paused = withContext(Dispatchers.IO) { services.vault.uploadPaused(user) }
         val requests = withContext(Dispatchers.IO) { services.vault.videoRequests(user) }
         val sessions = withContext(Dispatchers.IO) { services.vault.openVideoSessions(user) }
-        call.respondText(vaultPage(user, token, scan, images, page, tab, sort, paused, requests, sessions), ContentType.Text.Html)
+        call.respondText(vaultPage(user, token, scan, images, page, tab, sort, group, paused, requests, sessions), ContentType.Text.Html)
     }
     // Cheap change fingerprint for the overview page: it polls this instead of reloading blindly and only
     // reloads when one of the values moved (new image, deleted image, scan progress, queue/pause change).
@@ -357,6 +358,7 @@ private fun vaultPage(
     page: Int,
     tab: String,
     sort: String,
+    group: String,
     paused: Boolean,
     requests: Set<String>,
     sessions: List<de.wanderlogplus.shared.sync.VaultVideoSession>,
@@ -401,8 +403,18 @@ private fun vaultPage(
         </div>
     """.trimIndent()
     val photoCount = images.count { it.kind == VaultKind.PHOTO }
-    val videoCount = images.size - photoCount
-    val filtered = images.filter { if (tab == "videos") it.kind == VaultKind.VIDEO else it.kind == VaultKind.PHOTO }
+    val videos = images.filter { it.kind == VaultKind.VIDEO }
+    val videoCount = videos.size
+    val sessionRefs = sessionPct.keys
+    fun videoGroupOf(img: VaultImageInfo): String = when {
+        img.hasVideo -> "loaded"
+        img.videoRef != null && (img.videoRef in requests || img.videoRef in sessionRefs) -> "queued"
+        else -> "thumbnail"
+    }
+    val queuedCount = videos.count { videoGroupOf(it) == "queued" }
+    val thumbCount = videos.count { videoGroupOf(it) == "thumbnail" }
+    val loadedCount = videos.count { videoGroupOf(it) == "loaded" }
+    val filtered = if (tab == "videos") videos.filter { videoGroupOf(it) == group } else images.filter { it.kind == VaultKind.PHOTO }
     val sorted = when (sort) {
         "size" -> filtered.sortedByDescending { it.size }
         "name" -> filtered.sortedBy { it.fileName.lowercase() }
@@ -437,8 +449,15 @@ private fun vaultPage(
             """.trimIndent()
         }
     }
-    val tabHref = { t: String -> "/vault?token=${esc(token)}&amp;tab=$t&amp;sort=$sort" }
-    val sortHref = { s: String -> "/vault?token=${esc(token)}&amp;tab=$tab&amp;sort=$s" }
+    val tabHref = { t: String ->
+        if (t == "videos") "/vault?token=${esc(token)}&amp;tab=videos&amp;group=$group&amp;sort=$sort"
+        else "/vault?token=${esc(token)}&amp;tab=photos&amp;sort=$sort"
+    }
+    val sortHref = { s: String ->
+        val g = if (tab == "videos") "&amp;group=$group" else ""
+        "/vault?token=${esc(token)}&amp;tab=$tab$g&amp;sort=$s"
+    }
+    val groupHref = { g: String -> "/vault?token=${esc(token)}&amp;tab=videos&amp;group=$g&amp;sort=$sort" }
     val pagerHtml = if (pageCount <= 1) {
         ""
     } else {
@@ -453,7 +472,23 @@ private fun vaultPage(
     )
     // Fingerprint of what the page currently shows; the poll below reloads only when this changes.
     val initialState = """{"images":${images.size},"latest":${images.maxOfOrNull { it.uploadedAt } ?: 0L},"scanUpdated":${scan?.updatedAt ?: 0L},"requests":${requests.size},"sessionsProgress":${sessions.sumOf { it.receivedParts.size }},"paused":$paused,"pending":${scan?.pendingUploads ?: 0}}"""
-    val heading = if (tab == "videos") "Videos" else "Bilder"
+    val heading = when {
+        tab != "videos" -> "Bilder"
+        group == "queued" -> "Angefordert"
+        group == "loaded" -> "Geladen"
+        else -> "Thumbnail"
+    }
+    val groupTabsHtml = if (tab != "videos") {
+        ""
+    } else {
+        """
+        <div class="tabs">
+          <a class="${if (group == "thumbnail") "active" else ""}" href="${groupHref("thumbnail")}">Thumbnail ($thumbCount)</a>
+          <a class="${if (group == "queued") "active" else ""}" href="${groupHref("queued")}">Angefordert ($queuedCount)</a>
+          <a class="${if (group == "loaded") "active" else ""}" href="${groupHref("loaded")}">Geladen ($loadedCount)</a>
+        </div>
+        """.trimIndent()
+    }
     return """
 <!DOCTYPE html>
 <html lang="de">
@@ -496,6 +531,7 @@ $scanHtml
   <a class="${if (tab == "photos") "active" else ""}" href="${tabHref("photos")}">Fotos ($photoCount)</a>
   <a class="${if (tab == "videos") "active" else ""}" href="${tabHref("videos")}">Videos ($videoCount)</a>
 </div>
+$groupTabsHtml
 <div class="muted">Sortieren: <a href="${sortHref("date")}">Datum</a> · <a href="${sortHref("size")}">Größe</a> · <a href="${sortHref("name")}">Name</a>
   &nbsp; <button onclick="delSelected()">Ausgewählte löschen</button></div>
 <h2>$heading (${sorted.size})</h2>
