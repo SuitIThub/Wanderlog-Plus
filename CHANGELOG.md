@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.29.0
+
+- **Logistik verwalten:** „Hinzufügen“ in der Logistik legt einen Zug, einen Flug oder eine Unterkunft neu an.
+- **Unterkünfte** lassen sich jetzt anlegen, bearbeiten und löschen: Ort über die Suche (mit Adresse und Position für Karte, Wege und Wetter), Region automatisch aus der Lage oder gewählt, Check-in/-out, Stornofrist und -bedingungen, Buchungsnummer, Erwachsene, Zimmer und Notiz.
+- **Züge und Flüge:** Zugnummer (z. B. „Nozomi 21“) bzw. Flugnummer, Buchungsnummer und Notiz sind bearbeitbar.
+- **ÖPNV-Suche in der Fahrt:** „Verbindung suchen“ im Zug öffnet die Fahrplanauskunft mit Start, Ziel und Zeit; „Übernehmen“ setzt Bahnhöfe, Zeiten, Umstiege, Linie und Zugnummer. Die Verbindung bleibt an der Fahrt gespeichert – Detailansicht, „Nächste Fahrt“ und die Jetzt-Karte zeigen damit das **Gleis**.
+
 ## 0.28.0
 
 - **Fotos vom Ort:** Im Fotos-Tab eines Ortes steht über den eigenen Fotos eine Zeile mit Fotos des Ortes – sofort die Bilder aus Wanderlog, mit „Mehr von Google“ bis zu 10 weitere von Google Places (mit Nennung der Fotografen). Antippen öffnet die Fotos im Vollbild zum Durchwischen. Einmal geladene Google-Fotos bleiben auf dem Gerät und auf dem Server gespeichert.

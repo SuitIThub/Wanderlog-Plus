@@ -723,6 +723,7 @@ fun AppNavigation(
                                             s,
                                             onOpen = { e -> selected = "${e.type.name}/${e.id}" },
                                             today = rememberMinuteNow(clock).toLocalDate().toString(),
+                                            onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
                                         )
                                     },
                                     detail = {
@@ -737,6 +738,7 @@ fun AppNavigation(
                                 s,
                                 onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
                                 today = rememberMinuteNow(clock).toLocalDate().toString(),
+                                onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
                             )
                         }
                     }
@@ -760,7 +762,11 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("id").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
-                            LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch)
+                            if (type == EntityType.STAY) {
+                                de.wanderlogplus.app.ui.logistics.StayEditScreen(s, id, onBack = { nav.popBackStack() }, onSave = vm::saveStay, search = placeSearch)
+                            } else {
+                                LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch, transitApi = transitApi)
+                            }
                         }
                     }
                 }

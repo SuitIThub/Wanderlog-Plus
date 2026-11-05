@@ -136,6 +136,10 @@ data class Train(
     val note: String = "",
     /** Changes or stops between [depart] and [arrive] (e.g. Frankfurt Hbf), in travel order. */
     val via: List<Endpoint> = emptyList(),
+    /** Train name and number, e.g. "Nozomi 21" (for live status later). */
+    val number: String? = null,
+    /** The timetable connection taken over from the transit search (platforms, changes); null when entered by hand. */
+    val transit: de.wanderlogplus.shared.sync.TransitResult? = null,
 )
 
 @Serializable

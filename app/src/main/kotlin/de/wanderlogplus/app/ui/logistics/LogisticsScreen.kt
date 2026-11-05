@@ -1,5 +1,10 @@
 package de.wanderlogplus.app.ui.logistics
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Train
+import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -181,6 +186,8 @@ fun LogisticsScreen(
     onOpen: (LogisticsEntry) -> Unit = {},
     /** ISO date (trip zone) deciding whether a cancellation deadline still lies ahead; null shows every deadline. */
     today: String? = null,
+    /** "Hinzufügen" for a train, flight or stay; null hides the button. */
+    onAdd: ((EntityType) -> Unit)? = null,
 ) {
     val entries = remember(snapshot) { logisticsEntries(snapshot) }
     val moves = remember(entries) { entries.filter { it !is LogisticsEntry.StayEntry } }
@@ -194,6 +201,29 @@ fun LogisticsScreen(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (tab == TAB_MOVES) MovesTab(snapshot, moves, onOpen) else StaysTab(snapshot, stays, onOpen, today)
+            if (onAdd != null) {
+                var menu by remember { mutableStateOf(false) }
+                Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+                    androidx.compose.material3.ExtendedFloatingActionButton(
+                        onClick = { if (tab == TAB_MOVES) menu = true else onAdd(EntityType.STAY) },
+                        icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = null) },
+                        text = { Text("Hinzufügen") },
+                        modifier = Modifier.testTag("logistics-add"),
+                    )
+                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Zug / ÖPNV") }, onClick = { menu = false; onAdd(EntityType.TRAIN) },
+                            leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Train, contentDescription = null) },
+                            modifier = Modifier.testTag("logistics-add-train"),
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Flug") }, onClick = { menu = false; onAdd(EntityType.FLIGHT) },
+                            leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Flight, contentDescription = null) },
+                            modifier = Modifier.testTag("logistics-add-flight"),
+                        )
+                    }
+                }
+            }
         }
     }
 }
