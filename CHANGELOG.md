@@ -3,6 +3,20 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.36.1
+
+- **Videozugriff nach dem Update:** Wenn die Fotos-Erlaubnis schon da war, fragt „Upload starten“ jetzt den Videozugriff an – sonst blieben Videos unsichtbar.
+- **Pause gilt auch für Fotos:** „Uploads pausieren“ stoppt die Warteschlange vor dem nächsten Bild, nicht nur zwischen Video-Teilen.
+- **Statuszeile:** „n ausstehend“ sinkt mit den Uploads, statt an der Zahl vom Scan-Start hängen zu bleiben.
+- Benötigt das Server-Update.
+
+## 0.36.0
+
+- **Bilder-Upload für Videos:** Videos erscheinen als Vorschaubild; das volle Video lädt nur, wenn man es auf der Webseite anfordert. Der Upload geht in 8-MB-Stücken und lässt sich fortsetzen, ohne Größenlimit.
+- **Web-Übersicht:** Tabs Fotos/Videos, Sortierung, Mehrfachlöschung, Wiedergabe, Geräte-Status und Pause/Fortsetzen.
+- **Alle Fotos:** Der Upload nimmt jedes Bild mit, nicht nur vom alten Filter ausgewählte.
+- Benötigt das Server-Update.
+
 ## 0.35.0
 
 - **ÖPNV-Suche auch in Deutschland:** Liegen Start und Ziel nicht in Japan, sucht die Verbindungssuche über Transitous (offene Fahrplandaten) – Deutsche Bahn, üstra und der übrige Nah- und Fernverkehr in einer Auskunft, mit Gleis/Bahnsteig und Umstiegen, ohne Umschalten. Bahnhöfe gibt man mit ihrem Namen ein (z. B. „Hannover Kröpcke“). Fahrpläne gibt es dort meist erst einige Wochen im Voraus; vorher sagt die Suche das.
