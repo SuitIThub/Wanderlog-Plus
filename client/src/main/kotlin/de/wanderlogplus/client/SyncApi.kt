@@ -193,6 +193,11 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Live status of the flight [id] (AirLabs); NOT_CONFIGURED without a key on the server. */
+    suspend fun flightLive(id: String): de.wanderlogplus.shared.sync.FlightLive = call {
+        client.get("$base/api/live/flight/" + java.net.URLEncoder.encode(id, "UTF-8")) { auth() }
+    }
+
     /** Google photos of a place (by its Google place id); NOT_CONFIGURED without a key on the server. */
     suspend fun placePhotos(googlePlaceId: String): List<de.wanderlogplus.shared.sync.PlacePhoto> = call<de.wanderlogplus.shared.sync.PlacePhotos> {
         client.get("$base/api/places/photos") {

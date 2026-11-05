@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.30.0
+
+- **Live-Status für Flüge** (AirLabs): In der Flug-Detailansicht und in „Nächste Fahrt“ stehen Status (planmäßig, in der Luft, gelandet, annulliert), Verspätung, geplante und erwartete Zeiten, Terminal, Gate und Gepäckband. Abgefragt wird erst ab etwa 24 Stunden vor Abflug, dann stündlich, ab 3 Stunden vorher alle 10 Minuten, in der Luft alle 20 Minuten; nach der Landung nicht mehr. Der Server speichert alles zwischen, damit das Monatskontingent reicht.
+- Benötigt das Server-Update und `WLP_AIRLABS_KEY`.
+
 ## 0.29.0
 
 - **Logistik verwalten:** „Hinzufügen“ in der Logistik legt einen Zug, einen Flug oder eine Unterkunft neu an.

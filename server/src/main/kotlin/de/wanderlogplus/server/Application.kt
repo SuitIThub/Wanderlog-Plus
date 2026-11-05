@@ -89,6 +89,8 @@ class Services(
     val rates: RatesService = RatesService(store, null),
     /** Google photos of places (Places API); without a key `/api/places/photos` answers `photos_not_configured`. */
     val photos: PlacePhotosService = PlacePhotosService(store, config.dataDir.resolve("place-photos"), null),
+    /** Live status of flights (AirLabs). */
+    val flightLive: FlightLiveService = FlightLiveService(store, null, null),
 )
 
 @Serializable
@@ -164,6 +166,7 @@ fun Application.module(services: Services) {
         exception<TransitNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("transit_not_configured")) }
         exception<TransitUnavailable> { call, e -> call.respond(HttpStatusCode.BadGateway, ErrorResponse(e.code)) }
         exception<RatesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("rates_unavailable")) }
+        exception<FlightLiveNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("flight_live_not_configured")) }
         exception<PhotosNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("photos_not_configured")) }
         exception<PhotosUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("photos_unavailable")) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
@@ -261,6 +264,10 @@ fun Application.module(services: Services) {
                 val lat = call.request.queryParameters["lat"]?.toDoubleOrNull() ?: throw BadInput()
                 val lng = call.request.queryParameters["lng"]?.toDoubleOrNull() ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.TransitStations(withContext(Dispatchers.IO) { services.transit.stationsNear(lat, lng) }))
+            }
+            get("/api/live/flight/{id}") {
+                val id = call.parameters["id"].orEmpty()
+                call.respond(withContext(Dispatchers.IO) { services.flightLive.forFlight(id) })
             }
             get("/api/places/photos") {
                 val id = call.request.queryParameters["placeId"] ?: throw BadInput()

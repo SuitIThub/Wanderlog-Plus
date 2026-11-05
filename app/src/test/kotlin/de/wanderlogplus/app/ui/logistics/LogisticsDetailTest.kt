@@ -30,7 +30,7 @@ class LogisticsDetailTest {
         rule.onNodeWithText("ABC123").assertIsDisplayed()
         rule.onNodeWithText("Max Muster").assertIsDisplayed()
         rule.onNodeWithText("Frankfurt (FRA)", substring = true).assertIsDisplayed()
-        rule.onNodeWithText("Live-Status: –").assertIsDisplayed()
+        rule.onNode(androidx.compose.ui.test.hasTestTag("live-status")).assertDoesNotExist() // no live source in this test
         rule.onNodeWithText("Sitz", substring = true).assertIsDisplayed() // note as Markdown
         rule.onNodeWithTag("route-fallback").assertExists() // route map below the hero
     }

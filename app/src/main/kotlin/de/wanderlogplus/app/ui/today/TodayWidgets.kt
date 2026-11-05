@@ -55,6 +55,7 @@ import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.routeTitle
 import de.wanderlogplus.app.ui.design.timesLine
 import de.wanderlogplus.app.ui.logistics.platformText
+import de.wanderlogplus.app.ui.logistics.shortLine
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.model.Attachment
@@ -402,6 +403,13 @@ internal fun NextTripWidget(
                 }
                 Text(prefix + move.movement.timesLine(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 move.movement.platform()?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-platform")) }
+                (move.movement as? Movement.FlightMove)?.let { fm ->
+                    if (de.wanderlogplus.app.ui.logistics.LocalFlightLive.current != null) {
+                        de.wanderlogplus.app.ui.logistics.rememberFlightLive(fm.flight.id)?.shortLine()?.let {
+                            Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-live"))
+                        }
+                    }
+                }
             }
         }
         TicketChips(snapshot.attachmentsFor(move.movement.targetType(), move.movement.id()), onOpenAttachment, available)
