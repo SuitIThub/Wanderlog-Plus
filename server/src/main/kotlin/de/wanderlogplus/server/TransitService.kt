@@ -147,6 +147,8 @@ class TransitService(
     private val store: SqliteStore,
     private val source: TransitSource?,
     private val stations: StationFinder?,
+    /** Connections outside Japan (Germany: DB, üstra …); null: Japan only. */
+    private val elsewhere: TransitousSource? = null,
     private val now: () -> Instant = Instant::now,
 ) {
     val configured: Boolean get() = source != null && stations != null
@@ -158,6 +160,10 @@ class TransitService(
     }
 
     fun search(req: TransitRequest): TransitResult {
+        if (elsewhere != null && !TransitousSource.isJapan(req)) {
+            validate(req)
+            return elsewhere.search(req)
+        }
         val src = source ?: throw TransitNotConfigured()
         val finder = stations ?: throw TransitNotConfigured()
         validate(req)

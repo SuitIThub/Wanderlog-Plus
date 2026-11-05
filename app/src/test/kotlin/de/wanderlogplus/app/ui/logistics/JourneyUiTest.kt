@@ -143,6 +143,7 @@ class JourneyUiTest {
                 JourneyScreen(snapshot, "J", onBack = {}, onOpenLeg = { _, _ -> }, onAddLeg = { _, _, _ -> }, onJoin = {}, onLeave = { _, _ -> }, onDissolve = {}, onMoveLeg = { i, up -> moves += i to up })
             }
         }
+        rule.onNode(hasTestTag("route-fallback"), useUnmergedTree = true).assertExists() // route preview under the header
         rule.onNodeWithTag("journey-leg-1-up").performScrollTo().performClick()
         rule.onNodeWithTag("journey-leg-0-down").performScrollTo().performClick()
         assertEquals(listOf(1 to true, 0 to false), moves)

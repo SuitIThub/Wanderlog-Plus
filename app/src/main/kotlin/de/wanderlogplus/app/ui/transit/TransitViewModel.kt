@@ -72,6 +72,7 @@ fun transitError(e: ApiException): String = when {
     e.code == "transit_key_rejected" -> "Apify hat den Token abgelehnt."
     e.code == "stations_unavailable" -> "Die Bahnhofssuche (OpenStreetMap) antwortet gerade nicht. Gleich noch einmal versuchen."
     e.code == "bad_request" -> "Die Angaben passen nicht (Datum, Uhrzeit oder Bahnhof prüfen)."
+    e.code == "transit_no_timetable" -> "Für dieses Datum gibt es noch keinen Fahrplan – außerhalb Japans meist erst einige Wochen vorher. Später noch einmal suchen."
     else -> "Die Fahrplanauskunft antwortet gerade nicht. Später noch einmal versuchen."
 }
 
