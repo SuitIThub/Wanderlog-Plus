@@ -114,6 +114,8 @@ fun DayDetailScreen(
     onRestoreVersion: ((date: String, at: Long) -> Unit)? = null,
     /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
     onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
+    /** Own links of the day; null hides "Link". */
+    onSetLinks: ((date: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
 ) {
     val queries = remember(snapshot) { snapshot.queries() }
     val view = remember(queries, date) { queries?.days()?.firstOrNull { it.date == date } }
@@ -202,6 +204,8 @@ fun DayDetailScreen(
                     onRestoreVersion = onRestoreVersion?.let { restore -> { at: Long -> restore(date, at) } },
                     weather = de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(date),
                     onReplan = de.wanderlogplus.app.ui.design.LocalOpenChat.current,
+                    links = day?.links.orEmpty(),
+                    onSetLinks = onSetLinks?.let { set -> { l: List<de.wanderlogplus.shared.model.CustomLink> -> set(date, l) } },
                 )
                 TAB_SUGGESTIONS -> DaySuggestionsTab(
                     hasRegion = hasSuggestions,

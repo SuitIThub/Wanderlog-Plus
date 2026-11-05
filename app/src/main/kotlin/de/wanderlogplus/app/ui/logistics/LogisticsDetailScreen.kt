@@ -88,6 +88,10 @@ fun LogisticsDetailScreen(
     onMerge: ((type: EntityType, firstId: String, secondId: String) -> Unit)? = null,
     /** Deletes this train or flight (after confirmation); the caller navigates back. Null hides the action. */
     onDelete: ((EntityType, String) -> Unit)? = null,
+    /** Own header image of a stay; null hides "Titelbild ändern". */
+    onSetHeaderImage: ((EntityType, String, String?) -> Unit)? = null,
+    /** Own links; null hides "Link". */
+    onSetLinks: ((EntityType, String, List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -102,6 +106,22 @@ fun LogisticsDetailScreen(
 
     // The one-line hero cuts long names (stays); the full name then opens the page body.
     var titleCut by remember(type, id) { mutableStateOf(false) }
+    var choosingImage by remember(type, id) { mutableStateOf(false) }
+    val stay = if (type == EntityType.STAY) snapshot.stays.firstOrNull { it.id == id } else null
+    val customLinks = when (type) {
+        EntityType.STAY -> stay?.links
+        EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.links
+        EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.links
+        else -> null
+    }.orEmpty()
+    if (choosingImage && stay != null && onSetHeaderImage != null) {
+        de.wanderlogplus.app.ui.places.HeaderImagePicker(
+            snapshot.places[stay.placeId], snapshot.photosFor(EntityType.STAY, id), attachments?.files, stay.headerImage,
+            onPick = { ref -> onSetHeaderImage(type, id, ref); choosingImage = false },
+            onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
+            onDismiss = { choosingImage = false },
+        )
+    }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("logistics-detail")) {
         HeroHeader(
@@ -113,6 +133,7 @@ fun LogisticsDetailScreen(
             onBack = onBack,
             titleMaxLines = 1,
             onTitleOverflow = { titleCut = it },
+            onChangeImage = if (stay != null && onSetHeaderImage != null) ({ choosingImage = true }) else null,
         )
         RouteMap(view.route, view.accent, height = 160.dp)
         if (type == EntityType.TRAIN || type == EntityType.FLIGHT || type == EntityType.STAY) {
@@ -142,17 +163,24 @@ fun LogisticsDetailScreen(
                 EmptyHint("Keine Notiz", Modifier.padding(top = 6.dp))
             }
 
-            if (onOpenLink != null && view.links.isNotEmpty()) {
-                SectionLabel("Navigation", color = view.accent)
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    view.links.forEach { l -> ActionCircle(linkIcon(l.kind), l.label, { onOpenLink(l) }, "link-${l.kind}") }
-                }
+            if ((onOpenLink != null && (view.links.isNotEmpty() || customLinks.isNotEmpty())) || onSetLinks != null) {
+                SectionLabel("Links", color = view.accent)
+                de.wanderlogplus.app.ui.design.LinkRow(
+                    view.links, customLinks, onOpenLink,
+                    onSetLinks?.let { set -> { l: List<de.wanderlogplus.shared.model.CustomLink> -> set(type, id, l) } },
+                )
             }
 
             de.wanderlogplus.app.ui.budget.CostsSection(snapshot, id, today ?: java.time.LocalDate.now().toString(), view.accent)
+
+            if (type == EntityType.STAY && attachments != null) {
+                SectionLabel("Fotos", color = view.accent)
+                de.wanderlogplus.app.ui.attachments.PhotoGrid(
+                    snapshot.photosFor(EntityType.STAY, id), attachments.files,
+                    onAdd = attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
+                    onOpen = {},
+                )
+            }
 
             SectionLabel("Anhänge", color = view.accent)
             if (attachments == null) {
@@ -218,7 +246,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
             BookingView(
                 title = stayName(snapshot, s),
                 kicker = stayPeriod(s),
-                imageUrl = place?.heroImageUrl(),
+                imageUrl = de.wanderlogplus.app.ui.design.HeaderImages.url(s.headerImage) ?: place?.heroImageUrl(),
                 accent = region?.let { regionColor(it.color) } ?: primary,
                 route = null,
                 details = listOfNotNull(

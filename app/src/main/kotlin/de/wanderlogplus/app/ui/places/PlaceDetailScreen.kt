@@ -37,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.ui.graphics.Color
@@ -61,6 +62,7 @@ import de.wanderlogplus.app.ui.design.HeroHeader
 import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.SectionLabel
 import de.wanderlogplus.app.ui.design.heroImageUrl
+import de.wanderlogplus.app.ui.design.heroImage
 import de.wanderlogplus.app.ui.ratingLabel
 import de.wanderlogplus.app.ui.regionColor
 import de.wanderlogplus.app.ui.statusLabel
@@ -113,6 +115,7 @@ internal fun linkIcon(kind: LinkKind): ImageVector = when (kind) {
     LinkKind.WEBSITE -> Icons.Filled.Language
     LinkKind.PHONE -> Icons.Filled.Call
     LinkKind.TABELOG -> Icons.Filled.Restaurant
+    LinkKind.CUSTOM -> Icons.Filled.Link
 }
 
 /**
@@ -148,6 +151,10 @@ fun PlaceDetailScreen(
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
     /** "Reserviert" for a place that needs a reservation. */
     onSetReserved: (savedPlaceId: String, reserved: Boolean) -> Unit = { _, _ -> },
+    /** Own header image (null: default); null callback hides "Titelbild ändern". */
+    onSetHeaderImage: ((savedPlaceId: String, ref: String?) -> Unit)? = null,
+    /** Own links; null hides "Link". */
+    onSetLinks: ((savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -156,6 +163,7 @@ fun PlaceDetailScreen(
 
     var tab by rememberSaveable(savedPlaceId) { mutableIntStateOf(TAB_INFO) }
     var editingTags by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
+    var choosingImage by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var editing by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
     // Shown right after saving, until the snapshot carries the new note.
@@ -179,11 +187,12 @@ fun PlaceDetailScreen(
         HeroHeader(
             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
             kicker = region?.name ?: NO_REGION_LABEL,
-            imageUrl = place?.heroImageUrl(),
+            imageUrl = saved.heroImage(place),
             accent = accent,
             height = 140.dp,
             onBack = onBack,
             onEdit = { editingTags = true },
+            onChangeImage = onSetHeaderImage?.let { { choosingImage = true } },
             titleMaxLines = 1,
             onTitleOverflow = { titleCut = it },
         )
@@ -225,17 +234,8 @@ fun PlaceDetailScreen(
             if (reason != null || saved.reserved) ReservationRow(reason, saved.reserved) { onSetReserved(saved.id, it) }
         }
 
-        if (place != null && onOpenLink != null) {
-            val links = remember(place, saved.category) { GoogleExternalLinks.linksFor(place, saved.category) }
-            if (links.isNotEmpty()) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    links.forEach { l -> ActionCircle(linkIcon(l.kind), l.label, { onOpenLink(l) }, "link-${l.kind}") }
-                }
-            }
-        }
+        val builtIn = remember(place, saved.category) { place?.let { GoogleExternalLinks.linksFor(it, saved.category) }.orEmpty() }
+        de.wanderlogplus.app.ui.design.LinkRow(builtIn, saved.links, onOpenLink, onSetLinks?.let { set -> { l: List<de.wanderlogplus.shared.model.CustomLink> -> set(saved.id, l) } })
 
         if (onOpenMap != null) {
             val points = remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
@@ -298,6 +298,14 @@ fun PlaceDetailScreen(
         }
     }
 
+    if (choosingImage && onSetHeaderImage != null) {
+        HeaderImagePicker(
+            place, snapshot.photosFor(EntityType.SAVED_PLACE, saved.id), attachments?.files, saved.headerImage,
+            onPick = { ref -> onSetHeaderImage(saved.id, ref); choosingImage = false },
+            onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
+            onDismiss = { choosingImage = false },
+        )
+    }
     if (editingTags) {
         EditSheet("Ort bearbeiten", onDismiss = { editingTags = false }) {
             PlaceEditForm(snapshot, saved, onSetTags, onSetRegion, onSetCategory, onDone = { editingTags = false })

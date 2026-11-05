@@ -242,6 +242,13 @@ class PlacesViewModel(
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 
+    /** [ref] null: back to the default image. */
+    fun setHeaderImage(savedPlaceId: String, ref: String?) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("headerImage" to (ref?.let { JsonPrimitive(it) } ?: JsonNull))) }
+
+    fun setLinks(savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) =
+        write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("links" to kotlinx.serialization.json.Json.encodeToJsonElement(kotlinx.serialization.builtins.ListSerializer(de.wanderlogplus.shared.model.CustomLink.serializer()), links))) }
+
     fun setReserved(savedPlaceId: String, reserved: Boolean) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("reserved" to JsonPrimitive(reserved))) }
 }

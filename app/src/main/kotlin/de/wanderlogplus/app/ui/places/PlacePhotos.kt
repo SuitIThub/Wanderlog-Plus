@@ -103,6 +103,9 @@ class PlacePhotoRepository(private val api: suspend () -> SyncApi?, private val 
         }
     }
 
+    /** The photo's file when it is already on this device (no network). */
+    fun cachedFile(name: String, width: Int): File? = File(dir, "img-${key("$name|$width")}.jpg").takeIf { it.exists() && it.length() > 0 }
+
     /** The photo as a local file (fetched once); null when it cannot be loaded now. */
     suspend fun file(name: String, width: Int): File? = withContext(Dispatchers.IO) {
         val f = File(dir, "img-${key("$name|$width")}.jpg")
@@ -210,7 +213,7 @@ fun PlacePhotosRow(place: Place?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun GoogleImage(repo: PlacePhotoRepository?, photo: PlacePhoto, width: Int, modifier: Modifier, scale: ContentScale) {
+internal fun GoogleImage(repo: PlacePhotoRepository?, photo: PlacePhoto, width: Int, modifier: Modifier, scale: ContentScale) {
     val file by produceState<File?>(null, repo, photo.name, width) { value = repo?.file(photo.name, width) }
     if (file != null) AsyncImage(file, contentDescription = photo.author.takeIf { it.isNotBlank() }?.let { "Foto von $it" }, contentScale = scale, modifier = modifier)
     else Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(20.dp)) }
