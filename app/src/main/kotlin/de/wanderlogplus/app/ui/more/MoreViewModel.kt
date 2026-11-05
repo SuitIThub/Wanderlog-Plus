@@ -62,7 +62,12 @@ class MoreViewModel(
 
     /** Writes the changed fields; for [de.wanderlogplus.app.ui.logistics.NEW_ID] creates the entry. */
     fun saveFields(type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) =
-        write { e, _ -> if (id == de.wanderlogplus.app.ui.logistics.NEW_ID) e.create(type, after) else e.setChanged(type, id, before, after) }
+        write { e, _ -> if (de.wanderlogplus.app.ui.logistics.isNewId(id)) e.create(type, after) else e.setChanged(type, id, before, after) }
+
+    fun joinJourney(legs: List<Pair<EntityType, String>>) = write { e, s -> if (legs.distinct().size >= 2) e.joinJourney(s, legs) }
+    fun leaveJourney(type: EntityType, id: String) = write { e, s -> e.leaveJourney(s, type, id) }
+    fun dissolveJourney(journeyId: String) = write { e, s -> e.dissolveJourney(s, journeyId) }
+    fun splitLegacy(type: EntityType, id: String) = write { e, s -> e.splitLegacy(s, type, id) }
 
     /** Saves a stay (a picked hotel becomes a new place first); [existing] null creates it. */
     fun saveStay(existing: de.wanderlogplus.shared.model.Stay?, draft: de.wanderlogplus.app.ui.logistics.StayDraft) = write { e, s ->

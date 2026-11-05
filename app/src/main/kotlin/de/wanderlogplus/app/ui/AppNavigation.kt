@@ -395,6 +395,22 @@ fun AppNavigation(
                 onDelete = { t, i -> vm.deleteMove(t, i); afterDelete() },
                 onSetHeaderImage = vm::setHeaderImage,
                 onSetLinks = vm::setLinks,
+                onOpenJourney = { j -> nav.navigate(de.wanderlogplus.app.ui.logistics.journeyRoute(j)) },
+                onJoin = vm::joinJourney,
+                onSplit = vm::splitLegacy,
+            )
+        }
+
+        @Composable
+        fun JourneyFor(vm: MoreViewModel, snap: TripSnapshot, journeyId: String, onBack: (() -> Unit)?) {
+            de.wanderlogplus.app.ui.logistics.JourneyScreen(
+                snap, journeyId, onBack = onBack,
+                onOpenLeg = { t, i -> nav.navigate(logisticsDetailRoute(t, i)) },
+                onAddLeg = { t, prev, next -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.newLegId(journeyId, prev, next))) },
+                onJoin = vm::joinJourney,
+                onLeave = vm::leaveJourney,
+                onDissolve = { j -> vm.dissolveJourney(j); onBack?.invoke() },
+                onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
             )
         }
 
@@ -728,12 +744,14 @@ fun AppNavigation(
                                             onOpen = { e -> selected = "${e.type.name}/${e.id}" },
                                             today = rememberMinuteNow(clock).toLocalDate().toString(),
                                             onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
+                                            onOpenJourney = { j -> selected = "JOURNEY/$j" },
                                         )
                                     },
                                     detail = {
                                         if (sel == null) EmptyHint("Fahrt oder Unterkunft in der Liste antippen", Modifier.padding(24.dp))
                                         else androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.design.LocalOpenChat provides null) {
-                                            LogisticsDetailFor(vm, s, logisticsTypeOf(sel[0]), sel[1], onBack = null, afterDelete = { selected = null })
+                                            if (sel[0] == "JOURNEY") JourneyFor(vm, s, sel[1], onBack = null)
+                                            else LogisticsDetailFor(vm, s, logisticsTypeOf(sel[0]), sel[1], onBack = null, afterDelete = { selected = null })
                                         }
                                     },
                                 )
@@ -743,6 +761,7 @@ fun AppNavigation(
                                 onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
                                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                                 onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
+                                onOpenJourney = { j -> nav.navigate(de.wanderlogplus.app.ui.logistics.journeyRoute(j)) },
                             )
                         }
                     }
@@ -754,8 +773,12 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("id").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
-                            // An unknown type segment gets the same "nicht gefunden" page (with back) as a missing id.
-                            LogisticsDetailFor(vm, s, type, id, onBack = { nav.popBackStack() }, afterDelete = { nav.popBackStack() })
+                            if (entry.arguments?.getString("type") == de.wanderlogplus.app.ui.logistics.JOURNEY_SEGMENT) {
+                                JourneyFor(vm, s, id, onBack = { nav.popBackStack() })
+                            } else {
+                                // An unknown type segment gets the same "nicht gefunden" page (with back) as a missing id.
+                                LogisticsDetailFor(vm, s, type, id, onBack = { nav.popBackStack() }, afterDelete = { nav.popBackStack() })
+                            }
                         }
                     }
                 }

@@ -3,6 +3,16 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.33.0
+
+- **Reisen aus Teilstrecken:** Zusammenführen löscht nichts mehr – Züge, Flüge und ÖPNV-Fahrten werden zu einer Reise gruppiert und behalten ihre eigenen Nummern, Zeiten, Gleise, Tickets und ihr eigenes Live-Tracking.
+  - **Liste:** eine Karte pro Reise mit Gesamtstrecke und den Teilstrecken, dazwischen „Umstieg 45 Min.“ (rot, wenn knapp).
+  - **Reise-Detail:** kompakte Timeline – pro Teilstrecke Nummer, Zeiten, Gleis/Terminal/Gate und Live-Status; dazwischen Umstiegszeit, „Gleis 8 → Gleis 9“ bzw. Terminal/Gate, „gleicher Bahnhof/Flughafen“ oder der Fußweg zwischen zwei Orten, Warnung bei knappen oder überschneidenden Umstiegen.
+  - **„＋ Teilstrecke“** vor, zwischen und nach den Strecken: Zug/ÖPNV (Formular und Verbindungssuche vorausgefüllt – vor einem Flug mit „Ankunft bis 90 Min. vor Abflug“), Flug oder eine vorhandene Fahrt. Teilstrecken lassen sich aus der Reise entfernen, die Reise auflösen.
+  - **„Zu Reise zusammenführen“** in jeder Fahrt: beliebige Fahrten und Flüge per Häkchen auswählen (zeitlich nächste zuerst).
+  - Früher zusammengeführte Einträge: **„In Teilstrecken aufteilen“**.
+  - „Nächste Fahrt“ auf der Heute-Seite nennt die folgende Teilstrecke und den Umstieg.
+
 ## 0.32.0
 
 - **Eigene Titelbilder:** Bei Orten und Unterkünften öffnet das Bild-Symbol im Kopf „Titelbild“ – Wanderlog-Fotos, eigene Fotos oder Google-Fotos wählen, ein Foto hochladen oder zurück zum Standardbild. Das Bild erscheint im Kopf, in den Ortslisten, in der Logistik und als Tagesbild; es wird synchronisiert und vom Wanderlog-Import nicht überschrieben. Unterkünfte haben dafür jetzt auch einen Fotos-Bereich.

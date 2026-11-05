@@ -111,7 +111,7 @@ class LogisticsManageTest {
                 LogisticsEditScreen(snapshot, EntityType.TRAIN, NEW_ID, onBack = {}, onSave = { _, id, b, a -> saved = Triple(id, b, a) }, search = null)
             }
         }
-        rule.onNodeWithText("Neuer Zug").assertIsDisplayed()
+        rule.onNodeWithText("Neue Fahrt").assertIsDisplayed()
         rule.onNodeWithTag("edit-save").performClick()
         rule.onNodeWithTag("edit-error").assertIsDisplayed() // no stations yet
         rule.onNodeWithTag("edit-depart-name").performTextInput("Kyoto")
