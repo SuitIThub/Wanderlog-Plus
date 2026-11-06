@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.41.1
+
+- **Unterkunftsseite mit Reitern:** „Übersicht“, „Zimmer & Ausstattung“ (mit „Auf einen Blick“ als Stichpunktliste, Quellen eingeklappt) und „Fotos“. Auf der Übersicht steht ein Fotostreifen direkt unter dem Kopfbild (Zimmerfotos zuerst); ein Tipp aufs Kopfbild öffnet die Fotos groß.
+- **Check-in und Check-out mit Uhrzeit:** „Do, 14.05. ab 15:00“, „Sa, 16.05. bis 10:00“ – die gepflegten Zeiten fehlten bisher auf der Detailseite.
+
 ## 0.41.0
 
 - **Sitzplätze und Klasse:** Züge und Flüge bekommen Klasse und Sitzplätze (Wagen, Platz, Person). Sie stehen in den Details, auf der Karte „Nächste Fahrt“ und im Chat („2. Klasse · Wagen 12, 111 + 114“).
@@ -11,8 +16,6 @@ App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel 
 - **Recherchieren:** „Zimmer & Ausstattung recherchieren“ liest die Buchungsbestätigungen unter den Anhängen, die angegebenen Links und eine Websuche. Namen und Buchungsnummern werden nie übernommen. Fotos des Zimmertyps von den Seiten kommen, wo möglich, als „Zimmer“-Fotos in die Galerie.
 - **Von Hand korrigieren:** Unter „Unterkunft bearbeiten“ lassen sich alle Angaben ändern; was du änderst, bleibt bei einer neuen Recherche erhalten („Alles neu recherchieren“ ersetzt auch das). Fotos der Unterkunft lassen sich per Tippen als Zimmerfoto markieren.
 - **Chat:** kennt Zimmer, Verpflegung und Ausstattung eurer Unterkünfte.
-- **Unterkunftsseite mit Reitern:** „Übersicht“, „Zimmer & Ausstattung“ (mit „Auf einen Blick“ als Stichpunktliste, Quellen eingeklappt) und „Fotos“. Auf der Übersicht steht ein Fotostreifen direkt unter dem Kopfbild (Zimmerfotos zuerst); ein Tipp aufs Kopfbild öffnet die Fotos groß.
-- **Check-in und Check-out mit Uhrzeit:** „Do, 14.05. ab 15:00“, „Sa, 16.05. bis 10:00“ – die gepflegten Zeiten fehlten bisher auf der Detailseite.
 - Benötigt das Server-Update.
 
 ## 0.40.0
