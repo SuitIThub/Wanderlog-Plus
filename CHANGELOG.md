@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.43.0
+
+- **@-Kürzel im Chat:** Tippst du `@`, erscheint über der Tastatur eine Vorauswahl, die mit jedem Buchstaben filtert (Groß-/Kleinschreibung und Akzente egal): Orte, Tage („Tag 3“, „19.5.“), Unterkünfte, Züge, Flüge, Guides und Regionen. Das Gewählte steht farbig im Text und geht als genaue Referenz mit – der Chat weiß so eindeutig, was gemeint ist, und bekommt die Details gleich mit.
+- **Referenzen im Verlauf:** Unter deinen Nachrichten stehen die erwähnten Objekte als Chips; ein Tipp öffnet Ort, Tag, Unterkunft, Fahrt, Guide oder Region.
+
 ## 0.42.0
 
 - **Guide-Aufträge sichtbar, auch aus dem Chat:** Die Guide-Übersicht holt laufende Aufträge vom Server und zeigt sie mit Fortschritt – egal ob in der App oder vom Chat gestartet. Fehlgeschlagene Aufträge stehen einen Tag lang dort.

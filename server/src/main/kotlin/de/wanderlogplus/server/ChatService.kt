@@ -64,7 +64,7 @@ class ChatService(
             val chat = get(id) ?: throw ChatNotFound()
             if (chat.pending) throw ChatBusy()
             val t = now().toEpochMilli()
-            val msg = ChatMessage(UUID.randomUUID().toString(), ChatMessage.ROLE_USER, text, t, req.context, author = author)
+            val msg = ChatMessage(UUID.randomUUID().toString(), ChatMessage.ROLE_USER, text, t, req.context, author = author, refs = cleanRefs(req.refs))
             save(
                 chat.copy(
                     title = chat.title.ifBlank { titleFrom(text) },
@@ -139,6 +139,12 @@ class ChatService(
     }
 
     companion object {
+        /** Known types with an id and a label only, each once, at most 12, labels cut to 80 characters. */
+        fun cleanRefs(refs: List<de.wanderlogplus.shared.sync.ChatRef>): List<de.wanderlogplus.shared.sync.ChatRef> =
+            refs.filter { it.type in de.wanderlogplus.shared.sync.ChatRef.TYPES && it.id.isNotBlank() && it.label.isNotBlank() }
+                .map { it.copy(id = it.id.trim().take(100), label = it.label.trim().take(80)) }
+                .distinct().take(12)
+
         const val MAX_TEXT = 4000
         const val MAX_MESSAGES = 200
 

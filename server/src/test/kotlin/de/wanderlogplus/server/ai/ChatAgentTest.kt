@@ -531,6 +531,27 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `references go with the message, the newest in detail`() {
+        val model = ScriptedModel(listOf(text("ok")))
+        val kiyo = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.PLACE, "s-kiyo", "Kiyomizu-dera")
+        val day = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.DAY, "2027-05-19", "Tag 1, 19.05.")
+        val gone = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.PLACE, "s-nope", "Weg")
+        val earlier = user("Was ist mit @Kiyomizu-dera?").copy(id = "m0", refs = listOf(kiyo))
+        val reply = ChatMessage("a0", ChatMessage.ROLE_ASSISTANT, "Schön.", 0)
+        val now = user("Passt @Kiyomizu-dera an @Tag 1, 19.05.?").copy(refs = listOf(kiyo, day, gone))
+        ChatAgent(model, null) { "2027-05-19" }.answer(listOf(earlier, reply, now), trip)
+        val sent = model.seen.first()
+        val first = sent[1]["content"]!!.jsonPrimitive.content
+        val last = sent.last()["content"]!!.jsonPrimitive.content
+        assertTrue("@Kiyomizu-dera = Ort [id=s-kiyo]" in first, first)
+        assertTrue("@Kiyomizu-dera = Ort [id=s-kiyo]" in last, last)
+        assertTrue("@Tag 1, 19.05. = Tag 2027-05-19" in last, last)
+        assertFalse("s-nope" in last, last)
+        // Only the newest message carries the details (the place's text), the older one just names it.
+        assertTrue(last.length > first.length + 100, last)
+    }
+
+    @Test
     fun `guide jobs leave a card that follows the job`() {
         val g = FakeGuides()
         val tools = ChatTools(withGuides(), null, guides = g) {}

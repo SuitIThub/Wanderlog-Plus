@@ -489,6 +489,18 @@ fun AppNavigation(
                         onBack = { nav.popBackStack() },
                         onOpenPlace = { id -> nav.navigate(if (placesViewModelFactory != null) placeRoute(id) else tripPlaceRoute(id)) },
                         onOpenUrl = { url -> if (runCatching { uri.openUri(url) }.isFailure) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) } },
+                        onOpenRef = { r ->
+                            val R = de.wanderlogplus.shared.sync.ChatRef
+                            when (r.type) {
+                                R.PLACE -> nav.navigate(if (placesViewModelFactory != null) placeRoute(r.id) else tripPlaceRoute(r.id))
+                                R.DAY -> nav.navigate(de.wanderlogplus.app.ui.trip.dayRoute(r.id))
+                                R.STAY -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.STAY, r.id))
+                                R.TRAIN -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.TRAIN, r.id))
+                                R.FLIGHT -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.FLIGHT, r.id))
+                                R.GUIDE -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(r.id))
+                                R.REGION -> if (placesViewModelFactory != null) nav.navigate(regionRoute(r.id))
+                            }
+                        },
                     )
                 }
             }
