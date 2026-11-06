@@ -48,6 +48,8 @@ fun main() {
     }.takeIf { transit.configured || routes.configured }
     val weather = WeatherService(store, OpenMeteoHttp())
     val photon = PhotonGeocoder()
+    // Google details (hours, rating, price, contact) of places, cached: for research facts and to fill taken-over places.
+    val googleDetails = config.googlePlacesKey?.let { GooglePlaceDetails(store, HttpPlaceDetailsTransport(it)) }
     // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
     val placeFinder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
     val aiJobs = AiJobs(
@@ -85,6 +87,7 @@ fun main() {
         flightLive = FlightLiveService(store, OpenMeteoHttp(), config.airlabsKey),
         trainLive = TrainLiveService(store, OpenMeteoHttp()),
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
+        placeEnricher = googleDetails?.let { PlaceEnricher(store, sync, it) },
         chats = ChatService(
             store,
             textModel?.let { model ->
@@ -100,6 +103,7 @@ fun main() {
         ),
     )
     services.ai.resumeInterrupted()
+    services.placeEnricher?.schedule()
     services.chats.resumeInterrupted()
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }
