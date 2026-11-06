@@ -10,6 +10,10 @@ App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel 
 - **Am richtigen Ort:** Orte, Unterkünfte, Fahrten und Tage zeigen ihre Guides als Chips (lange drücken: hier ausblenden, Plus: anheften). Auf der Heute-Seite steht „Für heute“ mit den Guides in der Reihenfolge des Tages und einer kurzen Vorschau.
 - **Guides im Chat:** Der Chat kann Guides recherchieren, überarbeiten und zuordnen („häng den Omakase-Guide an das Sushi-Restaurant“, „zeig den Onsen-Guide bei allen Ryokans“).
 - **Bessere Ortsrecherche:** Parallel sammelt jetzt nur Fakten mit Quellen, Claude Sonnet bewertet sie mit dem Reisekontext.
+- **Reels finden den richtigen Ort:** Die KI unterscheidet den Ort, um den es geht, von Bahnhöfen, Vierteln und Kulisse, die nur zur Orientierung vorkommen. Diese stehen eingeklappt unter „Nur erwähnt“ und sind nicht vorausgewählt.
+- **Richtige Position:** Reel-Orte werden über Google Places gefunden (auch kleine Lokale), mit Stadtteil. Ein Namensvetter weit weg (z. B. in Tansania) wird nie mehr genommen, lieber gibt es keine Position.
+- **Filialen:** Hat ein Lokal mehrere Filialen, geht es um die aus dem Reel, die anderen stehen als „Weitere Filiale“ bei den Punkten vor Ort.
+- **Deutsch statt Japanisch:** Kommt eine Recherche oder ein Guide überwiegend auf Japanisch zurück, fragt der Server noch einmal auf Deutsch nach.
 - Benötigt das Server-Update.
 
 ## 0.39.0

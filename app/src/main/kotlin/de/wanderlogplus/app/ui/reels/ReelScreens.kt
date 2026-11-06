@@ -128,7 +128,7 @@ fun ReelJobScreen(
 ) {
     val candidates = job?.candidates.orEmpty()
     val picked = remember(job?.id, candidates.size) {
-        mutableStateMapOf<Int, Boolean>().apply { candidates.forEachIndexed { i, c -> put(i, c.onRoute && importable(c)) } }
+        mutableStateMapOf<Int, Boolean>().apply { candidates.forEachIndexed { i, c -> put(i, c.main && c.onRoute && importable(c)) } }
     }
     val regions = remember(job?.id, candidates.size, snapshot) {
         mutableStateMapOf<Int, String?>().apply { if (snapshot != null) candidates.forEachIndexed { i, c -> put(i, defaultRegion(snapshot, c)) } }
@@ -163,9 +163,17 @@ fun ReelJobScreen(
             candidates.isEmpty() -> EmptyHint("Im Reel wurde kein konkreter Ort erkannt.", Modifier.padding(16.dp))
             else -> {
                 job.summary?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp)) }
+                // Places only named for orientation (stations, landmarks in the background) are folded away.
+                var showReferences by remember(job.id) { mutableStateOf(false) }
+                val references = candidates.indices.filter { !candidates[it].main }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     itemsIndexed(candidates) { i, c ->
-                        SurfaceCard {
+                        if (!c.main && i == references.first()) {
+                            androidx.compose.material3.TextButton(onClick = { showReferences = !showReferences }, modifier = Modifier.testTag("reel-references")) {
+                                Text((if (showReferences) "Nur erwähnt ausblenden" else "Nur erwähnt (${references.size})") + " – Bahnhöfe, Viertel, Kulisse")
+                            }
+                        }
+                        if (c.main || showReferences) SurfaceCard {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Checkbox(

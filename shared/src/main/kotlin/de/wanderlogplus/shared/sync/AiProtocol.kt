@@ -68,6 +68,8 @@ data class ReelCandidate(
     val positionIssue: String? = null,
     /** Set in the app when the user picked the position in the place search. */
     val positionSetByHand: Boolean = false,
+    /** What the reel is about; false for places only named for orientation (located, not researched). */
+    val main: Boolean = true,
 )
 
 /** The judgement for one saved place. */

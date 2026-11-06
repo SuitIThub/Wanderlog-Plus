@@ -75,6 +75,46 @@ class GeocoderTest {
         assertEquals("not_found", why)
     }
 
+    @Test fun aNamesakeFarFromTheCityIsNotTaken() {
+        val osaka = GeoHit(34.69, 135.50, "Osaka", "JP")
+        val geocoder = Geocoder { q ->
+            when (q) {
+                "Osaka" -> osaka
+                "Mizuno" -> GeoHit(35.44, 139.64, "Mizuno, Yokohama", "JP") // the namesake 375 km away
+                "美津の" -> GeoHit(34.6687, 135.5013, "美津の, 大阪市", "JP") // the real one, by its Japanese name
+                "Ichiran" -> GeoHit(35.66, 139.70, "Ichiran Shibuya", "JP")
+                else -> null
+            }
+        }
+        val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, geocoder)
+        // The local name finds the right one; the bare name's namesake in Yokohama is never used.
+        assertEquals(135.5013, a.locate(FoundPlace("Mizuno", "美津の", "Osaka", "Japan", "food", "")).first!!.lng)
+        // Only a far namesake: no position rather than a wrong one.
+        val (far, why) = a.locate(FoundPlace("Ichiran", null, "Osaka", "Japan", "food", ""))
+        assertNull(far)
+        assertEquals("not_found", why)
+    }
+
+    @Test fun withoutACityOnlyHitsInTheCountryCount() {
+        val geocoder = Geocoder { q ->
+            when (q) {
+                "Hozenji Yokocho" -> GeoHit(34.668, 135.502, "法善寺横丁", "JP")
+                "Ginza" -> GeoHit(-33.9, 151.2, "Ginza Restaurant, Sydney", "AU")
+                else -> null
+            }
+        }
+        val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, geocoder)
+        assertEquals(135.502, a.locate(FoundPlace("Hozenji Yokocho", null, null, "Japan", "sight", "")).first!!.lng)
+        assertNull(a.locate(FoundPlace("Ginza", null, null, "Japan", "food", "")).first)
+    }
+
+    @Test fun reelPlacesUseThePlaceFinderPoisTheGeocoder() {
+        val photon = Geocoder { q -> if (q == "Osaka") GeoHit(34.69, 135.50, "Osaka", "JP") else null }
+        val google = Geocoder { q -> if (q == "Munimuni Osaka") GeoHit(34.7055, 135.4983, "Shibata, Osaka", "JP") else null }
+        val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, photon, placeFinder = google)
+        assertEquals(135.4983, a.locate(FoundPlace("Munimuni", null, "Osaka", "Japan", "food", "")).first!!.lng)
+    }
+
     @Test fun unavailableGeocoderIsNamedAsSuch() {
         val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, Geocoder { throw GeocoderUnavailable() })
         val said = mutableListOf<String>()

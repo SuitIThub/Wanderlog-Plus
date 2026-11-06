@@ -4,11 +4,15 @@ import de.wanderlogplus.shared.sync.AssessConfig
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-/** Asks [model] for a JSON object; asks once more when the answer has none or [valid] rejects it, then fails with "ai_bad_answer". */
-fun completeJson(model: ChatModel, system: String, user: String, valid: (JsonObject) -> Boolean = { true }): JsonObject {
-    repeat(2) {
+/**
+ * Asks [model] for a JSON object; asks once more (with [retryHint] added) when the answer has none or [valid] rejects
+ * it, then fails with "ai_bad_answer".
+ */
+fun completeJson(model: ChatModel, system: String, user: String, retryHint: String = "", valid: (JsonObject) -> Boolean = { true }): JsonObject {
+    repeat(2) { attempt ->
+        val text = if (attempt == 0 || retryHint.isBlank()) user else user + "\n\n" + retryHint
         val o = try {
-            OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(user)), webSearch = false))
+            OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(text)), webSearch = false))
         } catch (e: AiFailed) {
             if (e.code != "ai_bad_answer") throw e
             null
@@ -17,6 +21,21 @@ fun completeJson(model: ChatModel, system: String, user: String, valid: (JsonObj
     }
     throw AiFailed("ai_bad_answer")
 }
+
+/** True when most letters of [text] are Japanese (kana or kanji); Japanese names inside German text are fine. */
+fun mostlyJapanese(text: String): Boolean {
+    val letters = text.filter { it.isLetter() }
+    if (letters.isEmpty()) return false
+    val japanese = letters.count { c ->
+        val b = Character.UnicodeBlock.of(c)
+        b == Character.UnicodeBlock.HIRAGANA || b == Character.UnicodeBlock.KATAKANA || b == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS ||
+            b == Character.UnicodeBlock.KATAKANA_PHONETIC_EXTENSIONS || b == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
+    }
+    return japanese * 2 > letters.length
+}
+
+/** Added to a second request when the first answer came back in Japanese. */
+internal const val GERMAN_PLEASE = "WICHTIG: Schreibe alle Texte auf Deutsch, nicht auf Japanisch. Japanische Namen nur in Klammern hinter dem deutschen oder lateinischen Namen."
 
 /** The facts as numbered prompt lines with their sources. */
 internal fun factLines(f: Facts): String = f.items.withIndex().joinToString("\n") { (i, x) ->
@@ -29,13 +48,16 @@ class PipelineResearcher(private val facts: FactSource, private val model: ChatM
         val label = listOfNotNull(query.name, query.localName?.let { "($it)" }, query.city).joinToString(" ")
         val found = facts.facts(
             FactQuery(
-                objective = "Bewertungen, Tipps und praktische Hinweise zu $label für Reisende",
+                // What the reel says (district, nearest station) picks the right branch.
+                objective = "Bewertungen, Tipps und praktische Hinweise zu $label für Reisende" +
+                    (query.evidence.takeIf { it.isNotBlank() }?.let { ". Bekannt: $it" } ?: ""),
                 queries = listOfNotNull(listOfNotNull(query.name, query.city).joinToString(" "), query.localName, "${query.name} tips reviews"),
                 hints = listOf(
                     "Öffnungszeiten, Reservierung, Andrang, Preise",
                     "Geheimtipps von Einheimischen und Kennern, versteckte Ecken in der Nähe",
                     "zugehörige Punkte mit Lage (weitere Eingänge, Aussichtspunkte, nächster Bahnhof)",
                     "was man vorher wissen sollte (Etikette, Zahlung, Regeln)",
+                    "ob es mehrere Filialen gibt; welche zu den bekannten Hinweisen (Stadtteil, Bahnhof) passt und wo die anderen in der Stadt liegen",
                 ),
             ),
             say,
@@ -52,7 +74,11 @@ class PipelineResearcher(private val facts: FactSource, private val model: ChatM
             if (query.tripContext.isNotBlank()) append("\nReisekontext: ").append(query.tripContext)
             append("\n\nRecherchierte Fakten:\n").append(factLines(found))
         }
-        val o = completeJson(model, system, user) { (it["verdict"] as? JsonPrimitive)?.content?.isNotBlank() == true && it["worth"] is JsonPrimitive }
+        val o = completeJson(model, system, user, GERMAN_PLEASE) { o ->
+            val verdict = (o["verdict"] as? JsonPrimitive)?.content.orEmpty()
+            val description = (o["description"] as? JsonPrimitive)?.content.orEmpty()
+            verdict.isNotBlank() && o["worth"] is JsonPrimitive && !mostlyJapanese(description + " " + verdict)
+        }
         return parseResearch(o, config, found.sources)
     }
 }

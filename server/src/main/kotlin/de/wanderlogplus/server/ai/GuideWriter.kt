@@ -60,8 +60,9 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel) 
             }
             found?.let { append("\nRecherchierte Fakten:\n").append(factLines(it)) }
         }
-        val o = completeJson(model, system, user) { o ->
-            o.text("title").isNotBlank() && o.text("summary").isNotBlank() && (o["sections"] as? JsonArray)?.isNotEmpty() == true
+        val o = completeJson(model, system, user, GERMAN_PLEASE) { o ->
+            o.text("title").isNotBlank() && o.text("summary").isNotBlank() && (o["sections"] as? JsonArray)?.isNotEmpty() == true &&
+                !mostlyJapanese(o.text("summary"))
         }
         val triggers = (o["extraTriggers"] as? JsonArray).orEmpty().mapNotNull { e ->
             try { json.decodeFromJsonElement(GuideTrigger.serializer(), e) } catch (x: Exception) { null }

@@ -27,6 +27,26 @@ class PoiTest {
         assertEquals(MAX_POIS, parsePois(many).size)
     }
 
+    @Test fun otherBranchesMayLieAcrossTheCityButNotFurther() {
+        val geocoder = Geocoder { q ->
+            when {
+                q.startsWith("Stand Fuji Ebisu") -> GeoHit(35.6467, 139.7101, null) // ~8 km from Hamamatsucho
+                q.startsWith("Stand Fuji Osaka") -> GeoHit(34.69, 135.50, null) // another city
+                q.startsWith("Eingang Ebisu") -> GeoHit(35.6467, 139.7101, null)
+                else -> null
+            }
+        }
+        val pois = listOf(
+            PlacePoi("Stand Fuji Ebisu", PoiKinds.BRANCH),
+            PlacePoi("Stand Fuji Osaka", PoiKinds.BRANCH),
+            PlacePoi("Eingang Ebisu", PoiKinds.ENTRANCE),
+        )
+        val kept = locatePois(pois, 35.6562, 139.7551, "Stand Fuji", "Tokyo", geocoder)
+        assertEquals(listOf("Stand Fuji Ebisu"), kept.map { it.name })
+        assertEquals("Weitere Filiale", PoiKinds.label(PoiKinds.BRANCH))
+        assertEquals(PoiKinds.BRANCH, PoiKinds.normalize("BRANCH"))
+    }
+
     @Test fun keepsNearCoordinatesGeocodesUnknownAndDropsFarOnes() {
         val queries = mutableListOf<String>()
         val geocoder = Geocoder { q ->

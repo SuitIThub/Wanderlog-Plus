@@ -29,7 +29,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 /** A place the model found in a reel, before geocoding and research. */
-data class FoundPlace(val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String)
+data class FoundPlace(
+    val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String,
+    /** District or neighbourhood (Umeda, Hamamatsucho); helps to find the right branch. */
+    val area: String? = null,
+    /** What the reel is about; false for places only named for orientation (stations, landmarks in the background). */
+    val main: Boolean = true,
+)
 
 /** How far from the trip a reel's place may be to count as "on the route", in km (as for regions). */
 const val ON_ROUTE_KM = 50.0
@@ -75,19 +81,25 @@ class Assistant(
     private val researcher: PlaceResearcher = OpenRouterResearcher(model),
     /** Model for judging places (text only); the media [model] by default. */
     private val textModel: ChatModel = model,
+    /** Finds a reel's places (Google Places, then Photon); the [geocoder] by default. Spots near a place use the [geocoder]. */
+    private val placeFinder: Geocoder = geocoder,
 ) {
 
     /** Places named or shown in the reel; empty when there are none. */
     fun findPlaces(caption: String?, media: Media, context: TripContext): Pair<String?, List<FoundPlace>> {
         val system = """
             Du analysierst ein kurzes Reise-Video (Instagram-Reel) für eine Japanreise.
-            Finde alle konkreten Orte, die im Video gezeigt, gesagt oder in der Beschreibung erwähnt werden:
+            Finde die konkreten Orte, die im Video gezeigt, gesagt oder in der Beschreibung erwähnt werden:
             Sehenswürdigkeiten, Restaurants, Cafés, Läden, Bars, Aussichtspunkte, Onsen. Keine ganzen Länder oder Präfekturen.
-            Nutze Schilder und Texte in den Bildern, das Gesprochene und die Beschreibung.
+            Nutze Schilder und Texte in den Bildern, das Gesprochene und die Beschreibung (oft steht der Ort nach 📍).
+            Unterscheide: role "main" = ein Ort, um den es im Reel geht (meist einer, bei Listen-Reels mehrere);
+            role "reference" = nur zur Orientierung genannt oder im Hintergrund zu sehen (Bahnhof „2 min from …“, Stadtviertel,
+            ein Wahrzeichen in der Kulisse). Stadtviertel nur als area angeben, nicht als eigenen Ort.
             Antworte nur mit JSON: {"summary": "1 Satz auf Deutsch, worum es im Reel geht",
             "locations": [{"name": "üblicher Name in lateinischer Schrift", "localName": "japanischer Name oder null",
-            "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
-            "evidence": "kurz, woran du den Ort erkennst"}]}
+            "area": "Stadtteil/Viertel oder null", "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
+            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst"}]}
+            Die Orte mit role "main" zuerst.
             Wenn kein konkreter Ort erkennbar ist: "locations": [].
         """.trimIndent()
         val parts = buildList {
@@ -100,27 +112,31 @@ class Assistant(
         val found = (o["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val l = e as? JsonObject ?: return@mapNotNull null
             val name = l.str("name") ?: return@mapNotNull null
-            FoundPlace(name, l.str("localName"), l.str("city"), l.str("country"), l.str("kind") ?: "other", l.str("evidence").orEmpty())
+            FoundPlace(
+                name, l.str("localName"), l.str("city"), l.str("country"), l.str("kind") ?: "other", l.str("evidence").orEmpty(),
+                area = l.str("area"), main = l.str("role")?.lowercase() != "reference",
+            )
         }.distinctBy { (it.name + "|" + it.city).lowercase() }.take(MAX_PLACES)
         return o.str("summary") to found
     }
 
     /** Coordinates, distance to the trip and the full research for one place found in a reel. */
-    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}): ReelCandidate {
+    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}, deep: Boolean = p.main): ReelCandidate {
         say("Lage wird gesucht (Photon) …")
         val (hit, issue) = locate(p, say)
         val near = hit?.let { context.nearest(it.lat, it.lng) }
         if (hit != null) {
             say("Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty())
         }
-        val r = try {
+        val r = if (!deep) { say("Nur zur Orientierung genannt, ohne Recherche"); null } else try {
             val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence, trip), config, say)
+            val evidence = listOfNotNull(p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null }).joinToString("; ")
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, evidence, trip), config, say)
         } catch (e: AiFailed) {
             say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
         }
-        val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder)) }
+        val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder, placeFinder)) }
         if (r != null) say(poiLine(r.dossier.pois.size, d?.pois?.size ?: 0))
         return ReelCandidate(
             name = p.name,
@@ -141,26 +157,39 @@ class Assistant(
             sources = d?.sources.orEmpty(),
             dossier = d,
             positionIssue = issue,
+            main = p.main,
         )
     }
 
     /**
      * Coordinates of a reel place: the full name with city, the local name, the bare name; then ever shorter names
-     * ("Sunshine 60 Observatory TENBOU PARK" -> "Sunshine 60") with the city, accepted only within [SHORT_NAME_MAX_KM]
-     * of the city. Returns the hit or why there is none ("not_found", "unavailable").
+     * ("Sunshine 60 Observatory TENBOU PARK" -> "Sunshine 60") with the city. With a known city every hit must lie
+     * within [CITY_MAX_KM] of it ([SHORT_NAME_MAX_KM] for shortened names), so a namesake elsewhere ("Mizuno" in
+     * Yokohama for an Osaka okonomiyaki place) is never taken; without one, a place in Japan must be in Japan.
+     * Returns the hit or why there is none ("not_found", "unavailable").
      */
     internal fun locate(p: FoundPlace, say: (String) -> Unit = {}): Pair<GeoHit?, String?> = try {
-        val full = listOfNotNull(listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name).distinct()
-        full.firstNotNullOfOrNull { geocoder.find(it) }?.let { return it to null }
+        val city = p.city?.takeIf { it.isNotBlank() }?.let { placeFinder.find(it) }
+        val inJapan = p.country.isNullOrBlank() || p.country.lowercase().let { "jap" in it || it == "jp" || "日本" in it }
+        fun fits(h: GeoHit, maxKm: Double): Boolean = when {
+            city != null -> distanceKm(city.lat, city.lng, h.lat, h.lng) <= maxKm
+            inJapan -> h.country == null || h.country.equals("JP", ignoreCase = true) || "japan" in h.country.lowercase() || "日本" in h.country
+            else -> true
+        }
+        val full = listOfNotNull(
+            listOfNotNull(p.name, p.area, p.city).joinToString(" "), listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name,
+        ).distinct()
+        full.firstNotNullOfOrNull { q ->
+            placeFinder.find(q)?.let { h -> if (fits(h, CITY_MAX_KM)) h else { say("„$q“ liegt zu weit weg (Namensvetter?), verworfen"); null } }
+        }?.let { return it to null }
         val words = p.name.trim().split(Regex("\\s+"))
-        val city = p.city?.takeIf { it.isNotBlank() && words.size > 2 }?.let { geocoder.find(it) }
-        val shortHit = city?.let { c ->
+        val shortHit = city?.takeIf { words.size > 2 }?.let {
             (words.size - 1 downTo 2).asSequence()
                 .map { k -> words.take(k).joinToString(" ") }
                 .filter { it.length >= 4 }
                 .firstNotNullOfOrNull { short ->
-                    geocoder.find("$short ${p.city}")
-                        ?.takeIf { distanceKm(c.lat, c.lng, it.lat, it.lng) <= SHORT_NAME_MAX_KM }
+                    placeFinder.find("$short ${p.city}")
+                        ?.takeIf { h -> fits(h, SHORT_NAME_MAX_KM) }
                         ?.also { say("Lage über den kürzeren Namen „$short“ gefunden") }
                 }
         }
@@ -178,12 +207,15 @@ class Assistant(
         progress: JobProgress = JobProgress.NONE,
         onDone: (Int) -> Unit = {},
     ): List<ReelCandidate> {
-        val keyed = found.mapIndexed { i, p -> "place-$i" to p }
+        // The places the reel is about first; references after them.
+        val keyed = found.sortedBy { !it.main }.mapIndexed { i, p -> "place-$i" to p }
         progress.items(keyed.map { (k, p) -> JobItem(k, listOfNotNull(p.name, p.city).joinToString(", ")) })
         return inParallel(keyed, onDone) { (key, p) ->
             progress.item(key, state = "RUNNING")
             val c = research(p, context, config, progress.sayFor(key, p.name))
-            if (c.dossier == null) {
+            if (!p.main) {
+                progress.item(key, state = "DONE", detail = "nur erwähnt (Bezugspunkt)")
+            } else if (c.dossier == null) {
                 progress.item(key, state = "FAILED", detail = "ohne Recherche, nur Lage")
                 progress.step("${p.name}: ohne Recherche übernommen", JobProgress.WARN)
             } else {
@@ -228,7 +260,7 @@ class Assistant(
                 null
             }
             val result = r?.let {
-                val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder)
+                val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder, placeFinder)
                 say(poiLine(it.dossier.pois.size, pois.size))
                 DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
             }
@@ -303,6 +335,9 @@ class Assistant(
 
         /** A hit for a shortened name must lie this close to the named city. */
         const val SHORT_NAME_MAX_KM = 25.0
+
+        /** How far from its city a reel place may lie (city areas plus their outskirts). */
+        const val CITY_MAX_KM = 40.0
         const val ASSESS_BATCH = 25
         internal val CATEGORIES = setOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER")
 
@@ -351,8 +386,9 @@ internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was d
 "criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
 "insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
 "goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"],
-"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
-nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0."""
+"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|branch|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
+nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0.
+Hat der Ort mehrere Filialen: Schreibe über die Filiale, die Stadtteil und Hinweise meinen, und nenne höchstens 3 andere Filialen derselben Stadt als nearbyPoints mit kind "branch" (Name mit Stadtteil, z. B. „Stand Fuji Ebisu“)."""
 
 internal fun researchPrompt(q: ResearchQuery) = buildString {
     append("Ort: ").append(q.name)
@@ -403,16 +439,23 @@ internal const val MAX_POI_KM = 3.0
  * else the geocoder's hit for the spot's name (with place and [city]) when within range; the rest is dropped.
  * Without an anchor nothing is kept.
  */
-internal fun locatePois(pois: List<PlacePoi>, lat: Double?, lng: Double?, placeName: String, city: String?, geocoder: Geocoder): List<PlacePoi> {
+internal fun locatePois(
+    pois: List<PlacePoi>, lat: Double?, lng: Double?, placeName: String, city: String?, geocoder: Geocoder,
+    /** Finds other branches (small shops OpenStreetMap often lacks); the [geocoder] by default. */
+    branchFinder: Geocoder = geocoder,
+): List<PlacePoi> {
     if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) return emptyList()
-    fun near(a: Double, b: Double) = !(a == 0.0 && b == 0.0) && distanceKm(lat, lng, a, b) <= MAX_POI_KM
     return pois.mapNotNull { p ->
+        // Other branches may lie anywhere in the city, all other spots right at the place.
+        val maxKm = if (p.kind == PoiKinds.BRANCH) Assistant.CITY_MAX_KM else MAX_POI_KM
+        fun near(a: Double, b: Double) = !(a == 0.0 && b == 0.0) && distanceKm(lat, lng, a, b) <= maxKm
+        val finder = if (p.kind == PoiKinds.BRANCH) branchFinder else geocoder
         if (near(p.lat, p.lng)) return@mapNotNull p
         val hit = listOf(
             listOfNotNull(p.name, placeName.ifBlank { null }, city).joinToString(" "),
             listOfNotNull(p.name, city).joinToString(" "),
         ).distinct().firstNotNullOfOrNull { q ->
-            val h = try { geocoder.find(q) } catch (e: Exception) { null }
+            val h = try { finder.find(q) } catch (e: Exception) { null }
             h?.takeIf { near(it.lat, it.lng) }
         }
         hit?.let { p.copy(lat = it.lat, lng = it.lng) }
