@@ -46,6 +46,13 @@ class AiJobs(
     private val now: () -> Instant = Instant::now,
     // Two at a time: a long research of a whole region must not keep a shared reel waiting.
     private val executor: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "ai-jobs").apply { isDaemon = true } },
+    /**
+     * Research jobs run here, one after another: a second research waits for the first instead of both sharing the
+     * places' parallelism and the app's progress line. Reels, guides and stays keep the pool above.
+     */
+    private val researchExecutor: ExecutorService = java.util.concurrent.ThreadPoolExecutor(
+        1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS, java.util.concurrent.LinkedBlockingQueue(),
+    ) { r -> Thread(r, "ai-research").apply { isDaemon = true } },
     /** Writes research results into the trip as the server (see SyncService.writeAsServer); null: the app applies them. */
     private val writeResults: ((List<ServerEdit>) -> Int)? = null,
     /** Writes travel guides; null: guide jobs fail with `ai_not_configured`. */
@@ -59,6 +66,23 @@ class AiJobs(
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
 
     val configured: Boolean get() = assistant != null
+
+    /** Threads of the research lane (1 by default); -1 when unknown (a custom executor). */
+    val researchLaneSize: Int get() = (researchExecutor as? java.util.concurrent.ThreadPoolExecutor)?.maximumPoolSize ?: -1
+
+    /** Research jobs queued or running in the lane. */
+    private val researchActive = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Puts a research job into the lane; the counter says whether the next one has to wait. */
+    private fun enqueueResearch(run: () -> Unit) {
+        researchActive.incrementAndGet()
+        try {
+            researchExecutor.execute { try { run() } finally { researchActive.decrementAndGet() } }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            researchActive.decrementAndGet()
+            throw e
+        }
+    }
 
     val guidesConfigured: Boolean get() = guideWriter != null
 
@@ -217,11 +241,12 @@ class AiJobs(
     fun startResearch(ids: List<String>, config: AssessConfig = AssessConfig()): AiJobInfo {
         val job = save(
             AiJobInfo(
-                UUID.randomUUID().toString(), "research", now().toEpochMilli(), "QUEUED", total = ids.size, steps = listOf(queuedStep()),
+                UUID.randomUUID().toString(), "research", now().toEpochMilli(), "QUEUED", total = ids.size,
+                steps = listOf(if (researchActive.get() > 0) JobStep(now().toEpochMilli(), "Wartet auf die laufende Recherche …") else queuedStep()),
                 appliedOnServer = writeResults != null, savedPlaceIds = ids, config = config,
             ),
         )
-        executor.execute { runResearch(job, ids, config) }
+        enqueueResearch { runResearch(job, ids, config) }
         return job
     }
 
@@ -236,7 +261,8 @@ class AiJobs(
      */
     fun resumeInterrupted() {
         val recent = list(null, 100)
-        recent.filter { !(it.status == "DONE" || it.status == "FAILED") }.forEach { job ->
+        // Oldest first, so interrupted research keeps its order in the lane.
+        recent.filter { !(it.status == "DONE" || it.status == "FAILED") }.sortedBy { it.createdAt }.forEach { job ->
             val url = job.source?.takeIf { it.startsWith("https://") }
             if (job.kind == "research" && job.savedPlaceIds.isNotEmpty() && assistant != null) {
                 val done = job.dossiers.map { it.savedPlaceId }.toSet()
@@ -248,7 +274,7 @@ class AiJobs(
                         steps = (job.steps + JobStep(now().toEpochMilli(), "Server neu gestartet, Recherche geht mit den restlichen ${rest.size} Orten weiter", JobProgress.WARN)).takeLast(MAX_STEPS),
                     ),
                 )
-                executor.execute { runResearch(restarted, rest, job.config ?: AssessConfig()) }
+                enqueueResearch { runResearch(restarted, rest, job.config ?: AssessConfig()) }
             } else if (job.kind == "reel" && url != null && assistant != null) {
                 val restarted = save(
                     job.copy(
@@ -472,6 +498,7 @@ class AiJobs(
 
     /** Waits for queued work (tests). */
     internal fun drain() {
+        researchExecutor.submit {}.get()
         executor.submit {}.get()
     }
 

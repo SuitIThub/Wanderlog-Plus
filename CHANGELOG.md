@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.50.0
+
+- **Recherchen nacheinander:** Startet man mehrere Recherchen (z. B. zwei Regionen), laufen sie jetzt nacheinander statt gleichzeitig. Die Statuszeile zeigt nur die laufende, z. B. „Kyoto: Recherche: 3 von 12 Orten … · danach: Osaka“, statt zwischen beiden hin- und herzuspringen; „Ablauf“ öffnet immer die gerade laufende. Orte, die schon in einer wartenden Recherche stecken, werden nicht doppelt eingereiht.
+- **Schneller recherchieren (Server):** Eine Recherche bearbeitet bis zu 10 Orte gleichzeitig statt 4 (einstellbar mit `WLP_RESEARCH_PARALLELISM`, 1–20). Drosselt OpenRouter oder Parallel (429 bzw. „in-flight budget“), wartet der Server kurz und versucht es bis zu 3-mal erneut, statt den Ort als fehlgeschlagen zu markieren.
+
 ## 0.49.0
 
 - **Fotos online suchen:** Überall, wo man Fotos hinzufügt (Ort, Unterkunft, Tag), fragt die App jetzt „Aus Galerie“ oder „Online suchen“. Die Suche ist mit Ortsname und Region (Unterkunft: Name und Region, Tag: Region des Tages) vorbefüllt und zeigt Fotos von Google (die passenden Orte) und Wikimedia Commons in einem Raster; mehrere auswählen, „Übernehmen“ – sie werden wie eigene Fotos gespeichert. Die Quelle steht im Dateinamen, z. B. „Kinkaku-ji (Foto: Wikimedia · Autor, CC BY-SA 4.0)“.

@@ -118,74 +118,151 @@ class PlacesViewModel(
         }
     }
 
-    /** Saved places whose research job is running. */
+    /** Saved places in a research job that is waiting or running. */
     private val _researching = MutableStateFlow<Set<String>>(emptySet())
     val researching: StateFlow<Set<String>> = _researching
 
-    /** Progress or outcome of "Recherchieren (KI)" (fixed German text); null when idle. */
+    /** Progress of the running research (with the waiting ones after it) or the last outcome; null when idle. */
     private val _researchStatus = MutableStateFlow<String?>(null)
     val researchStatus: StateFlow<String?> = _researchStatus
 
-    /** Id of the research job started last (for its "Ablauf"); null before the first. */
+    /** Id of the running research job (for its "Ablauf"), else the one finished last; null before the first. */
     private val _researchJob = MutableStateFlow<String?>(null)
     val researchJob: StateFlow<String?> = _researchJob
 
-    fun consumeResearchStatus() { if (_researching.value.isEmpty()) _researchStatus.value = null }
+    /** Research jobs in the order they were started: one runs, the others wait (the server runs them one by one). */
+    private val _queue = MutableStateFlow<List<QueuedResearch>>(emptyList())
+    val queue: StateFlow<List<QueuedResearch>> = _queue
+
+    private val queueLock = Any()
+    private var nextKey = 1L
+    private val started = mutableMapOf<Long, kotlinx.coroutines.CompletableDeferred<de.wanderlogplus.shared.sync.AiJobInfo?>>()
+    private var worker: Job? = null
+
+    fun consumeResearchStatus() {
+        synchronized(queueLock) {
+            if (_queue.value.any { !it.finished }) return
+            _queue.value = emptyList()
+            _researchStatus.value = null
+        }
+    }
+
+    private fun updateQueue(change: (List<QueuedResearch>) -> List<QueuedResearch>) {
+        synchronized(queueLock) {
+            val q = change(_queue.value)
+            _queue.value = q
+            _researching.value = q.filterNot { it.finished }.flatMap { it.ids }.toSet()
+            _researchStatus.value = queueStatus(q)
+            (q.firstOrNull { !it.finished }?.jobId ?: q.lastOrNull { it.finished && it.jobId != null }?.jobId)?.let { _researchJob.value = it }
+        }
+    }
+
+    private fun setEntry(key: Long, change: (QueuedResearch) -> QueuedResearch) =
+        updateQueue { q -> q.map { if (it.key == key) change(it) else it } }
 
     /**
-     * Web research of [savedPlaceIds] (criteria, verdict, insider tips, hidden spots, good to know). Waits for the
-     * server job on the process-wide scope and writes the dossiers; places already being researched are skipped.
+     * Web research of [savedPlaceIds] (criteria, verdict, insider tips, hidden spots, good to know) as one job labelled
+     * [label] (a region's name; blank: no prefix in the status). The job goes to the server at once, which runs jobs
+     * one after another; here only the running one is followed, then the next. Places already waiting or running
+     * are skipped.
      */
-    fun research(savedPlaceIds: List<String>) {
+    fun research(savedPlaceIds: List<String>, label: String = "") {
         val provider = api ?: return
-        val todo = savedPlaceIds.distinct().filterNot { it in _researching.value }.take(MAX_RESEARCH)
-        if (todo.isEmpty()) return
-        _researching.value = _researching.value + todo
-        _researchStatus.value = researchProgress(0, todo.size)
+        val entry: QueuedResearch
+        val gate = kotlinx.coroutines.CompletableDeferred<de.wanderlogplus.shared.sync.AiJobInfo?>()
+        synchronized(queueLock) {
+            val todo = savedPlaceIds.distinct().filterNot { it in _researching.value }.take(MAX_RESEARCH)
+            if (todo.isEmpty()) return
+            // A fresh start drops what is left over from earlier runs.
+            val keep = _queue.value.filterNot { it.finished }
+            entry = QueuedResearch(nextKey++, label, todo, total = todo.size, state = QueuedResearch.State.WAITING)
+            started[entry.key] = gate
+            updateQueue { keep + entry }
+        }
         writeScope.launch {
-            val outcome = try {
+            val job = try {
                 val a = provider() ?: throw IllegalStateException("no server")
-                var job = a.startResearch(todo, config())
-                _researchJob.value = job.id
-                var seen = 0
-                var offlineSince = 0L
-                while (job.status != "DONE" && job.status != "FAILED") {
-                    kotlinx.coroutines.delay(pollMillis)
-                    job = try {
-                        a.aiJob(job.id).also { offlineSince = 0L }
-                    } catch (e: de.wanderlogplus.client.ApiException) {
-                        // A long research must survive short network gaps (tunnel, app in the background).
-                        if (e.kind != de.wanderlogplus.client.ApiErrorKind.NETWORK) throw e
-                        if (offlineSince == 0L) offlineSince = System.currentTimeMillis()
-                        if (System.currentTimeMillis() - offlineSince > MAX_OFFLINE_MILLIS) throw e
-                        continue
-                    }
-                    if (job.status != "DONE" && job.status != "FAILED") _researchStatus.value = researchProgress(job.progress, todo.size)
-                    // The server writes each finished place into the trip: fetch them while the rest still runs.
-                    if (job.appliedOnServer && job.dossiers.size > seen) { seen = job.dossiers.size; syncNow() }
-                }
-                if (job.status == "FAILED") {
-                    if (job.appliedOnServer && job.dossiers.isNotEmpty()) syncNow()
-                    de.wanderlogplus.app.ui.reels.errorText(job.error)
-                } else {
-                    val applied = if (job.appliedOnServer) job.dossiers.size.also { syncNow() } else applyDossiers(job.dossiers)
-                    when (val n = applied) {
-                        0 -> "Recherche ohne Ergebnis"
-                        1 -> "1 Ort recherchiert"
-                        else -> "$n Orte recherchiert"
-                    }
-                }
+                a.startResearch(entry.ids, config())
             } catch (e: CancellationException) {
+                gate.complete(null)
                 throw e
             } catch (e: de.wanderlogplus.client.ApiException) {
-                if (e.kind == de.wanderlogplus.client.ApiErrorKind.NOT_CONFIGURED) de.wanderlogplus.app.ui.reels.errorText("ai_not_configured") else "Recherche fehlgeschlagen"
+                val text = if (e.kind == de.wanderlogplus.client.ApiErrorKind.NOT_CONFIGURED) de.wanderlogplus.app.ui.reels.errorText("ai_not_configured") else "Recherche fehlgeschlagen"
+                setEntry(entry.key) { it.copy(state = QueuedResearch.State.FAILED, outcome = text) }
+                null
             } catch (e: Exception) {
-                "Recherche fehlgeschlagen"
-            } finally {
-                _researching.value = _researching.value - todo.toSet()
+                setEntry(entry.key) { it.copy(state = QueuedResearch.State.FAILED, outcome = "Recherche fehlgeschlagen") }
+                null
             }
-            _researchStatus.value = outcome
+            if (job != null) setEntry(entry.key) { it.copy(jobId = job.id) }
+            gate.complete(job)
         }
+        synchronized(queueLock) {
+            if (worker?.isActive != true) worker = writeScope.launch { work() }
+        }
+    }
+
+    /** Follows the first unfinished job until none is left. */
+    private suspend fun work() {
+        while (true) {
+            val (entry, gate) = synchronized(queueLock) {
+                val e = _queue.value.firstOrNull { !it.finished } ?: run { worker = null; return }
+                e to started[e.key]
+            }
+            val job = gate?.await()
+            if (job == null) {
+                // Start failed (already marked) or was cancelled.
+                if (_queue.value.firstOrNull { it.key == entry.key }?.finished != true) setEntry(entry.key) { it.copy(state = QueuedResearch.State.FAILED, outcome = "Recherche fehlgeschlagen") }
+                continue
+            }
+            setEntry(entry.key) { it.copy(state = QueuedResearch.State.RUNNING) }
+            val outcome = follow(entry, job)
+            synchronized(queueLock) { started.remove(entry.key) }
+            setEntry(entry.key) { it.copy(state = if (outcome.second) QueuedResearch.State.DONE else QueuedResearch.State.FAILED, outcome = outcome.first) }
+        }
+    }
+
+    /** Polls [first] until it ends and applies its results; returns the outcome text and whether it succeeded. */
+    private suspend fun follow(entry: QueuedResearch, first: de.wanderlogplus.shared.sync.AiJobInfo): Pair<String, Boolean> = try {
+        val a = api?.invoke() ?: throw IllegalStateException("no server")
+        var job = first
+        var seen = 0
+        var offlineSince = 0L
+        while (job.status != "DONE" && job.status != "FAILED") {
+            kotlinx.coroutines.delay(pollMillis)
+            job = try {
+                a.aiJob(job.id).also { offlineSince = 0L }
+            } catch (e: de.wanderlogplus.client.ApiException) {
+                // A long research must survive short network gaps (tunnel, app in the background).
+                if (e.kind != de.wanderlogplus.client.ApiErrorKind.NETWORK) throw e
+                if (offlineSince == 0L) offlineSince = System.currentTimeMillis()
+                if (System.currentTimeMillis() - offlineSince > MAX_OFFLINE_MILLIS) throw e
+                continue
+            }
+            if (job.status != "DONE" && job.status != "FAILED") {
+                val p = job.progress
+                setEntry(entry.key) { it.copy(progress = p) }
+            }
+            // The server writes each finished place into the trip: fetch them while the rest still runs.
+            if (job.appliedOnServer && job.dossiers.size > seen) { seen = job.dossiers.size; syncNow() }
+        }
+        if (job.status == "FAILED") {
+            if (job.appliedOnServer && job.dossiers.isNotEmpty()) syncNow()
+            de.wanderlogplus.app.ui.reels.errorText(job.error) to false
+        } else {
+            val applied = if (job.appliedOnServer) job.dossiers.size.also { syncNow() } else applyDossiers(job.dossiers)
+            when (applied) {
+                0 -> "Recherche ohne Ergebnis"
+                1 -> "1 Ort recherchiert"
+                else -> "$applied Orte recherchiert"
+            } to true
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: de.wanderlogplus.client.ApiException) {
+        (if (e.kind == de.wanderlogplus.client.ApiErrorKind.NOT_CONFIGURED) de.wanderlogplus.app.ui.reels.errorText("ai_not_configured") else "Recherche fehlgeschlagen") to false
+    } catch (e: Exception) {
+        "Recherche fehlgeschlagen" to false
     }
 
     /** Writes worth, verdict and dossier; fills the place description only when it has none. Returns how many were applied. */
@@ -299,3 +376,31 @@ internal val DOSSIER_JSON = Json { encodeDefaults = false }
 /** "Ort wird recherchiert …" or "Recherche: 3 von 12 Orten …". */
 fun researchProgress(done: Int, total: Int): String =
     if (total <= 1) "Ort wird recherchiert …" else "Recherche: $done von $total Orten …"
+
+/** One research job in the app's queue. [outcome] is the fixed German result text once it ended. */
+data class QueuedResearch(
+    val key: Long,
+    val label: String,
+    val ids: List<String>,
+    val jobId: String? = null,
+    val progress: Int = 0,
+    val total: Int,
+    val state: State,
+    val outcome: String? = null,
+) {
+    enum class State { WAITING, RUNNING, DONE, FAILED }
+
+    val finished: Boolean get() = state == State.DONE || state == State.FAILED
+}
+
+/**
+ * The status line of the queue: "<label>: Recherche: 3 von 12 Orten … · danach: Osaka, Nara" while one runs, else
+ * the outcome of the last one; null when empty.
+ */
+fun queueStatus(q: List<QueuedResearch>): String? {
+    val open = q.filterNot { it.finished }
+    val head = open.firstOrNull() ?: return q.lastOrNull()?.outcome
+    val progress = researchProgress(head.progress, head.total)
+    val waiting = open.drop(1).map { it.label.ifBlank { if (it.total == 1) "1 Ort" else "${it.total} Orte" } }
+    return (if (head.label.isBlank()) progress else "${head.label}: $progress") + (if (waiting.isEmpty()) "" else " · danach: " + waiting.joinToString(", "))
+}
