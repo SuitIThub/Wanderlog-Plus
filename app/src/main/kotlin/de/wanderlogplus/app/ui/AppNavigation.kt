@@ -179,6 +179,9 @@ fun AppNavigation(
     placeFinder: de.wanderlogplus.client.PlaceFinder? = null,
     /** Google search via the server for linking places; null (no server) hides „Suchen“. */
     googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
+    /** Online photo search via the server; null (no server) offers only the gallery. */
+    webPhotoSearch: de.wanderlogplus.app.ui.attachments.WebPhotoSearch? = null,
+    webPhotoFetch: de.wanderlogplus.app.ui.attachments.WebPhotoFetch? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -335,7 +338,10 @@ fun AppNavigation(
         val attachmentActions: AttachmentActions? =
             if (attachmentsViewModelFactory != null && attachmentFiles != null) {
                 val avm: AttachmentsViewModel = viewModel(factory = attachmentsViewModelFactory)
-                rememberAttachmentActions(avm, attachmentFiles, snackbar) { a -> nav.navigate(attachmentRoute(a.id)) }
+                rememberAttachmentActions(
+                    avm, attachmentFiles, snackbar, webSearch = webPhotoSearch, webFetch = webPhotoFetch,
+                    queryFor = { t -> snapshot?.let { de.wanderlogplus.app.ui.attachments.photoQuery(it, t) } ?: de.wanderlogplus.app.ui.attachments.PhotoQuery("", null) },
+                ) { a -> nav.navigate(attachmentRoute(a.id)) }
             } else {
                 null
             }
@@ -396,6 +402,7 @@ fun AppNavigation(
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
                 onOpenPhoto = attachmentFiles?.let { { t: EntityType, tid: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, tid, i)) } },
+                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
             )
@@ -436,6 +443,7 @@ fun AppNavigation(
                 onSetPhotoLabel = vm::setPhotoLabel,
                 onOpenPhoto = if (type == EntityType.STAY) ({ i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(EntityType.STAY, id, i)) }) else null,
                 stayResearchJob = stayResearchJob,
+                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
             )

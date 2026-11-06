@@ -166,6 +166,8 @@ fun PlaceDetailScreen(
     onSetLinks: ((savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
     /** "Ort löschen" in "Ort bearbeiten" (after a confirmation); null hides it. */
     onDelete: ((savedPlaceId: String) -> Unit)? = null,
+    /** Makes the photo attachment the header (after "Online suchen" in the header picker); null hides that button. */
+    onSetHeaderFromAttachment: ((savedPlaceId: String, attachmentId: String) -> Unit)? = null,
     /** Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
     googleSearch: GoogleSearch? = null,
     /** Links the place to a Google entry (null: unlinks), optionally taking its position. */
@@ -350,6 +352,14 @@ fun PlaceDetailScreen(
             onPick = { ref -> onSetHeaderImage(saved.id, ref); choosingImage = false },
             onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
             onDismiss = { choosingImage = false },
+            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
+                {
+                    choosingImage = false
+                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.SAVED_PLACE, saved.id), true) { ids ->
+                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(saved.id, it) }
+                    }
+                }
+            },
         )
     }
     if (editingTags) {

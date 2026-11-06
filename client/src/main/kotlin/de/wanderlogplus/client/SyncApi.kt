@@ -240,6 +240,27 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
             }
         }.hits
 
+    /** Photos online (Google, Wikimedia Commons) via the server. */
+    suspend fun searchWebPhotos(q: String, near: Pair<Double, Double>?): List<de.wanderlogplus.shared.sync.WebPhoto> =
+        call<de.wanderlogplus.shared.sync.WebPhotos> {
+            client.get("$base/api/photos/search") {
+                auth()
+                parameter("q", q)
+                near?.let { (lat, lng) -> parameter("near", "$lat,$lng") }
+            }
+        }.photos
+
+    /** The bytes of a web photo ([de.wanderlogplus.shared.sync.WebPhoto.id]), at most [maxWidth] pixels wide. */
+    suspend fun webPhoto(id: String, maxWidth: Int): ByteArray {
+        val response = client.get("$base/api/photos/media") {
+            auth()
+            parameter("id", id)
+            parameter("w", maxWidth)
+        }
+        if (response.status.value !in 200..299) throw ApiException(ApiErrorKind.SERVER, status = response.status.value, message = "Foto nicht verfügbar")
+        return response.body<ByteArray>()
+    }
+
     /** The JPEG bytes of a place photo, at most [maxWidth] pixels wide. */
     suspend fun placePhoto(name: String, maxWidth: Int): ByteArray {
         val response = client.get("$base/api/places/photos/media") {

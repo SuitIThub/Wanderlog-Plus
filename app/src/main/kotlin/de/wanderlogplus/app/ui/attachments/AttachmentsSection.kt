@@ -71,6 +71,11 @@ class AttachmentActions(
     val onAddPhotosToDay: ((date: String) -> Unit)? = null,
     /** Local files, for thumbnails. */
     val files: de.wanderlogplus.app.files.AttachmentFiles? = null,
+    /**
+     * Online photo search straight away (header image: [single] true); [onAdded] gets the new attachments' ids.
+     * Null: no online search (no server).
+     */
+    val onSearchPhotos: ((target: AttachmentTarget, single: Boolean, onAdded: suspend (List<String>) -> Unit) -> Unit)? = null,
 )
 
 @Composable

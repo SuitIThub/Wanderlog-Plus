@@ -238,6 +238,8 @@ class MainActivity : ComponentActivity() {
                         placeSearch = { q, near -> container.placeFinder.search(q, near, null).places },
                         geoSearch = container.geoSearch,
                         placeFinder = container.placeFinder,
+                        webPhotoSearch = { q, near -> (container.syncApi() ?: throw java.io.IOException("no server")).searchWebPhotos(q, near) },
+                        webPhotoFetch = { id, w -> (container.syncApi() ?: throw java.io.IOException("no server")).webPhoto(id, w) },
                         googleSearch = { q, near -> (container.syncApi() ?: throw java.io.IOException("no server")).searchPlaces(q, near, null).map { it.toGeoPlace() } },
                         snapshot = snapshot,
                         syncStatus = status,

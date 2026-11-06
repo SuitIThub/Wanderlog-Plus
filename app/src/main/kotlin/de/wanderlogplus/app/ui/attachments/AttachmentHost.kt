@@ -69,6 +69,11 @@ fun rememberAttachmentActions(
     vm: AttachmentsViewModel,
     files: AttachmentFiles,
     snackbar: SnackbarHostState,
+    /** Online photo search; null: only the gallery. */
+    webSearch: WebPhotoSearch? = null,
+    webFetch: WebPhotoFetch? = null,
+    /** What to search for when photos go to a target. */
+    queryFor: (AttachmentTarget) -> PhotoQuery = { PhotoQuery("", null) },
     onView: (Attachment) -> Unit,
 ): AttachmentActions {
     val context = LocalContext.current
@@ -88,6 +93,37 @@ fun rememberAttachmentActions(
         if (uris.isNotEmpty() && target != null) vm.addPhotos(target, uris.map { ContentUriSource(context.contentResolver, it) })
     }
     val pickImages = { photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+    // "Aus Galerie" / "Online suchen" and the search sheet (only with a server).
+    var photoRequest by remember { mutableStateOf<PhotoRequest?>(null) }
+    val queryForState = androidx.compose.runtime.rememberUpdatedState(queryFor)
+    if (webSearch != null && webFetch != null) {
+        val thumbs = remember { mutableMapOf<String, ByteArray>() }
+        WebPhotoFlow(
+            photoRequest, webSearch,
+            thumb = { p -> thumbs[p.id] ?: webFetch(p.id, WebPhotoAttachment.THUMB_WIDTH).also { thumbs[p.id] = it } },
+            onGallery = { r ->
+                pendingPhotos = when (val t = r.target) {
+                    is AttachmentTarget.Entity -> "E|${t.type.name}|${t.id}"
+                    is AttachmentTarget.Day -> "D|${t.date}"
+                }
+                pickImages()
+            },
+            onPicked = { r, picked -> vm.addPhotos(r.target, picked.map { WebPhotoAttachment(it, webFetch) }, r.onAdded) },
+            onDone = { photoRequest = null },
+        )
+    }
+    val online = webSearch != null && webFetch != null
+    val addPhotosTo: (AttachmentTarget) -> Unit = { target ->
+        if (online) {
+            photoRequest = PhotoRequest(target, queryForState.value(target), single = false)
+        } else {
+            pendingPhotos = when (target) {
+                is AttachmentTarget.Entity -> "E|${target.type.name}|${target.id}"
+                is AttachmentTarget.Day -> "D|${target.date}"
+            }
+            pickImages()
+        }
+    }
     val message by vm.message.collectAsState()
     LaunchedEffect(message) {
         message?.let {
@@ -96,7 +132,7 @@ fun rememberAttachmentActions(
         }
     }
     val onViewState = androidx.compose.runtime.rememberUpdatedState(onView)
-    return remember(files, version, vm) {
+    return remember(files, version, vm, online) {
         AttachmentActions(
             available = { hash -> files.fileFor(hash) != null },
             onAdd = { type, id -> pending = "E|${type.name}|$id"; picker.launch(arrayOf("*/*")) },
@@ -114,9 +150,12 @@ fun rememberAttachmentActions(
                 }
             },
             onDelete = { vm.delete(it) },
-            onAddPhotos = { type, id -> pendingPhotos = "E|${type.name}|$id"; pickImages() },
-            onAddPhotosToDay = { date -> pendingPhotos = "D|$date"; pickImages() },
+            onAddPhotos = { type, id -> addPhotosTo(AttachmentTarget.Entity(type, id)) },
+            onAddPhotosToDay = { date -> addPhotosTo(AttachmentTarget.Day(date)) },
             files = files,
+            onSearchPhotos = if (online) { target, single, onAdded ->
+                photoRequest = PhotoRequest(target, queryForState.value(target), single = single, onlineOnly = true, onAdded = onAdded)
+            } else null,
         )
     }
 }

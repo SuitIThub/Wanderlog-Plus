@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.49.0
+
+- **Fotos online suchen:** Überall, wo man Fotos hinzufügt (Ort, Unterkunft, Tag), fragt die App jetzt „Aus Galerie“ oder „Online suchen“. Die Suche ist mit Ortsname und Region (Unterkunft: Name und Region, Tag: Region des Tages) vorbefüllt und zeigt Fotos von Google (die passenden Orte) und Wikimedia Commons in einem Raster; mehrere auswählen, „Übernehmen“ – sie werden wie eigene Fotos gespeichert. Die Quelle steht im Dateinamen, z. B. „Kinkaku-ji (Foto: Wikimedia · Autor, CC BY-SA 4.0)“.
+- **Titelbild aus dem Netz:** „Titelbild ändern“ hat „Online suchen“: das gewählte Foto wird eigenes Foto und gleich Titelbild.
+
 ## 0.48.0
 
 - **Google-Eintrag nachträglich verknüpfen:** Orts- und Unterkunftsseite zeigen die Zeile „Google-Eintrag“: verknüpft mit Name und Adresse (Tipp öffnet Google Maps) und „Ändern“, sonst „Kein Google-Eintrag“ mit „Suchen“. Die Suche ist mit Name und Region vorbefüllt, zeigt Adresse und Entfernung zum bisherigen Punkt; „Lage übernehmen“ setzt die Position auf den Google-Eintrag, „Verknüpfung lösen“ entfernt ihn. Öffnungszeiten, Bewertung und Google-Fotos kommen danach von selbst.

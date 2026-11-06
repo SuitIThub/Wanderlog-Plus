@@ -109,6 +109,8 @@ fun LogisticsDetailScreen(
     onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
     /** Stays: open the stay's photos large at this gallery index (header image, photo strip); null: no viewer. */
     onOpenPhoto: ((index: Int) -> Unit)? = null,
+    /** Stays: makes the photo attachment the header (after "Online suchen"); null hides that button. */
+    onSetHeaderFromAttachment: ((EntityType, String, String) -> Unit)? = null,
     /** Stays: Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
     googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
     /** Stays: links the stay's place to a Google entry (null: unlinks). */
@@ -143,6 +145,14 @@ fun LogisticsDetailScreen(
             onPick = { ref -> onSetHeaderImage(type, id, ref); choosingImage = false },
             onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
             onDismiss = { choosingImage = false },
+            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
+                {
+                    choosingImage = false
+                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.STAY, id), true) { ids ->
+                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(EntityType.STAY, id, it) }
+                    }
+                }
+            },
         )
     }
 

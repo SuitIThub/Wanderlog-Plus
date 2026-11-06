@@ -266,6 +266,10 @@ class PlacesViewModel(
     fun linkGoogle(placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) =
         write { e, s -> googleLinkEdits(placeId, hit, takePosition)(e, s) }
 
+    /** The photo attachment [attachmentId] becomes the header of [savedPlaceId]. */
+    fun setHeaderFromAttachment(savedPlaceId: String, attachmentId: String) =
+        write { e, s -> de.wanderlogplus.app.ui.attachments.headerFromAttachmentEdits(EntityType.SAVED_PLACE, savedPlaceId, attachmentId)(e, s) }
+
     /** [ref] null: back to the default image. */
     fun setHeaderImage(savedPlaceId: String, ref: String?) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("headerImage" to (ref?.let { JsonPrimitive(it) } ?: JsonNull))) }
