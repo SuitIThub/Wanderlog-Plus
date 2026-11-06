@@ -3,6 +3,31 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.51.0
+
+- **Regionen recherchieren aus der Orte-Übersicht:** „Einschätzen (KI)“ heißt jetzt „Recherchieren (KI)“ und macht eine volle Recherche statt nur einer Einschätzung. Ein Tipp öffnet die Auswahl der Regionen („Kyoto · 12 Orte, 5 neu“, „Alle auswählen“); danach „Nur unrecherchierte“ oder „Alle“, jeweils mit Anzahl und Kosten. Jede gewählte Region wird als eigene Recherche nacheinander abgearbeitet, der Fortschritt steht unter den Knöpfen („Ablauf“ öffnet die laufende). Verworfene Orte werden nicht recherchiert.
+
+## 0.50.0
+
+- **Recherchen nacheinander:** Startet man mehrere Recherchen (z. B. zwei Regionen), laufen sie jetzt nacheinander statt gleichzeitig. Die Statuszeile zeigt nur die laufende, z. B. „Kyoto: Recherche: 3 von 12 Orten … · danach: Osaka“, statt zwischen beiden hin- und herzuspringen; „Ablauf“ öffnet immer die gerade laufende. Orte, die schon in einer wartenden Recherche stecken, werden nicht doppelt eingereiht.
+- **Schneller recherchieren (Server):** Eine Recherche bearbeitet bis zu 10 Orte gleichzeitig statt 4 (einstellbar mit `WLP_RESEARCH_PARALLELISM`, 1–20). Drosselt OpenRouter oder Parallel (429 bzw. „in-flight budget“), wartet der Server kurz und versucht es bis zu 3-mal erneut, statt den Ort als fehlgeschlagen zu markieren.
+
+## 0.49.0
+
+- **Fotos online suchen:** Überall, wo man Fotos hinzufügt (Ort, Unterkunft, Tag), fragt die App jetzt „Aus Galerie“ oder „Online suchen“. Die Suche ist mit Ortsname und Region (Unterkunft: Name und Region, Tag: Region des Tages) vorbefüllt und zeigt Fotos von Google (die passenden Orte) und Wikimedia Commons in einem Raster; mehrere auswählen, „Übernehmen“ – sie werden wie eigene Fotos gespeichert. Die Quelle steht im Dateinamen, z. B. „Kinkaku-ji (Foto: Wikimedia · Autor, CC BY-SA 4.0)“.
+- **Titelbild aus dem Netz:** „Titelbild ändern“ hat „Online suchen“: das gewählte Foto wird eigenes Foto und gleich Titelbild.
+
+## 0.48.0
+
+- **Google-Eintrag nachträglich verknüpfen:** Orts- und Unterkunftsseite zeigen die Zeile „Google-Eintrag“: verknüpft mit Name und Adresse (Tipp öffnet Google Maps) und „Ändern“, sonst „Kein Google-Eintrag“ mit „Suchen“. Die Suche ist mit Name und Region vorbefüllt, zeigt Adresse und Entfernung zum bisherigen Punkt; „Lage übernehmen“ setzt die Position auf den Google-Eintrag, „Verknüpfung lösen“ entfernt ihn. Öffnungszeiten, Bewertung und Google-Fotos kommen danach von selbst.
+- **Fehlende Verknüpfung sichtbar:** In der Ortsliste einer Region markiert ein kleines Symbol Orte ohne Google-Eintrag.
+
+## 0.47.0
+
+- **„Ort suchen“ über Google:** Die Ortssuche (Orte, Region, Tag, Reel-Lage, Unterkunft und Bahnhöfe/Flughäfen beim Bearbeiten) fragt jetzt Google Places über den eigenen Server. Gefundene Orte bekommen gleich ihre Google-Verknüpfung, also kommen Öffnungszeiten, Bewertung und Google-Fotos von selbst dazu.
+- **Ohne Google weiter nutzbar:** Hat der Server keinen Google-Key oder ist er nicht erreichbar, sucht die App wie bisher über OpenStreetMap und zeigt „Suche ohne Google (OpenStreetMap)“.
+- **Sparsam:** Beim Bearbeiten sucht die App erst ab 3 Zeichen und nach einer kurzen Tipppause; gleiche Suchen beantwortet der Server 24 Stunden aus dem Zwischenspeicher.
+
 ## 0.46.3
 
 - **Ausstattung: lange Texte lesbar.** Nichts wird mehr abgeschnitten: Texte umbrechen vollständig, lange Kacheln nehmen die ganze Breite ein.

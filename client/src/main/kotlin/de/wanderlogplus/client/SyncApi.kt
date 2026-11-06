@@ -229,6 +229,38 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }.photos
 
+    /** Google's Text Search via the server: near a point and/or inside a map area. */
+    suspend fun searchPlaces(q: String, near: Pair<Double, Double>?, bbox: BBox?): List<de.wanderlogplus.shared.sync.GooglePlaceHit> =
+        call<de.wanderlogplus.shared.sync.PlaceSearchHits> {
+            client.get("$base/api/places/search") {
+                auth()
+                parameter("q", q)
+                near?.let { (lat, lng) -> parameter("near", "$lat,$lng") }
+                bbox?.normalized()?.let { parameter("bbox", it.param()) }
+            }
+        }.hits
+
+    /** Photos online (Google, Wikimedia Commons) via the server. */
+    suspend fun searchWebPhotos(q: String, near: Pair<Double, Double>?): List<de.wanderlogplus.shared.sync.WebPhoto> =
+        call<de.wanderlogplus.shared.sync.WebPhotos> {
+            client.get("$base/api/photos/search") {
+                auth()
+                parameter("q", q)
+                near?.let { (lat, lng) -> parameter("near", "$lat,$lng") }
+            }
+        }.photos
+
+    /** The bytes of a web photo ([de.wanderlogplus.shared.sync.WebPhoto.id]), at most [maxWidth] pixels wide. */
+    suspend fun webPhoto(id: String, maxWidth: Int): ByteArray {
+        val response = client.get("$base/api/photos/media") {
+            auth()
+            parameter("id", id)
+            parameter("w", maxWidth)
+        }
+        if (response.status.value !in 200..299) throw ApiException(ApiErrorKind.SERVER, status = response.status.value, message = "Foto nicht verfügbar")
+        return response.body<ByteArray>()
+    }
+
     /** The JPEG bytes of a place photo, at most [maxWidth] pixels wide. */
     suspend fun placePhoto(name: String, maxWidth: Int): ByteArray {
         val response = client.get("$base/api/places/photos/media") {

@@ -10,6 +10,15 @@ class ServerConfigTest {
     private val ok = mapOf("WLP_TOKENS" to "alice:$TOKEN_A,bob:$TOKEN_B")
 
     @Test
+    fun researchParallelism() {
+        assertEquals(10, ServerConfig.fromEnv(ok).researchParallelism)
+        assertEquals(16, ServerConfig.fromEnv(ok + ("WLP_RESEARCH_PARALLELISM" to "16")).researchParallelism)
+        assertEquals(10, ServerConfig.fromEnv(ok + ("WLP_RESEARCH_PARALLELISM" to "0")).researchParallelism)
+        assertEquals(10, ServerConfig.fromEnv(ok + ("WLP_RESEARCH_PARALLELISM" to "21")).researchParallelism)
+        assertEquals(10, ServerConfig.fromEnv(ok + ("WLP_RESEARCH_PARALLELISM" to "abc")).researchParallelism)
+    }
+
+    @Test
     fun defaults() {
         val c = ServerConfig.fromEnv(ok)
         assertEquals(mapOf("alice" to TOKEN_A, "bob" to TOKEN_B), c.tokens)

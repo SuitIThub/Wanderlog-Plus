@@ -52,7 +52,7 @@ class InsertAndSearchTest {
 
     @Test fun searchPrefersVisibleArea() = runBlocking {
         val fake = FakeSearch(listOf(inside, farAway))
-        val m = PlaceSearchModel(fake::search, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder(fake::search), { _, _ -> null }, null)
         m.visible = kyoto
         m.query = "Kinkaku"
         m.submit()
@@ -66,7 +66,7 @@ class InsertAndSearchTest {
 
     @Test fun nothingInAreaWidensAndZoomsToHits() = runBlocking {
         val fake = FakeSearch(listOf(farAway))
-        val m = PlaceSearchModel(fake::search, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder(fake::search), { _, _ -> null }, null)
         m.visible = kyoto
         m.query = "Ramen"
         m.submit()
@@ -79,7 +79,7 @@ class InsertAndSearchTest {
 
     @Test fun failingAreaSearchStillSearchesEverywhere() = runBlocking {
         val calls = mutableListOf<BBox?>()
-        val m = PlaceSearchModel({ _, _, bbox -> calls += bbox; if (bbox != null) throw IllegalStateException("400") else listOf(farAway) }, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder({ _, _, bbox -> calls += bbox; if (bbox != null) throw IllegalStateException("400") else listOf(farAway) }), { _, _ -> null }, null)
         m.visible = kyoto
         m.query = "Ramen"
         m.submit()
@@ -89,13 +89,13 @@ class InsertAndSearchTest {
     }
 
     @Test fun refusingServiceIsNamed() = runBlocking {
-        val m = PlaceSearchModel({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.SERVER, status = 503) }, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.SERVER, status = 503) }), { _, _ -> null }, null)
         m.query = "Ramen"
         m.submit()
         assertEquals(SearchStatus.UNAVAILABLE, m.status)
         assertEquals(503, m.failedStatus)
         assertTrue(statusText(SearchStatus.UNAVAILABLE, 0)!!.contains("lange auf die Karte"))
-        val offline = PlaceSearchModel({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.NETWORK) }, { _, _ -> null }, null)
+        val offline = PlaceSearchModel(finder({ _, _, _ -> throw de.wanderlogplus.client.ApiException(de.wanderlogplus.client.ApiErrorKind.NETWORK) }), { _, _ -> null }, null)
         offline.query = "Ramen"
         offline.submit()
         assertEquals(SearchStatus.FAILED, offline.status)
@@ -103,7 +103,7 @@ class InsertAndSearchTest {
 
     @Test fun worldMapAreaIsNoFilter() = runBlocking {
         val calls = mutableListOf<BBox?>()
-        val m = PlaceSearchModel({ _, _, bbox -> calls += bbox; listOf(farAway) }, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder({ _, _, bbox -> calls += bbox; listOf(farAway) }), { _, _ -> null }, null)
         m.visible = BBox(-450.0, -85.0, 450.0, 85.0)
         m.query = "Ramen"
         m.submit()
@@ -113,7 +113,7 @@ class InsertAndSearchTest {
 
     @Test fun movedMapOffersAreaSearch() = runBlocking {
         val fake = FakeSearch(listOf(inside, farAway))
-        val m = PlaceSearchModel(fake::search, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder(fake::search), { _, _ -> null }, null)
         m.visible = kyoto
         m.query = "Kinkaku"
         m.submit()
@@ -126,7 +126,7 @@ class InsertAndSearchTest {
     }
 
     @Test fun longPressPicksNamedOrBarePoint() = runBlocking {
-        val m = PlaceSearchModel({ _, _, _ -> emptyList() }, { lat, _ -> if (lat > 35) inside.copy(lat = 0.0) else null }, null)
+        val m = PlaceSearchModel(finder({ _, _, _ -> emptyList() }), { lat, _ -> if (lat > 35) inside.copy(lat = 0.0) else null }, null)
         m.pick(35.04, 135.73)
         assertEquals("Kinkaku-ji", m.selected?.name)
         assertEquals(35.04, m.selected!!.lat, 1e-9) // the pressed point, not the lookup's
@@ -135,7 +135,7 @@ class InsertAndSearchTest {
     }
 
     @Test fun failureIsReported() = runBlocking {
-        val m = PlaceSearchModel({ _, _, _ -> error("offline") }, { _, _ -> null }, null)
+        val m = PlaceSearchModel(finder({ _, _, _ -> error("offline") }), { _, _ -> null }, null)
         m.query = "x"
         m.submit()
         assertEquals(SearchStatus.FAILED, m.status)
@@ -198,7 +198,7 @@ class InsertAndSearchTest {
 
     @Test fun searchScreenFindsAndAdds() {
         val fake = FakeSearch(listOf(inside, farAway))
-        val model = PlaceSearchModel(fake::search, { _, _ -> null }, null)
+        val model = PlaceSearchModel(finder(fake::search), { _, _ -> null }, null)
         var added: GeoPlace? = null
         rule.setContent { WanderlogPlusTheme { PlaceSearchScreen(model, start = null, onAdd = { added = it }, onBack = {}) } }
         rule.onNodeWithText("Karte nicht verfügbar").assertIsDisplayed()

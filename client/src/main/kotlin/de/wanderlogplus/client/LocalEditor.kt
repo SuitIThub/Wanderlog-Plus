@@ -207,6 +207,8 @@ class LocalEditor(
         address: String?,
         category: PlaceCategory,
         position: ItemPosition = ItemPosition.End,
+        /** Google's place id when known: the server then adds hours, rating and photos. */
+        googlePlaceId: String? = null,
     ): String {
         val trip = requireNotNull(snapshot.trip) { "No trip" }
         require(name.isNotBlank()) { "A place needs a name" }
@@ -227,6 +229,7 @@ class LocalEditor(
                     put("lat", JsonPrimitive(lat))
                     put("lng", JsonPrimitive(lng))
                     address?.takeIf { it.isNotBlank() }?.let { put("address", JsonPrimitive(it)) }
+                    googlePlaceId?.takeIf { it.isNotBlank() }?.let { put("googlePlaceId", JsonPrimitive(it)) }
                 },
             )
             writeNew(

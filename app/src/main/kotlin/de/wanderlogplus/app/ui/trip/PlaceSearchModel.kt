@@ -12,6 +12,13 @@ import kotlin.math.abs
 /** Name search, optionally near a point and/or inside an area; throws on failure. */
 typealias AreaSearch = suspend (query: String, near: Pair<Double, Double>?, bbox: BBox?) -> List<GeoPlace>
 
+/** [AreaSearch] that also says whether Google answered (false: OpenStreetMap only). */
+typealias FinderSearch = suspend (query: String, near: Pair<Double, Double>?, bbox: BBox?) -> de.wanderlogplus.client.PlaceFinderResult
+
+/** A plain [AreaSearch] as a [FinderSearch] that always reports [viaGoogle]. */
+fun finder(search: AreaSearch, viaGoogle: Boolean = true): FinderSearch =
+    { q, near, bbox -> de.wanderlogplus.client.PlaceFinderResult(search(q, near, bbox), viaGoogle) }
+
 /** The place at a point (reverse geocoding); null when nothing is known there. */
 typealias PointLookup = suspend (lat: Double, lng: Double) -> GeoPlace?
 
@@ -23,7 +30,7 @@ enum class SearchStatus { IDLE, LOADING, FOUND, FOUND_ELSEWHERE, NOTHING, FAILED
  * The map reports its area via [visible]; [fitRequest] increases whenever the map should zoom to the [results].
  */
 class PlaceSearchModel(
-    private val search: AreaSearch,
+    private val find: FinderSearch,
     private val lookup: PointLookup,
     /** Bias for searches before the map has reported an area (e.g. the day's places). */
     private val home: Pair<Double, Double>?,
@@ -39,6 +46,13 @@ class PlaceSearchModel(
 
     /** The area the map shows right now. */
     var visible by mutableStateOf<BBox?>(null)
+
+    /** False when the last search had to use OpenStreetMap (no Google on the server). */
+    var viaGoogle by mutableStateOf(true)
+        private set
+
+    private suspend fun search(q: String, near: Pair<Double, Double>?, bbox: BBox?): List<GeoPlace> =
+        find(q, near, bbox).also { viaGoogle = it.viaGoogle }.places
 
     /** HTTP status of the last failed search, for the message (null: no answer at all). */
     var failedStatus by mutableStateOf<Int?>(null)

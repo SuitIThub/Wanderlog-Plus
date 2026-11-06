@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -71,6 +72,8 @@ fun HeaderImagePicker(
     onPick: (String?) -> Unit,
     onUpload: (() -> Unit)?,
     onDismiss: () -> Unit,
+    /** "Online suchen": one photo from the web becomes an own photo and the header; null hides it. */
+    onSearchOnline: (() -> Unit)? = null,
 ) {
     val repo = LocalPlacePhotos.current
     val gid = place?.googlePlaceId?.takeIf { it.isNotBlank() }
@@ -153,6 +156,12 @@ fun HeaderImagePicker(
                     Icon(Icons.Filled.PhotoLibrary, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text("Mehr von Google")
                 }
+            }
+        }
+        if (onSearchOnline != null) {
+            OutlinedButton(onClick = onSearchOnline, modifier = Modifier.testTag("header-online")) {
+                Icon(Icons.Filled.TravelExplore, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                Text("Online suchen")
             }
         }
         if (onUpload != null) Text("Hochgeladene Fotos erscheinen hier und bei den eigenen Fotos.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

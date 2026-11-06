@@ -55,12 +55,15 @@ class HttpParallelTransport(private val apiKey: String, private val base: String
             .header("x-api-key", apiKey)
             .header("Content-Type", "application/json")
         val request = if (method == "POST") b.POST(HttpRequest.BodyPublishers.ofString(body ?: "{}")).build() else b.GET().build()
-        val response = try {
-            http.send(request, HttpResponse.BodyHandlers.ofString())
-        } catch (e: IOException) {
-            throw AiFailed("research_unreachable")
+        val response = throttled {
+            val r = try {
+                http.send(request, HttpResponse.BodyHandlers.ofString())
+            } catch (e: IOException) {
+                throw AiFailed("research_unreachable")
+            }
+            Attempt(r.statusCode(), r.body() ?: "", r.headers().firstValue("Retry-After").orElse(null))
         }
-        return response.statusCode() to response.body()
+        return response.status to response.body
     }
 }
 

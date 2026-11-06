@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui
 
+import de.wanderlogplus.client.toGeoPlace
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -233,8 +235,12 @@ class MainActivity : ComponentActivity() {
                         pendingReelJob = reelJob,
                         onPendingReelConsumed = { pendingReel.value = null },
                         hasServer = hasServer,
-                        placeSearch = { q, near -> container.geoSearch.search(q, near) },
+                        placeSearch = { q, near -> container.placeFinder.search(q, near, null).places },
                         geoSearch = container.geoSearch,
+                        placeFinder = container.placeFinder,
+                        webPhotoSearch = { q, near -> (container.syncApi() ?: throw java.io.IOException("no server")).searchWebPhotos(q, near) },
+                        webPhotoFetch = { id, w -> (container.syncApi() ?: throw java.io.IOException("no server")).webPhoto(id, w) },
+                        googleSearch = { q, near -> (container.syncApi() ?: throw java.io.IOException("no server")).searchPlaces(q, near, null).map { it.toGeoPlace() } },
                         snapshot = snapshot,
                         syncStatus = status,
                         onRefresh = container.syncScheduler::requestNow,

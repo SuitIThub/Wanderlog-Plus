@@ -65,14 +65,15 @@ class AttachmentsViewModel(
         }
     }
 
-    /** Adds several gallery photos one after another; says how many made it. */
-    fun addPhotos(target: AttachmentTarget, sources: List<AttachmentSource>): Job = writeScope.launch(Dispatchers.IO) {
+    /** Adds several gallery photos one after another; says how many made it. [onAdded] gets the new attachments' ids. */
+    fun addPhotos(target: AttachmentTarget, sources: List<AttachmentSource>, onAdded: suspend (List<String>) -> Unit = {}): Job = writeScope.launch(Dispatchers.IO) {
         val add = addPhoto ?: return@launch
         var ok = 0
+        val ids = mutableListOf<String>()
         for (source in sources) {
             try {
                 val input = source.open() ?: continue
-                input.use {
+                ids += input.use {
                     when (target) {
                         is AttachmentTarget.Entity -> add(target.type, { target.id }, it, source.fileName())
                         is AttachmentTarget.Day -> add(EntityType.DAY, { ensureDay(target.date) }, it, source.fileName())
@@ -90,6 +91,7 @@ class AttachmentsViewModel(
             ok == 0 -> "Fotos konnten nicht hinzugefügt werden"
             else -> "$ok von ${sources.size} Fotos hinzugefügt"
         }
+        if (ids.isNotEmpty()) onAdded(ids)
     }
 
     fun delete(a: Attachment): Job = writeScope.launch {

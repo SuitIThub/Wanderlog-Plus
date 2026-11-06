@@ -67,15 +67,19 @@ class OpenRouterModel(private val apiKey: String, private val model: String) : C
             .header("X-Title", "Wanderlog Plus")
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build()
-        val response = try {
-            http.send(request, HttpResponse.BodyHandlers.ofString())
-        } catch (e: IOException) {
-            throw AiFailed("ai_unreachable")
+        // Many places at once can hit OpenRouter's in-flight budget or a provider's rate limit: wait and try again.
+        val response = throttled {
+            val r = try {
+                http.send(request, HttpResponse.BodyHandlers.ofString())
+            } catch (e: IOException) {
+                throw AiFailed("ai_unreachable")
+            }
+            Attempt(r.statusCode(), r.body() ?: "", r.headers().firstValue("Retry-After").orElse(null))
         }
-        if (response.statusCode() == 401 || response.statusCode() == 403) throw AiFailed("ai_key_rejected")
-        if (response.statusCode() == 402) throw AiFailed("ai_no_credit")
-        if (response.statusCode() !in 200..299) throw AiFailed()
-        return response.body()
+        if (response.status == 401 || response.status == 403) throw AiFailed("ai_key_rejected")
+        if (response.status == 402) throw AiFailed("ai_no_credit")
+        if (response.status !in 200..299) throw AiFailed()
+        return response.body
     }
 
     companion object {

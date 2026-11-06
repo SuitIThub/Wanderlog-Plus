@@ -166,6 +166,12 @@ fun PlaceDetailScreen(
     onSetLinks: ((savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
     /** "Ort löschen" in "Ort bearbeiten" (after a confirmation); null hides it. */
     onDelete: ((savedPlaceId: String) -> Unit)? = null,
+    /** Makes the photo attachment the header (after "Online suchen" in the header picker); null hides that button. */
+    onSetHeaderFromAttachment: ((savedPlaceId: String, attachmentId: String) -> Unit)? = null,
+    /** Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
+    googleSearch: GoogleSearch? = null,
+    /** Links the place to a Google entry (null: unlinks), optionally taking its position. */
+    onLinkGoogle: ((placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -264,6 +270,13 @@ fun PlaceDetailScreen(
 
         val builtIn = remember(place, saved.category) { place?.let { GoogleExternalLinks.linksFor(it, saved.category) }.orEmpty() }
         de.wanderlogplus.app.ui.design.LinkRow(builtIn, saved.links, onOpenLink, onSetLinks?.let { set -> { l: List<de.wanderlogplus.shared.model.CustomLink> -> set(saved.id, l) } })
+        place?.let { p ->
+            GoogleLinkRow(
+                p, listOfNotNull(p.name.ifBlank { null }, region?.name).joinToString(" "), googleSearch.takeIf { onLinkGoogle != null },
+                onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
 
         if (onOpenMap != null) {
             val points = remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
@@ -339,6 +352,14 @@ fun PlaceDetailScreen(
             onPick = { ref -> onSetHeaderImage(saved.id, ref); choosingImage = false },
             onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
             onDismiss = { choosingImage = false },
+            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
+                {
+                    choosingImage = false
+                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.SAVED_PLACE, saved.id), true) { ids ->
+                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(saved.id, it) }
+                    }
+                }
+            },
         )
     }
     if (editingTags) {

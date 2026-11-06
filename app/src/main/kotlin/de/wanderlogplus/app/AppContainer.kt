@@ -71,6 +71,11 @@ class AppContainer(context: Context) {
     /** Place search for stopovers; a third-party service, so it never gets the server token. */
     val geoSearch: GeoSearch by lazy { GeoSearch(http) }
 
+    /** "Ort suchen": Google via the own server when one is set up, else OpenStreetMap. */
+    val placeFinder: de.wanderlogplus.client.PlaceFinder by lazy {
+        de.wanderlogplus.client.PlaceFinder({ q, near, bbox -> (syncApi() ?: throw java.io.IOException("no server")).searchPlaces(q, near, bbox) }, geoSearch)
+    }
+
     val attachmentFiles: AttachmentFiles by lazy { AttachmentFiles(File(appContext.filesDir, AppProfile.scoped(appContext, "attachments"))) }
 
     private var apiFor: ServerSettings? = null

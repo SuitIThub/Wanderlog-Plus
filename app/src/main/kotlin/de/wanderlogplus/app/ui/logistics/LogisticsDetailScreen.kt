@@ -109,6 +109,12 @@ fun LogisticsDetailScreen(
     onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
     /** Stays: open the stay's photos large at this gallery index (header image, photo strip); null: no viewer. */
     onOpenPhoto: ((index: Int) -> Unit)? = null,
+    /** Stays: makes the photo attachment the header (after "Online suchen"); null hides that button. */
+    onSetHeaderFromAttachment: ((EntityType, String, String) -> Unit)? = null,
+    /** Stays: Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
+    googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
+    /** Stays: links the stay's place to a Google entry (null: unlinks). */
+    onLinkGoogle: ((placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -139,6 +145,14 @@ fun LogisticsDetailScreen(
             onPick = { ref -> onSetHeaderImage(type, id, ref); choosingImage = false },
             onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
             onDismiss = { choosingImage = false },
+            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
+                {
+                    choosingImage = false
+                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.STAY, id), true) { ids ->
+                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(EntityType.STAY, id, it) }
+                    }
+                }
+            },
         )
     }
 
@@ -207,6 +221,14 @@ fun LogisticsDetailScreen(
                     )
                     androidx.compose.material3.TextButton(onClick = { stayTab = 2 }) { Text("Alle") }
                 }
+            }
+            snapshot.places[stay?.placeId]?.let { p ->
+                de.wanderlogplus.app.ui.places.GoogleLinkRow(
+                    p, listOfNotNull(p.name.ifBlank { null }, snapshot.regions.firstOrNull { it.id == stay?.regionId }?.name).joinToString(" "),
+                    googleSearch.takeIf { onLinkGoogle != null },
+                    onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
+                    Modifier.padding(top = 12.dp),
+                )
             }
             SectionLabel("Details", color = view.accent)
             InfoCard {

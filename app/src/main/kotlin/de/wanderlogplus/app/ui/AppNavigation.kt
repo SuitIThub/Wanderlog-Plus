@@ -175,6 +175,13 @@ fun AppNavigation(
     placeSearch: PlaceSearch? = null,
     /** Place search with map for the day program ("Ort suchen"); null hides it. */
     geoSearch: GeoSearch? = null,
+    /** Google first (via the server), OpenStreetMap as fallback; null: Photon only. */
+    placeFinder: de.wanderlogplus.client.PlaceFinder? = null,
+    /** Google search via the server for linking places; null (no server) hides „Suchen“. */
+    googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
+    /** Online photo search via the server; null (no server) offers only the gallery. */
+    webPhotoSearch: de.wanderlogplus.app.ui.attachments.WebPhotoSearch? = null,
+    webPhotoFetch: de.wanderlogplus.app.ui.attachments.WebPhotoFetch? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -331,7 +338,10 @@ fun AppNavigation(
         val attachmentActions: AttachmentActions? =
             if (attachmentsViewModelFactory != null && attachmentFiles != null) {
                 val avm: AttachmentsViewModel = viewModel(factory = attachmentsViewModelFactory)
-                rememberAttachmentActions(avm, attachmentFiles, snackbar) { a -> nav.navigate(attachmentRoute(a.id)) }
+                rememberAttachmentActions(
+                    avm, attachmentFiles, snackbar, webSearch = webPhotoSearch, webFetch = webPhotoFetch,
+                    queryFor = { t -> snapshot?.let { de.wanderlogplus.app.ui.attachments.photoQuery(it, t) } ?: de.wanderlogplus.app.ui.attachments.PhotoQuery("", null) },
+                ) { a -> nav.navigate(attachmentRoute(a.id)) }
             } else {
                 null
             }
@@ -392,6 +402,9 @@ fun AppNavigation(
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
                 onOpenPhoto = attachmentFiles?.let { { t: EntityType, tid: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, tid, i)) } },
+                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
+                googleSearch = googleSearch,
+                onLinkGoogle = vm::linkGoogle,
             )
         }
 
@@ -404,7 +417,7 @@ fun AppNavigation(
             RegionPlacesScreen(
                 snap, key, onBack = { nav.popBackStack() }, onOpenPlace = onOpenPlace,
                 onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(key)) } },
-                onResearch = if (vm.canAssess) vm::research else null,
+                onResearch = if (vm.canAssess) { ids: List<String> -> vm.research(ids, snap.regions.firstOrNull { it.id == key }?.name ?: "Ohne Region") } else null,
                 researchStatus = status.takeIf { researching.isNotEmpty() },
                 onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
             )
@@ -430,6 +443,9 @@ fun AppNavigation(
                 onSetPhotoLabel = vm::setPhotoLabel,
                 onOpenPhoto = if (type == EntityType.STAY) ({ i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(EntityType.STAY, id, i)) }) else null,
                 stayResearchJob = stayResearchJob,
+                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
+                googleSearch = googleSearch,
+                onLinkGoogle = vm::linkGoogle,
             )
         }
 
@@ -663,7 +679,7 @@ fun AppNavigation(
                         if (s != null && geo != null) {
                             val start = remember(date, position) { searchStart(s, date, (position as? ItemPosition.After)?.itemId) }
                             val model = rememberPlaceSearchModel(
-                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                 lookup = { lat, lng -> geo.reverse(lat, lng) },
                                 home = start,
                             )
@@ -688,13 +704,17 @@ fun AppNavigation(
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
                             else -> {
-                                val assessing by vm.assessing.collectAsState()
+                                val researching by vm.researching.collectAsState()
+                                val status by vm.researchStatus.collectAsState()
+                                val researchJob by vm.researchJob.collectAsState()
+                                ResearchSnack(vm, snackbar)
                                 PlacesScreen(
                                     s,
                                     onOpenRegion = { nav.navigate(regionRoute(it)) },
                                     onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
-                                    onAssess = if (vm.canAssess) vm::assessAll else null,
-                                    assessing = assessing,
+                                    onResearchRegions = if (vm.canAssess) vm::researchRegions else null,
+                                    researchStatus = status.takeIf { researching.isNotEmpty() },
+                                    onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
                                     onReels = reelsViewModelFactory?.let { { nav.navigate(REELS_ROUTE) } },
                                 )
                             }
@@ -716,7 +736,7 @@ fun AppNavigation(
                                 }
                             }
                             val model = rememberPlaceSearchModel(
-                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                 lookup = { lat, lng -> geo.reverse(lat, lng) },
                                 home = start,
                             )
@@ -911,7 +931,7 @@ fun AppNavigation(
                                     } ?: de.wanderlogplus.app.maps.LatLngD(36.2, 138.25) // never a world map: its area is no search filter
                                 }
                                 val model = rememberPlaceSearchModel(
-                                    search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                    search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                     lookup = { lat, lng -> geo.reverse(lat, lng) },
                                     home = start,
                                 )

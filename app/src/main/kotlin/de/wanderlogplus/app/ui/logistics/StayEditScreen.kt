@@ -51,6 +51,8 @@ data class StayDraft(
     val lat: Double? = null,
     val lng: Double? = null,
     val picked: Boolean = false,
+    /** Google's id of the picked place (search via Google); goes onto a new Place. */
+    val googlePlaceId: String? = null,
     val regionId: String? = null,
     val checkIn: String = "",
     val checkOut: String = "",
@@ -118,7 +120,7 @@ data class StaySave(val stay: Stay, val newPlace: Place?)
 /** [newPlaceId] is used for a picked place; [existing] keeps fields the form does not show (travellers). */
 fun stayToSave(snapshot: TripSnapshot, d: StayDraft, existing: Stay?, newPlaceId: String): StaySave {
     val newPlace = if (d.picked || d.placeId.isBlank()) {
-        Place(newPlaceId, name = d.name.trim(), lat = d.lat ?: 0.0, lng = d.lng ?: 0.0, address = d.address.trim().ifBlank { null })
+        Place(newPlaceId, name = d.name.trim(), lat = d.lat ?: 0.0, lng = d.lng ?: 0.0, address = d.address.trim().ifBlank { null }, googlePlaceId = d.googlePlaceId.orEmpty())
     } else null
     val base = existing ?: Stay("")
     val stay = base.copy(
@@ -172,7 +174,7 @@ fun StayEditScreen(
         PlaceSearchPanel(
             search = search, near = near,
             onPick = { p ->
-                d = d.copy(name = p.name, address = p.detail, lat = p.lat, lng = p.lng, picked = true)
+                d = d.copy(name = p.name, address = p.detail, lat = p.lat, lng = p.lng, picked = true, googlePlaceId = p.googlePlaceId)
                 searching = false
             },
             onCancel = { searching = false },

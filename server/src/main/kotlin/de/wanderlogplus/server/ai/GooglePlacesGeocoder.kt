@@ -20,7 +20,10 @@ fun interface PlacesSearchTransport {
     fun searchText(body: String): Pair<Int, String>
 }
 
-class HttpPlacesSearchTransport(private val apiKey: String) : PlacesSearchTransport {
+class HttpPlacesSearchTransport(
+    private val apiKey: String,
+    private val fieldMask: String = "places.id,places.displayName,places.formattedAddress,places.location",
+) : PlacesSearchTransport {
     private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
 
     override fun searchText(body: String): Pair<Int, String> {
@@ -28,7 +31,7 @@ class HttpPlacesSearchTransport(private val apiKey: String) : PlacesSearchTransp
             .timeout(Duration.ofSeconds(20))
             .header("Content-Type", "application/json")
             .header("X-Goog-Api-Key", apiKey)
-            .header("X-Goog-FieldMask", "places.id,places.displayName,places.formattedAddress,places.location")
+            .header("X-Goog-FieldMask", fieldMask)
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build()
         return try {
