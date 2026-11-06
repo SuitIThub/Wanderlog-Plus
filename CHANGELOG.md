@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.39.0
+
+- **Stärkeres Modell für Chat und Einschätzungen:** Chat und „Orte einschätzen“ laufen jetzt auf Claude Sonnet 5.5 (`WLP_TEXT_MODEL`), Reels und Videos weiter auf Gemini Flash (`WLP_AI_MODEL`).
+- **Chat kennt die ganze Reise:** Neben dem Reiseplan stehen jetzt alle hinterlegten Orte (mit Region, Einschätzung, reserviert, eingeplant am …) und alle Fahrten mit Nummern, Zeiten, Teilstrecken und gewählter Verbindung im Kontext. Details holt er weiter per Werkzeug.
+- **Günstiger durch Prompt-Cache:** Der feste Teil des Kontexts ändert sich nur mit der Reise und wird zwischengespeichert; Datum, Wetter und der offene Bildschirm stehen dahinter.
+- Benötigt das Server-Update.
+
 ## 0.38.0
 
 - **Tagesablauf von Unterkunft zu Unterkunft:** Der Tag beginnt bei der Unterkunft der letzten Nacht und endet bei der Unterkunft der Nacht. Mit „Wege“ gibt es einen einstellbaren Weg zum ersten Programmpunkt und vom letzten zurück, mit Verkehrsmittel und „Verbindung abfragen“.

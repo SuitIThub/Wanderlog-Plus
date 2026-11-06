@@ -199,10 +199,81 @@ object ChatContextText {
                         if (i.kind == DayItemKind.PLACE) t.places[i.placeId]?.name ?: "Ort" else "Notiz"
                     },
                     t.movementsOn(d.date).takeIf { it.isNotEmpty() }?.joinToString("; "),
-                    t.weather[d.date]?.let { "Wetter: " + WeatherText.summary(it) },
                 ).joinToString(" · ").ifEmpty { "noch nichts geplant" })
                 append('\n')
             }
+        }
+    }
+
+    /** Every saved place on one line (dropped ones only counted), by region in trip order, then name: stable for the prompt cache. */
+    fun savedPlaces(t: ChatTrip): String = buildString {
+        val live = t.saved.filter { it.status != PlaceStatus.DROPPED }
+        val regionOrder = t.regions.withIndex().associate { (i, r) -> r.id to i }
+        append("Hinterlegte Orte (vollständige Liste, id in Klammern):\n")
+        live.sortedWith(compareBy<SavedPlace>({ regionOrder[it.regionId] ?: Int.MAX_VALUE }, { t.places[it.placeId]?.name.orEmpty().lowercase() }, { it.id }))
+            .forEach { s ->
+                append("- ").append(t.places[s.placeId]?.name?.ifBlank { null } ?: "Ort").append(" [id=").append(s.id).append("]")
+                listOfNotNull(
+                    t.regionName(s.regionId),
+                    s.category.name,
+                    ChatTools.worthLabel(s.worth),
+                    "besucht".takeIf { s.status == PlaceStatus.VISITED },
+                    "reserviert".takeIf { s.reserved },
+                    t.plannedDates[s.placeId]?.takeIf { it.isNotEmpty() }?.let { "eingeplant " + it.joinToString(", ") { d -> shortDate(d) } },
+                ).forEach { append(" · ").append(it) }
+                append('\n')
+            }
+        val dropped = t.saved.size - live.size
+        if (dropped > 0) append(dropped).append(" verworfene Orte nicht aufgeführt.\n")
+    }
+
+    /** Flights and trains with numbers, times and the taken connection; legs of a journey grouped. */
+    fun logistics(t: ChatTrip): String = buildString {
+        class Ride(val journeyId: String?, val order: Int?, val sortKey: String, val line: String)
+        fun ep(e: Endpoint) = listOfNotNull(
+            e.name.ifBlank { null }?.let { n -> e.code?.let { "$n ($it)" } ?: n } ?: e.code,
+            e.date?.let { shortDate(it) },
+            e.time,
+        ).joinToString(" ")
+        fun key(e: Endpoint) = e.date.orEmpty() + " " + e.time.orEmpty()
+        fun via(v: List<Endpoint>) = v.takeIf { it.isNotEmpty() }?.let { ", über " + it.joinToString(", ") { e -> ep(e) } }.orEmpty()
+        val rides = t.flights.map { f ->
+            Ride(
+                f.journeyId, f.journeyOrder, key(f.depart),
+                "Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).joinToString(" ") + ": " + ep(f.depart) + " → " + ep(f.arrive) + via(f.via),
+            )
+        } + t.trains.map { tr ->
+            val connection = tr.transit?.routes?.firstOrNull()?.legs?.filter { !it.walk }?.takeIf { it.isNotEmpty() }?.joinToString(" → ") { l ->
+                l.line.ifBlank { l.lineJa } + (l.departurePlatform?.let { " ab Gleis $it" } ?: "") + (l.arrivalPlatform?.let { ", an Gleis $it" } ?: "")
+            }
+            val name = listOfNotNull(tr.carrier, tr.number).joinToString(" ")
+            Ride(
+                tr.journeyId, tr.journeyOrder, key(tr.depart),
+                "Zug" + (if (name.isEmpty()) "" else " $name") + ": " + ep(tr.depart) + " → " + ep(tr.arrive) + via(tr.via) +
+                    (connection?.let { "; Verbindung: $it" } ?: ""),
+            )
+        }
+        if (rides.isEmpty()) return@buildString
+        append("Fahrten (Reisen aus Teilstrecken gruppiert):\n")
+        rides.withIndex().groupBy { (i, r) -> r.journeyId ?: "solo:$i" }.values
+            .map { legs -> legs.map { it.value }.sortedWith(compareBy<Ride>({ it.order ?: Int.MAX_VALUE }, { it.sortKey })) }
+            .sortedBy { legs -> legs.minOf { it.sortKey } }
+            .forEach { legs ->
+                if (legs.size > 1) {
+                    append("- Reise:\n")
+                    legs.forEach { append("  - ").append(it.line).append('\n') }
+                } else {
+                    append("- ").append(legs.single().line).append('\n')
+                }
+            }
+    }
+
+    /** The weather of the trip days (changes daily, so it stays out of the cached part). */
+    fun weather(t: ChatTrip): String = buildString {
+        if (t.weather.isEmpty()) return@buildString
+        append("Wetter der Reisetage:\n")
+        t.weather.keys.sorted().forEach { d ->
+            append("- ").append(shortDate(d)).append(" (").append(d).append("): Wetter: ").append(WeatherText.summary(t.weather.getValue(d))).append('\n')
         }
     }
 
@@ -1087,7 +1158,8 @@ class ChatAgent(
         val context = last.context ?: ChatContext()
         val here = location?.let { Anchor("Dein Standort", it.lat, it.lng) }
         val tools = ChatTools(trip, web, here ?: ChatContextText.anchor(context, trip, today()), geocoder, ways, here, say)
-        val messages = mutableListOf(system(systemPrompt(trip, context, location)))
+        val (stable, volatile) = systemParts(trip, context, location)
+        val messages = mutableListOf(cachedSystem(stable, volatile))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
                 msg("user", (m.context?.label?.let { "[Geöffnet bei: $it] " } ?: "") + m.text)
@@ -1117,11 +1189,27 @@ class ChatAgent(
         throw AiFailed("ai_bad_answer")
     }
 
-    fun systemPrompt(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): String = buildString {
+    fun systemPrompt(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): String =
+        systemParts(trip, context, location).let { (a, b) -> a + b }
+
+    /**
+     * The system prompt in two parts: rules and trip data that only change with the trip (cached by the model provider),
+     * then what changes per message (date, weather, screen, location).
+     */
+    fun systemParts(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): Pair<String, String> =
+        stablePrompt(trip) to buildString {
+            append(ChatContextText.weather(trip))
+            append("Aktueller Kontext:\n").append(ChatContextText.current(context, trip, today()))
+            location?.let { append(ChatContextText.location(it, trip)) }
+        }
+
+    private fun stablePrompt(trip: ChatTrip): String = buildString {
         append(
             """
             Du bist der Reiseassistent der App „Wanderlog Plus“ für eine Japanreise. Antworte auf Deutsch, freundlich und knapp
             (Markdown: kurze Absätze, Listen, **fett**; keine Tabellen, keine Links im Text).
+            - Unten steht die vollständige Liste der hinterlegten Orte. Prüfe sie, bevor du einen Ort als neu vorschlägst oder im Web suchst;
+              Details (Öffnungszeiten, Dossier, Notizen) holst du mit get_place.
             - Für Vorschläge suchst du zuerst mit search_saved_places in den hinterlegten Vorschlägen der Reisenden und empfiehlst bevorzugt diese.
               Nutze dafür den Kontext (Region und Datum des Tages, Öffnungstage mit openOn) und die Wünsche des Nutzers.
             - Achte auf Entfernungen (Luftlinie, in den Zeilen angegeben). Unterkünfte und Programm mit Adressen stehen unten.
@@ -1132,7 +1220,7 @@ class ChatAgent(
               aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
               als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
               steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
-            - Das Wetter der Reisetage steht im Reiseplan (Vorhersage des japanischen Wetterdienstes JMA für die nächsten Tage,
+            - Das Wetter der Reisetage steht unten unter „Wetter der Reisetage“ (Vorhersage des japanischen Wetterdienstes JMA für die nächsten Tage,
               sonst das Mittel der letzten Jahre – das ist keine Vorhersage, sag das). Bei Regen schlägst du von dir aus Orte
               für drinnen vor und weist darauf hin, wenn Wanderungen, Gärten oder Aussichtspunkte geplant sind; ist ein anderer
               Tag in derselben Region trockener, schlag einen Tausch vor.
@@ -1173,8 +1261,23 @@ class ChatAgent(
         }
         append("- Du kannst nichts an der Reise ändern; der Nutzer plant selbst. Bei Unsicherheit frag kurz nach.\n\n")
         append(ChatContextText.overview(trip)).append('\n')
-        append("Aktueller Kontext:\n").append(ChatContextText.current(context, trip, today()))
-        location?.let { append(ChatContextText.location(it, trip)) }
+        append(ChatContextText.savedPlaces(trip)).append('\n')
+        ChatContextText.logistics(trip).takeIf { it.isNotEmpty() }?.let { append(it).append('\n') }
+    }
+
+    /** One system message: the stable block marked for the prompt cache, then the changing block. */
+    private fun cachedSystem(stable: String, volatile: String) = buildJsonObject {
+        put("role", "system")
+        putJsonArray("content") {
+            add(
+                buildJsonObject {
+                    put("type", "text")
+                    put("text", stable)
+                    putJsonObject("cache_control") { put("type", "ephemeral") }
+                },
+            )
+            add(buildJsonObject { put("type", "text"); put("text", volatile) })
+        }
     }
 
     private fun system(text: String) = msg("system", text)

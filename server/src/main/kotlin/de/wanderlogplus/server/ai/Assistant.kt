@@ -72,6 +72,8 @@ class Assistant(
     private val geocoder: Geocoder,
     /** Web research per place: Parallel when configured, else the chat model's web search. */
     private val researcher: PlaceResearcher = OpenRouterResearcher(model),
+    /** Model for judging places (text only); the media [model] by default. */
+    private val textModel: ChatModel = model,
 ) {
 
     /** Places named or shown in the reel; empty when there are none. */
@@ -268,7 +270,7 @@ class Assistant(
                     p?.description?.take(300)?.let { "info=$it" },
                 ).joinToString("; ")
             }
-            val o = OpenRouterModel.jsonObjectIn(model.complete(system, listOf(AiPart.Text(lines)), webSearch = false))
+            val o = OpenRouterModel.jsonObjectIn(textModel.complete(system, listOf(AiPart.Text(lines)), webSearch = false))
             val known = batch.map { it.id }.toSet()
             (o["results"] as? JsonArray).orEmpty().mapNotNull { e ->
                 val r = e as? JsonObject ?: return@mapNotNull null

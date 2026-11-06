@@ -17,7 +17,10 @@ data class ServerConfig(
     val airlabsKey: String? = null,
     /** OpenRouter key for the assistant (reel analysis, worth judgements); without it those answer `ai_not_configured`. */
     val openRouterKey: String? = null,
+    /** Model for reels and videos (images and sound). */
     val aiModel: String = DEFAULT_AI_MODEL,
+    /** Model for text work: chat, worth judgements, research evaluation, guides. */
+    val textModel: String = DEFAULT_TEXT_MODEL,
     /** Parallel key for the web research of reel places (Search + Task API); without it OpenRouter researches. */
     val parallelKey: String? = null,
     val parallelProcessor: String = "base",
@@ -33,6 +36,7 @@ data class ServerConfig(
     companion object {
         const val MIN_TOKEN_LENGTH = 16
         const val DEFAULT_AI_MODEL = "google/gemini-2.5-flash"
+        const val DEFAULT_TEXT_MODEL = "anthropic/claude-sonnet-5-5"
 
         fun fromEnv(env: Map<String, String>): ServerConfig {
             val raw = env["WLP_TOKENS"]?.takeIf { it.isNotBlank() }
@@ -74,6 +78,7 @@ data class ServerConfig(
                 googlePlacesKey = env["WLP_GOOGLE_PLACES_KEY"]?.takeIf { it.isNotBlank() } ?: env["WLP_GOOGLE_ROUTES_KEY"]?.takeIf { it.isNotBlank() },
                 openRouterKey = env["WLP_OPENROUTER_KEY"]?.takeIf { it.isNotBlank() },
                 aiModel = env["WLP_AI_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL,
+                textModel = env["WLP_TEXT_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_TEXT_MODEL,
                 parallelKey = env["WLP_PARALLEL_KEY"]?.takeIf { it.isNotBlank() },
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },

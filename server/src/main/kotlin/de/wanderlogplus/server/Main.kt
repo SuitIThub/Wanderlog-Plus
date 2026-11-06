@@ -27,6 +27,8 @@ fun main() {
     Runtime.getRuntime().addShutdownHook(Thread { store.close() })
     val sync = SyncService(store)
     val openRouter = config.openRouterKey?.let { OpenRouterModel(it, config.aiModel) }
+    // Text work (chat, judgements, research evaluation) runs on the stronger text model; reels stay on the media model.
+    val textModel = config.openRouterKey?.let { OpenRouterModel(it, config.textModel) }
     val routes = RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) })
     val transit = TransitService(
         store,
@@ -47,8 +49,9 @@ fun main() {
         AiJobs(
             store,
             openRouter?.let { model ->
-                val researcher = config.parallelKey?.let { ParallelResearcher(HttpParallelTransport(it), config.parallelProcessor) } ?: OpenRouterResearcher(model)
-                Assistant(model, PhotonGeocoder(), researcher)
+                val text = textModel ?: model
+                val researcher = config.parallelKey?.let { ParallelResearcher(HttpParallelTransport(it), config.parallelProcessor) } ?: OpenRouterResearcher(text)
+                Assistant(model, PhotonGeocoder(), researcher, textModel = text)
             },
             ToolReelMedia(cookies = config.instagramCookies),
             config.dataDir.resolve("ai-work"),
@@ -62,7 +65,7 @@ fun main() {
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
         chats = ChatService(
             store,
-            openRouter?.let { model ->
+            textModel?.let { model ->
                 // "Today" in Japan, where the trip happens.
                 ChatAgent(
                     model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways,

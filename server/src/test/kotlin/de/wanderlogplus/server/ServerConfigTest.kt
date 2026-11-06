@@ -39,6 +39,16 @@ class ServerConfigTest {
         assertFailsWith<IllegalArgumentException> { ServerConfig.fromEnv(env) }
     }
 
+    @Test
+    fun aiModels() {
+        val d = ServerConfig.fromEnv(ok)
+        assertEquals("google/gemini-2.5-flash", d.aiModel)
+        assertEquals("anthropic/claude-sonnet-5-5", d.textModel)
+        val c = ServerConfig.fromEnv(ok + mapOf("WLP_AI_MODEL" to "m/media", "WLP_TEXT_MODEL" to "m/text"))
+        assertEquals("m/media", c.aiModel)
+        assertEquals("m/text", c.textModel)
+    }
+
     @Test fun missingTokens() = bad(emptyMap())
     @Test fun shortToken() = bad(mapOf("WLP_TOKENS" to "alice:short"))
     @Test fun duplicateName() = bad(mapOf("WLP_TOKENS" to "alice:$TOKEN_A,alice:$TOKEN_B"))
