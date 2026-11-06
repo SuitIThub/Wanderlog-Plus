@@ -7,6 +7,9 @@ import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
 import de.wanderlogplus.server.ai.ModelFacts
 import de.wanderlogplus.server.ai.GuideWriter
+import de.wanderlogplus.server.ai.FallbackGeocoder
+import de.wanderlogplus.server.ai.GooglePlacesGeocoder
+import de.wanderlogplus.server.ai.HttpPlacesSearchTransport
 import de.wanderlogplus.server.ai.ParallelFacts
 import de.wanderlogplus.server.ai.PipelineResearcher
 import de.wanderlogplus.server.ai.HttpParallelTransport
@@ -51,7 +54,10 @@ fun main() {
             // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
             val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
             val researcher = PipelineResearcher(facts, text)
-            Assistant(model, PhotonGeocoder(), researcher, textModel = text)
+            val photon = PhotonGeocoder()
+            // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
+            val finder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
+            Assistant(model, photon, researcher, textModel = text, placeFinder = finder)
         },
         ToolReelMedia(cookies = config.instagramCookies),
         config.dataDir.resolve("ai-work"),

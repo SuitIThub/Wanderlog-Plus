@@ -75,6 +75,8 @@ class Assistant(
     private val researcher: PlaceResearcher = OpenRouterResearcher(model),
     /** Model for judging places (text only); the media [model] by default. */
     private val textModel: ChatModel = model,
+    /** Finds a reel's places (Google Places, then Photon); the [geocoder] by default. Spots near a place use the [geocoder]. */
+    private val placeFinder: Geocoder = geocoder,
 ) {
 
     /** Places named or shown in the reel; empty when there are none. */
@@ -152,7 +154,7 @@ class Assistant(
      * Returns the hit or why there is none ("not_found", "unavailable").
      */
     internal fun locate(p: FoundPlace, say: (String) -> Unit = {}): Pair<GeoHit?, String?> = try {
-        val city = p.city?.takeIf { it.isNotBlank() }?.let { geocoder.find(it) }
+        val city = p.city?.takeIf { it.isNotBlank() }?.let { placeFinder.find(it) }
         val inJapan = p.country.isNullOrBlank() || p.country.lowercase().let { "jap" in it || it == "jp" || "日本" in it }
         fun fits(h: GeoHit, maxKm: Double): Boolean = when {
             city != null -> distanceKm(city.lat, city.lng, h.lat, h.lng) <= maxKm
@@ -161,7 +163,7 @@ class Assistant(
         }
         val full = listOfNotNull(listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name).distinct()
         full.firstNotNullOfOrNull { q ->
-            geocoder.find(q)?.let { h -> if (fits(h, CITY_MAX_KM)) h else { say("„$q“ liegt zu weit weg (Namensvetter?), verworfen"); null } }
+            placeFinder.find(q)?.let { h -> if (fits(h, CITY_MAX_KM)) h else { say("„$q“ liegt zu weit weg (Namensvetter?), verworfen"); null } }
         }?.let { return it to null }
         val words = p.name.trim().split(Regex("\\s+"))
         val shortHit = city?.takeIf { words.size > 2 }?.let {
@@ -169,7 +171,7 @@ class Assistant(
                 .map { k -> words.take(k).joinToString(" ") }
                 .filter { it.length >= 4 }
                 .firstNotNullOfOrNull { short ->
-                    geocoder.find("$short ${p.city}")
+                    placeFinder.find("$short ${p.city}")
                         ?.takeIf { h -> fits(h, SHORT_NAME_MAX_KM) }
                         ?.also { say("Lage über den kürzeren Namen „$short“ gefunden") }
                 }

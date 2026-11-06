@@ -108,6 +108,13 @@ class GeocoderTest {
         assertNull(a.locate(FoundPlace("Ginza", null, null, "Japan", "food", "")).first)
     }
 
+    @Test fun reelPlacesUseThePlaceFinderPoisTheGeocoder() {
+        val photon = Geocoder { q -> if (q == "Osaka") GeoHit(34.69, 135.50, "Osaka", "JP") else null }
+        val google = Geocoder { q -> if (q == "Munimuni Osaka") GeoHit(34.7055, 135.4983, "Shibata, Osaka", "JP") else null }
+        val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, photon, placeFinder = google)
+        assertEquals(135.4983, a.locate(FoundPlace("Munimuni", null, "Osaka", "Japan", "food", "")).first!!.lng)
+    }
+
     @Test fun unavailableGeocoderIsNamedAsSuch() {
         val a = Assistant(object : ChatModel { override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean) = "{}" }, Geocoder { throw GeocoderUnavailable() })
         val said = mutableListOf<String>()
