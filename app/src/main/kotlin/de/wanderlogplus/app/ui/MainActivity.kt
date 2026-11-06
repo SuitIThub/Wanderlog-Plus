@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui
 
+import de.wanderlogplus.client.toGeoPlace
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -236,6 +238,7 @@ class MainActivity : ComponentActivity() {
                         placeSearch = { q, near -> container.placeFinder.search(q, near, null).places },
                         geoSearch = container.geoSearch,
                         placeFinder = container.placeFinder,
+                        googleSearch = { q, near -> (container.syncApi() ?: throw java.io.IOException("no server")).searchPlaces(q, near, null).map { it.toGeoPlace() } },
                         snapshot = snapshot,
                         syncStatus = status,
                         onRefresh = container.syncScheduler::requestNow,

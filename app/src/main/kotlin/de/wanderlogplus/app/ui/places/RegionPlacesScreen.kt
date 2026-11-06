@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -248,6 +249,13 @@ private fun PlaceCard(s: Suggestion, accent: Color, votes: List<de.wanderlogplus
         onClick = onClick,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (s.place?.googlePlaceId?.isBlank() == true) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Filled.LinkOff, contentDescription = "Kein Google-Eintrag",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 6.dp).size(16.dp).testTag("no-google-${s.saved.id}"),
+                    )
+                }
                 score?.let { Text(if (it > 0) "+$it" else "$it", style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(end = 6.dp).testTag("vote-score-${s.saved.id}")) }
                 StatusIndicator(s.saved.id, s.saved.status)
             }

@@ -262,6 +262,10 @@ class PlacesViewModel(
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 
+    /** Links the place to a Google entry ([hit] null: unlinks); see [googleLinkEdits]. */
+    fun linkGoogle(placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) =
+        write { e, s -> googleLinkEdits(placeId, hit, takePosition)(e, s) }
+
     /** [ref] null: back to the default image. */
     fun setHeaderImage(savedPlaceId: String, ref: String?) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("headerImage" to (ref?.let { JsonPrimitive(it) } ?: JsonNull))) }

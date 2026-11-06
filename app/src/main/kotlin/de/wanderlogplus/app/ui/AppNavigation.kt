@@ -177,6 +177,8 @@ fun AppNavigation(
     geoSearch: GeoSearch? = null,
     /** Google first (via the server), OpenStreetMap as fallback; null: Photon only. */
     placeFinder: de.wanderlogplus.client.PlaceFinder? = null,
+    /** Google search via the server for linking places; null (no server) hides „Suchen“. */
+    googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -394,6 +396,8 @@ fun AppNavigation(
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
                 onOpenPhoto = attachmentFiles?.let { { t: EntityType, tid: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, tid, i)) } },
+                googleSearch = googleSearch,
+                onLinkGoogle = vm::linkGoogle,
             )
         }
 
@@ -432,6 +436,8 @@ fun AppNavigation(
                 onSetPhotoLabel = vm::setPhotoLabel,
                 onOpenPhoto = if (type == EntityType.STAY) ({ i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(EntityType.STAY, id, i)) }) else null,
                 stayResearchJob = stayResearchJob,
+                googleSearch = googleSearch,
+                onLinkGoogle = vm::linkGoogle,
             )
         }
 
