@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui
 
+import androidx.compose.foundation.layout.consumeWindowInsets
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -442,7 +444,7 @@ fun AppNavigation(
             )
         }
 
-        Row(Modifier.padding(padding).fillMaxSize()) {
+        Row(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize()) {
         if (wide && current != SETUP_ROUTE) {
             NavigationRail(modifier = Modifier.testTag("nav-rail")) {
                 Tab.entries.forEach { tab ->
