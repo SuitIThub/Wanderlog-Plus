@@ -80,6 +80,8 @@ data class SavedPlace(
     val dossier: PlaceDossier? = null,
     /** The travellers booked it (a reservation or tickets): no more reservation reminders. */
     val reserved: Boolean = false,
+    /** When to reserve, set by hand; null: worked out from the research and the plan ([de.wanderlogplus.shared.query.ReservationDates]). */
+    val reservationWindow: ReservationWindow? = null,
     /** Own header image: "wl:<image key>", "att:<attachment id>" or "g:<Google photo name>"; null: the first place image. */
     val headerImage: String? = null,
     /** Own links shown as buttons on the page (tickets, booking, info). */
@@ -111,6 +113,8 @@ data class Stay(
     val info: StayInfo? = null,
     /** Pages to read when researching the room and amenities (hotel site, booking page). */
     val infoLinks: List<String> = emptyList(),
+    /** When it can and must be booked (e.g. a ryokan dinner); null: no deadline. */
+    val reservation: ReservationWindow? = null,
 )
 
 @Serializable
@@ -148,6 +152,8 @@ data class Flight(
     val seats: List<Seat> = emptyList(),
     /** Key of the seat map chosen by hand ([de.wanderlogplus.shared.seatmap.SeatMaps]); null: found by the number. */
     val seatMap: String? = null,
+    /** When seats can and must be reserved; null: no deadline. */
+    val reservation: ReservationWindow? = null,
 )
 
 @Serializable
@@ -175,6 +181,8 @@ data class Train(
     val seats: List<Seat> = emptyList(),
     /** Key of the seat map chosen by hand ([de.wanderlogplus.shared.seatmap.SeatMaps]); null: found by the number. */
     val seatMap: String? = null,
+    /** When seats can and must be reserved; null: no deadline. */
+    val reservation: ReservationWindow? = null,
 )
 
 @Serializable

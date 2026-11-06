@@ -5,7 +5,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 
-data class Deadline(val date: String, val stay: Stay)
+data class StayDeadline(val date: String, val stay: Stay)
 
 sealed interface Movement {
     val date: String
@@ -35,7 +35,7 @@ fun movementsOn(flights: List<Flight>, trains: List<Train>, date: String): List<
         .sortedWith(compareBy(nullsLast()) { it.time?.takeIf { t -> t.isNotBlank() } })
 
 sealed interface TodayState {
-    data class Before(val daysUntilStart: Long, val deadlines: List<Deadline>) : TodayState
+    data class Before(val daysUntilStart: Long, val deadlines: List<StayDeadline>) : TodayState
     data class During(val day: DayView, val movements: List<Movement>) : TodayState
     data object After : TodayState
     data object Unknown : TodayState
@@ -55,10 +55,10 @@ class TodayQueries(
     /** Flights and trains departing on [date], by departure time (missing last). */
     fun movementsOn(date: String): List<Movement> = movementsOn(flights, trains, date)
 
-    private fun deadlines(today: LocalDate): List<Deadline> =
+    private fun deadlines(today: LocalDate): List<StayDeadline> =
         stays.mapNotNull { s ->
             val d = parseOrNull(s.cancellationDeadline?.take(10)) ?: return@mapNotNull null
-            if (d < today) null else Deadline(d.toString(), s)
+            if (d < today) null else StayDeadline(d.toString(), s)
         }.sortedBy { it.date }
 
     fun state(today: LocalDate): TodayState {
