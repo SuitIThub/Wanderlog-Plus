@@ -156,4 +156,17 @@ class LogisticsManageTest {
         rule.onNodeWithTag("delete-confirm").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(listOf(EntityType.STAY to "st"), deleted)
     }
+
+    @Test fun classSeatsAndSeatMapAreSaved() {
+        val s = de.wanderlogplus.app.testing.Fixtures.trip()
+        val d = MoveDraft("JR", "ICE 571", de.wanderlogplus.shared.model.Endpoint("Hannover"), emptyList(), de.wanderlogplus.shared.model.Endpoint("Frankfurt"))
+            .copy(travelClass = "2. Klasse", seats = listOf(de.wanderlogplus.shared.model.Seat("12", "111"), de.wanderlogplus.shared.model.Seat("12", "114")), seatMap = "db-ice4-2kl")
+        val (_, after) = draftChanges(s, de.wanderlogplus.shared.sync.EntityType.TRAIN, NEW_ID, d)
+        val t = de.wanderlogplus.shared.model.EntityCodec.decode<de.wanderlogplus.shared.model.Train>(
+            de.wanderlogplus.shared.sync.EntityRecord(de.wanderlogplus.shared.sync.EntityType.TRAIN, "x", after.mapValues { (_, v) -> de.wanderlogplus.shared.sync.FieldValue(v, "000000000000001-000000-a") }),
+        )
+        org.junit.Assert.assertEquals("2. Klasse", t.travelClass)
+        org.junit.Assert.assertEquals(listOf("111", "114"), t.seats.map { it.seat })
+        org.junit.Assert.assertEquals("db-ice4-2kl", t.seatMap)
+    }
 }

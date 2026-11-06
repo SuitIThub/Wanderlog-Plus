@@ -401,7 +401,7 @@ class ChatAgentTest {
                 de.wanderlogplus.shared.model.Flight("f1", airline = "ANA", number = "NH204", depart = Endpoint("Frankfurt", "FRA", date = "2027-05-17", time = "20:55"), arrive = Endpoint("Tokyo Haneda", "HND", date = "2027-05-18", time = "16:00"), journeyId = "j"),
                 de.wanderlogplus.shared.model.Flight("f2", airline = "ANA", number = "NH23", depart = Endpoint("Tokyo Haneda", "HND", date = "2027-05-18", time = "18:00"), arrive = Endpoint("Osaka Itami", "ITM", date = "2027-05-18", time = "19:10"), journeyId = "j"),
             ),
-            trains = trip.trains.map { it.copy(number = "Nozomi 21") },
+            trains = trip.trains.map { it.copy(number = "Nozomi 21", travelClass = "Green Car", seats = listOf(de.wanderlogplus.shared.model.Seat("9", "5A"), de.wanderlogplus.shared.model.Seat("9", "5B"))) },
         )
         val agent = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }
         val (stable, _) = agent.systemParts(withMore, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
@@ -413,7 +413,7 @@ class ChatAgentTest {
         // Sorted by region, then name: Kyoto before Nara before Tokyo.
         assertTrue(stable.indexOf("[id=s-ramen]") < stable.indexOf("[id=s-deer]") && stable.indexOf("[id=s-deer]") < stable.indexOf("[id=s-shib]"))
         assertTrue("- Reise:\n  - Flug ANA NH204: Frankfurt (FRA) Mo 17.05. 20:55 → Tokyo Haneda (HND) Di 18.05. 16:00\n  - Flug ANA NH23: Tokyo Haneda (HND) Di 18.05. 18:00 → Osaka Itami (ITM) Di 18.05. 19:10\n" in stable, stable)
-        assertTrue("- Zug JR Nozomi 21: Kyoto Sa 22.05. 09:10 → Tokyo Sa 22.05. 11:20\n" in stable, stable)
+        assertTrue("- Zug JR Nozomi 21: Kyoto Sa 22.05. 09:10 → Tokyo Sa 22.05. 11:20 · Green Car · Wagen 9, 5A + 5B\n" in stable, stable)
         assertFalse("SECRET" in stable)
         assertFalse("Heutiges Datum" in stable || "2027-05-19\n" in stable.substringAfter("Hinterlegte Orte").take(0))
         // The same trip gives the same bytes on another day and screen, weather or not: the prompt cache keeps hitting.

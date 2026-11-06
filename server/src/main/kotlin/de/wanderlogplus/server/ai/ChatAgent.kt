@@ -245,7 +245,8 @@ object ChatContextText {
         val rides = t.flights.map { f ->
             Ride(
                 f.journeyId, f.journeyOrder, key(f.depart),
-                "Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).joinToString(" ") + ": " + ep(f.depart) + " → " + ep(f.arrive) + via(f.via),
+                "Flug " + listOfNotNull(f.airline ?: f.airlineCode, f.number).joinToString(" ") + ": " + ep(f.depart) + " → " + ep(f.arrive) + via(f.via) +
+                    (de.wanderlogplus.shared.seatmap.seatLine(f.travelClass, f.seats)?.let { " · $it" } ?: ""),
             )
         } + t.trains.map { tr ->
             val connection = tr.transit?.routes?.firstOrNull()?.legs?.filter { !it.walk }?.takeIf { it.isNotEmpty() }?.joinToString(" → ") { l ->
@@ -255,6 +256,7 @@ object ChatContextText {
             Ride(
                 tr.journeyId, tr.journeyOrder, key(tr.depart),
                 "Zug" + (if (name.isEmpty()) "" else " $name") + ": " + ep(tr.depart) + " → " + ep(tr.arrive) + via(tr.via) +
+                    (de.wanderlogplus.shared.seatmap.seatLine(tr.travelClass, tr.seats)?.let { " · $it" } ?: "") +
                     (connection?.let { "; Verbindung: $it" } ?: ""),
             )
         }

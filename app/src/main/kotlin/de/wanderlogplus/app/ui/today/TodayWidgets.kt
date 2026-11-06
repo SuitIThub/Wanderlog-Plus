@@ -406,6 +406,10 @@ internal fun NextTripWidget(
                 }
                 Text(prefix + move.movement.timesLine(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 move.movement.platform()?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("next-trip-platform")) }
+                when (val m = move.movement) {
+                    is Movement.TrainMove -> de.wanderlogplus.shared.seatmap.seatLine(m.train.travelClass, m.train.seats)
+                    is Movement.FlightMove -> de.wanderlogplus.shared.seatmap.seatLine(m.flight.travelClass, m.flight.seats)
+                }?.let { Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("next-trip-seats")) }
                 (move.movement as? Movement.TrainMove)?.let { tm ->
                     if (de.wanderlogplus.app.ui.logistics.LocalTrainLive.current != null) {
                         de.wanderlogplus.app.ui.logistics.rememberTrainLive(tm.train.id)?.shortLine()?.let {
