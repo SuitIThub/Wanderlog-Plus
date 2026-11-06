@@ -67,7 +67,12 @@ class AppNavigationSmokeTest {
         val files = AttachmentFiles(tmp.newFolder("att"))
         val imported = files.importStream("not really a jpeg".byteInputStream())
         val ticket = Attachment("a-ticket", EntityType.TRAIN, "tr-1", imported.hash, "Buchung.jpg", "image/jpeg", imported.size)
-        val snapshot: TripSnapshot = Fixtures.trip().copy(attachments = listOf(ticket))
+        val onsen = de.wanderlogplus.shared.model.Guide(
+            "g-onsen", topic = "onsen", title = "Onsen-Knigge", summary = "Erst waschen, dann baden.",
+            sections = listOf(de.wanderlogplus.shared.model.GuideSection("Ablauf", "So geht's.", dos = listOf("Waschen"), donts = listOf("Handtuch ins Wasser"))),
+            phrases = listOf(de.wanderlogplus.shared.model.GuidePhrase("Wo ist das Bad?", "お風呂はどこですか？", "ofuro wa doko desu ka?")),
+        )
+        val snapshot: TripSnapshot = Fixtures.trip().copy(attachments = listOf(ticket), guides = listOf(onsen))
         val flow = MutableStateFlow<TripSnapshot?>(snapshot)
         rule.setContent {
             WanderlogPlusTheme {
@@ -80,6 +85,7 @@ class AppNavigationSmokeTest {
                     placesViewModelFactory = factory { PlacesViewModel({ flow }, edit, scope) },
                     moreViewModelFactory = factory { MoreViewModel({ flow }, edit, scope) },
                     budgetViewModelFactory = factory { de.wanderlogplus.app.ui.budget.BudgetViewModel(edit, scope, { null }, { "2027-04-02" }) },
+                    guidesViewModelFactory = factory { de.wanderlogplus.app.ui.guides.GuidesViewModel(edit, scope, { null }, { null }) },
                     importViewModelFactory = factory { ImportViewModel({ null }, onImported = {}) },
                     vaultScanViewModelFactory = factory {
                         de.wanderlogplus.app.ui.vault.VaultScanViewModel({ MutableStateFlow(null) }, { MutableStateFlow(0) }, { MutableStateFlow(0) }, {}, {})
@@ -197,6 +203,18 @@ class AppNavigationSmokeTest {
         shows("notes-list")
         tag("note-n-1").tap(); rule.waitForIdle()
         shows("note-detail")
+    }
+
+    @Test fun guidesAndGuideDetail() {
+        launch()
+        tab("mehr")
+        rule.onNodeWithText("Guides").tap(); rule.waitForIdle()
+        shows("guides")
+        shows("guide-suggestions")
+        rule.onNodeWithText("Japanisch für unterwegs").assertExists()
+        rule.onNodeWithText("Onsen-Knigge").tap(); rule.waitForIdle()
+        shows("guide-detail")
+        rule.onNodeWithText("お風呂はどこですか？").assertExists()
     }
 
     @Test fun importAndConflicts() {

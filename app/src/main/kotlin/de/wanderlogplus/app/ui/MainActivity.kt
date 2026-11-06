@@ -226,6 +226,7 @@ class MainActivity : ComponentActivity() {
                         reelsViewModelFactory = remember { reelsFactory(container) },
                         chatViewModelFactory = remember { chatFactory(container) },
                         budgetViewModelFactory = remember { budgetFactory(container) },
+                        guidesViewModelFactory = remember { guidesFactory(container) },
                         vaultScanViewModelFactory = remember { vaultScanFactory(container) },
                         hasAdminToken = hasAdminToken,
                         pendingReelJob = reelJob,
@@ -310,6 +311,15 @@ class MainActivity : ComponentActivity() {
             adminApi = { t -> container.adminApi(t) },
             loadToken = { container.settings.adminToken() },
             saveToken = { t -> container.settings.setAdminToken(t) },
+        ) as T
+    }
+
+    private fun guidesFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.guides.GuidesViewModel(
+            { block -> container.edit(block) }, container.scope,
+            startGuides = { asks -> container.syncApi()?.startGuides(asks) },
+            job = { id -> container.syncApi()?.aiJob(id) },
         ) as T
     }
 
