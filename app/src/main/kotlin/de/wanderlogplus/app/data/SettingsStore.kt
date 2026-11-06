@@ -70,6 +70,19 @@ class SettingsStore(context: Context) : SyncStateStore {
         }
     }
 
+    private val myNameKey = stringPreferencesKey("my_name")
+    private val myNameTokenKey = stringPreferencesKey("my_name_token")
+
+    /** The own access name as last asked from the server, while the token is still the same; null otherwise. */
+    suspend fun myName(): String? {
+        val p = appContext.serverDataStore.data.first()
+        return p[myNameKey]?.takeIf { it.isNotBlank() && p[myNameTokenKey] == p[tokenKey] }
+    }
+
+    suspend fun setMyName(name: String) {
+        appContext.serverDataStore.edit { it[myNameKey] = name; it[myNameTokenKey] = it[tokenKey].orEmpty() }
+    }
+
     private val adminTokenKey = stringPreferencesKey("admin_token")
 
     /** The admin token for "Zugänge verwalten" (per profile); never used for sync. */

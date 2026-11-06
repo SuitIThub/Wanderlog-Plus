@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.46.0
+
+- **Abstimmen über Orte:** Am Ort gibt jeder Zugang 👍 (+1), 👍👍 (+2, „will ich unbedingt“) oder 👎 (−2); nochmal tippen nimmt die Stimme zurück. Wer wie gestimmt hat, steht mit Namen darunter; in der Ortsliste steht die Punktzahl.
+- **Automatisch „Vorgemerkt“:** Ab 2 Punkten wird aus einer Idee „Vorgemerkt“, fällt die Punktzahl unter 2, wird sie wieder zur Idee. Der Server prüft das nach jeder Stimme nach und nimmt nur die eigene Stimme eines Zugangs an.
+- **Hinweis bei geplanten Orten:** Fällt ein geplanter Ort unter 2 Punkte, erscheint „Kaum noch Zustimmung“ auf der Heute-Seite und in der Tagesansicht des geplanten Tags (nur, wenn jemand abgestimmt hat).
+
 ## 0.45.0
 
 - **Neuer Zustand „Vorgemerkt“** zwischen „Idee“ und „Geplant“: für Orte, die ihr eher machen wollt. Vorgemerkte Orte erscheinen wie Ideen in den Tagesvorschlägen und im Chat und werden beim Einplanen zu „Geplant“.

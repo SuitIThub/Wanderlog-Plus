@@ -385,6 +385,8 @@ fun AppNavigation(
                 onSetHeaderImage = vm::setHeaderImage, onSetLinks = vm::setLinks,
                 onSetReserved = vm::setReserved,
                 onSetReservationWindow = vm::setReservationWindow,
+                me = vm.me.collectAsState().value,
+                onVote = vm::vote,
                 onDelete = { sid -> vm.delete(sid); onBack?.invoke() },
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,

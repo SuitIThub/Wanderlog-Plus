@@ -188,7 +188,7 @@ fun RegionPlacesScreen(
             }
             groups.forEach { g ->
                 item(key = g.key) { SectionLabel(g.label, Modifier.testTag(g.key), color = accent) }
-                items(g.places, key = { it.saved.id }) { s -> PlaceCard(s, accent) { onOpenPlace(s.saved.id) } }
+                items(g.places, key = { it.saved.id }) { s -> PlaceCard(s, accent, snapshot.votes) { onOpenPlace(s.saved.id) } }
             }
         }
     }
@@ -235,7 +235,8 @@ private fun ResearchRegionDialog(all: List<Suggestion>, onResearch: (List<String
 }
 
 @Composable
-private fun PlaceCard(s: Suggestion, accent: Color, onClick: () -> Unit) {
+private fun PlaceCard(s: Suggestion, accent: Color, votes: List<de.wanderlogplus.shared.model.Vote>, onClick: () -> Unit) {
+    val score = votes.filter { it.savedPlaceId == s.saved.id && it.value != 0 }.takeIf { it.isNotEmpty() }?.sumOf { it.value }
     PhotoCard(
         title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
         subtitle = s.place?.let(::ratingText),
@@ -245,7 +246,12 @@ private fun PlaceCard(s: Suggestion, accent: Color, onClick: () -> Unit) {
         style = PhotoCardStyle.Compact,
         badges = s.saved.tags.map(::tagBadge),
         onClick = onClick,
-        trailing = { StatusIndicator(s.saved.id, s.saved.status) },
+        trailing = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                score?.let { Text(if (it > 0) "+$it" else "$it", style = MaterialTheme.typography.labelMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, modifier = Modifier.padding(end = 6.dp).testTag("vote-score-${s.saved.id}")) }
+                StatusIndicator(s.saved.id, s.saved.status)
+            }
+        },
         modifier = Modifier.testTag("place-${s.saved.id}"),
     )
 }
