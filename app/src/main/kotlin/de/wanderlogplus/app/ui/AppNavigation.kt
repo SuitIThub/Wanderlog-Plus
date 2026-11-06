@@ -538,6 +538,7 @@ fun AppNavigation(
                                 onOpenLink = onOpenLink,
                                 available = attachmentActions?.available ?: { true },
                                 onOpenPlace = { id -> nav.navigateToTab(Tab.ORTE); nav.navigate(placeRoute(id)) },
+                                onOpenLogistics = { t, id -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(t, id)) },
                             )
                             }
                         }

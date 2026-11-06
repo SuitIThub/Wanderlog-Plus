@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.today
 
+import de.wanderlogplus.shared.sync.EntityType
+
 import de.wanderlogplus.app.ui.guides.guideWorld
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,8 +74,6 @@ import java.time.format.DateTimeFormatter
 private const val MAX_OPEN_NOW = 5
 private val HH_MM = DateTimeFormatter.ofPattern("HH:mm")
 
-/** During the trip only reservations for the next days are listed. */
-private const val RESERVATION_DAYS_DURING = 14L
 
 /** [now] is injected so tests can pin "today"; production passes the device's local time. */
 @Composable
@@ -92,7 +92,18 @@ fun TodayScreen(
     available: (hash: String) -> Boolean = { true },
     /** Opens a place (from "Fristen"); null: the rows are not tappable. */
     onOpenPlace: ((savedPlaceId: String) -> Unit)? = null,
+    /** Opens a stay, train or flight (from "Fristen"); null: those rows are not tappable. */
+    onOpenLogistics: ((EntityType, String) -> Unit)? = null,
 ) {
+    val openDeadline: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)? =
+        if (onOpenPlace == null && onOpenLogistics == null) null else { t, id ->
+            when (t) {
+                de.wanderlogplus.shared.query.DeadlineTarget.PLACE -> onOpenPlace?.invoke(id)
+                de.wanderlogplus.shared.query.DeadlineTarget.STAY -> onOpenLogistics?.invoke(EntityType.STAY, id)
+                de.wanderlogplus.shared.query.DeadlineTarget.TRAIN -> onOpenLogistics?.invoke(EntityType.TRAIN, id)
+                de.wanderlogplus.shared.query.DeadlineTarget.FLIGHT -> onOpenLogistics?.invoke(EntityType.FLIGHT, id)
+            }
+        }
     val trip = snapshot.trip
     val queries = remember(snapshot) { snapshot.queries() }
     val state = remember(snapshot, now.toLocalDate()) {
@@ -101,12 +112,12 @@ fun TodayScreen(
     }
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
-        is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, onOpenPlace, modifier)
+        is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, openDeadline, modifier)
         TodayState.After -> Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
         }
-        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, onOpenPlace, modifier)
+        is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, openDeadline, modifier)
     }
 }
 
@@ -118,13 +129,13 @@ private fun Before(
     now: LocalDateTime,
     onOpenAttachment: (Attachment) -> Unit,
     available: (String) -> Boolean,
-    onOpenPlace: ((String) -> Unit)?,
+    onOpenPlace: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)?,
     modifier: Modifier,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val today = now.toLocalDate().toString()
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
-    val deadlines = remember(snapshot, today) { deadlineRows(snapshot, today, null) }
+    val deadlines = remember(snapshot, today) { deadlineRows(snapshot, today) }
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Box(Modifier.fillMaxWidth().height(150.dp).background(heroGradient(accent))) {
             Column(Modifier.align(Alignment.BottomStart).padding(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
@@ -170,7 +181,7 @@ private fun During(
     onOpenAttachment: (Attachment) -> Unit,
     onOpenLink: ((ExternalLink) -> Unit)?,
     available: (String) -> Boolean,
-    onOpenPlace: ((String) -> Unit)?,
+    onOpenPlace: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)?,
     modifier: Modifier,
 ) {
     val view = state.day
@@ -187,7 +198,7 @@ private fun During(
         DayNow.layout(items, snapshot.places, snapshot.savedPlaces, state.movements, stayPlace, nowMin)
     }
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
-    val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date, RESERVATION_DAYS_DURING) }
+    val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date) }
     val openNow = remember(snapshot, date, now) {
         val dow = now.dayOfWeek.value % 7 // 0 = Sunday
         val time = now.format(HH_MM)
