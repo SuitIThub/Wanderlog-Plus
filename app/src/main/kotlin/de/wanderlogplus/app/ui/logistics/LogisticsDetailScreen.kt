@@ -181,6 +181,16 @@ fun LogisticsDetailScreen(
                 if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
 
+            val train = if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id } else null
+            val flight = if (type == EntityType.FLIGHT) snapshot.flights.firstOrNull { it.id == id } else null
+            val seatModel = train?.let { de.wanderlogplus.shared.seatmap.SeatMaps.modelFor(it) } ?: flight?.let { de.wanderlogplus.shared.seatmap.SeatMaps.modelFor(it) }
+            val seats = train?.seats ?: flight?.seats.orEmpty()
+            val travelClass = train?.travelClass ?: flight?.travelClass
+            if (seats.isNotEmpty() || !travelClass.isNullOrBlank()) {
+                SectionLabel("Sitzplätze", color = view.accent)
+                InfoCard { SeatCard(seatModel, travelClass, seats) }
+            }
+
             val guideTarget = when (type) {
                 EntityType.STAY -> de.wanderlogplus.shared.model.GuideTargetType.STAY
                 EntityType.TRAIN -> de.wanderlogplus.shared.model.GuideTargetType.TRAIN
