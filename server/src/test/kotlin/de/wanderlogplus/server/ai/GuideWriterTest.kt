@@ -101,6 +101,26 @@ class GuideWriterTest {
     }
 
     @Test
+    fun `a failed save does not stop the other guides`() {
+        var calls = 0
+        val j = AiJobs(
+            store, null, object : ReelMedia {
+                override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
+                override fun extract(video: java.nio.file.Path, dir: java.nio.file.Path) = throw DownloadFailed()
+            },
+            tmp.resolve("work-x"), executor = Executors.newSingleThreadExecutor(),
+            writeResults = { edits -> if (calls++ == 0) error("disk full") else sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+            guideWriter = GuideWriter(facts, Scripted { answer("Guide") }),
+        )
+        val started = j.startGuides(listOf(GuideAsk(topic = "onsen"), GuideAsk(topic = "ryokan")))
+        j.drain()
+        val job = j.get(started.id)!!
+        assertEquals("DONE", job.status)
+        assertEquals(listOf("FAILED", "DONE"), job.items.map { it.state })
+        assertEquals(listOf("ryokan"), storedGuides().map { it.topic })
+    }
+
+    @Test
     fun `asking for an existing topic rewrites that guide`() {
         val j = jobs(Scripted { answer("Onsen & Sentō") })
         j.startGuides(listOf(GuideAsk(topic = "onsen"))); j.drain()

@@ -773,7 +773,8 @@ class ChatTools(
     private fun guideOf(args: JsonObject): de.wanderlogplus.shared.model.Guide? = args.s("guideId")?.let { id -> guideList.firstOrNull { it.id == id } }
 
     private fun keep(g: de.wanderlogplus.shared.model.Guide, port: ChatGuides) {
-        port.saveGuide(g)
+        val before = guideList.firstOrNull { it.id == g.id } ?: return
+        port.saveGuide(before, g)
         guideList.replaceAll { if (it.id == g.id) g else it }
     }
 
@@ -818,11 +819,15 @@ class ChatTools(
 
     private fun setTriggers(args: JsonObject, port: ChatGuides): String {
         val g = guideOf(args) ?: return "Unbekannter Guide."
-        val triggers = (args["triggers"] as? JsonArray).orEmpty().mapNotNull { e ->
+        val given = (args["triggers"] as? JsonArray).orEmpty()
+        val triggers = given.mapNotNull { e ->
             try { json.decodeFromJsonElement(de.wanderlogplus.shared.model.GuideTrigger.serializer(), e) } catch (x: Exception) { null }
         }
+        if (given.isNotEmpty() && triggers.isEmpty()) return "Keine der Regeln war lesbar; die bisherigen Regeln bleiben. Erlaubt sind die Arten aus der Werkzeugbeschreibung."
         keep(g.copy(extraTriggers = triggers), port)
-        return "Regeln von „${g.title}“ gespeichert: " + (if (triggers.isEmpty()) "keine zusätzlichen." else "${triggers.size}.")
+        val skipped = given.size - triggers.size
+        return "Regeln von „${g.title}“ gespeichert: " + (if (triggers.isEmpty()) "keine zusätzlichen." else "${triggers.size}.") +
+            (if (skipped > 0) " $skipped unlesbare ausgelassen." else "")
     }
 
     private fun JsonObject.s(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
@@ -1265,8 +1270,15 @@ class ChatTools(
 
 /** What the chat may do with guides: save one right away (pins, hides, rules), or start a job that writes guides. */
 interface ChatGuides {
-    fun saveGuide(g: de.wanderlogplus.shared.model.Guide)
+    /** Saves the change from [before] to [after]; only the fields that differ are written ([guideChanges]). */
+    fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide)
     fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>): de.wanderlogplus.shared.sync.AiJobInfo
+}
+
+/** The fields that differ between two versions of a guide, so a pin never rewrites (and reverts) the text. */
+fun guideChanges(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide): Map<String, kotlinx.serialization.json.JsonElement> {
+    val old = EntityCodec.fields(before)
+    return EntityCodec.fields(after).filter { (k, v) -> old[k] != v }
 }
 
 /** An assistant answer: text (Markdown) and the cards below it. */

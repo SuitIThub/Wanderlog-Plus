@@ -93,6 +93,11 @@ class AiJobs(
                 } catch (e: AiFailed) {
                     t.item(key, state = "FAILED", detail = failText(e.code))
                     t.step("${label(ask)}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    // One guide that cannot be saved must not stop the rest.
+                    log.error("Guide failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                    t.step("${label(ask)}: " + failText("internal"), JobProgress.WARN)
                 }
                 t.update { it.copy(progress = i + 1) }
             }

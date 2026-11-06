@@ -438,8 +438,12 @@ class ChatAgentTest {
 
     private class FakeGuides : ChatGuides {
         val saved = mutableListOf<de.wanderlogplus.shared.model.Guide>()
+        val fields = mutableListOf<Set<String>>()
         val started = mutableListOf<List<de.wanderlogplus.shared.sync.GuideAsk>>()
-        override fun saveGuide(g: de.wanderlogplus.shared.model.Guide) { saved += g }
+        override fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide) {
+            saved += after
+            fields += guideChanges(before, after).keys
+        }
         override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) =
             de.wanderlogplus.shared.sync.AiJobInfo("job-1", "guides", 0, "QUEUED").also { started += asks }
     }
@@ -458,7 +462,10 @@ class ChatAgentTest {
         assertFalse(r.startsWith("Unbekannt"), r)
         val pin = de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.PLACE, "s-kiyo")
         assertEquals(listOf(pin), g.saved.last().pinnedTo)
+        // Only the changed fields are written, so a pin never reverts someone's edit of the text.
+        assertEquals(setOf("pinnedTo"), g.fields.last())
         tools.run("unassign_guide", """{"guideId":"g1","targetType":"PLACE","targetId":"s-kiyo"}""")
+        assertEquals(setOf("pinnedTo", "hiddenFrom"), g.fields.last())
         assertEquals(emptyList(), g.saved.last().pinnedTo)
         assertEquals(listOf(pin), g.saved.last().hiddenFrom)
     }
@@ -479,6 +486,15 @@ class ChatAgentTest {
             listOf<de.wanderlogplus.shared.model.GuideTrigger>(de.wanderlogplus.shared.model.GuideTrigger.Text(listOf("ryokan"), de.wanderlogplus.shared.model.TriggerOn.STAY)),
             g.saved.single().extraTriggers,
         )
+        assertEquals(setOf("extraTriggers"), g.fields.single())
+    }
+
+    @Test
+    fun `unreadable triggers do not wipe the rules`() {
+        val g = FakeGuides()
+        val r = ChatTools(withGuides(), null, guides = g) {}.run("set_guide_triggers", """{"guideId":"g1","triggers":[{"kind":"nonsense"},"x"]}""")
+        assertTrue(r.startsWith("Keine der Regeln"), r)
+        assertTrue(g.saved.isEmpty())
     }
 
     @Test

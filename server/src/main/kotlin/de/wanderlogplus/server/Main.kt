@@ -62,8 +62,9 @@ fun main() {
     )
     // The chat saves guide pins and rules right away and writes guides through the guides job.
     val chatGuides = object : de.wanderlogplus.server.ai.ChatGuides {
-        override fun saveGuide(g: de.wanderlogplus.shared.model.Guide) {
-            sync.writeAsServer(ASSISTANT_AUTHOR, listOf(ServerEdit(de.wanderlogplus.shared.sync.EntityType.GUIDE, g.id, de.wanderlogplus.shared.model.EntityCodec.fields(g), create = true)))
+        override fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide) {
+            val changed = de.wanderlogplus.server.ai.guideChanges(before, after)
+            if (changed.isNotEmpty()) sync.writeAsServer(ASSISTANT_AUTHOR, listOf(ServerEdit(de.wanderlogplus.shared.sync.EntityType.GUIDE, after.id, changed)))
         }
         override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) = aiJobs.startGuides(asks)
     }.takeIf { aiJobs.guidesConfigured }
