@@ -146,21 +146,31 @@ class Assistant(
 
     /**
      * Coordinates of a reel place: the full name with city, the local name, the bare name; then ever shorter names
-     * ("Sunshine 60 Observatory TENBOU PARK" -> "Sunshine 60") with the city, accepted only within [SHORT_NAME_MAX_KM]
-     * of the city. Returns the hit or why there is none ("not_found", "unavailable").
+     * ("Sunshine 60 Observatory TENBOU PARK" -> "Sunshine 60") with the city. With a known city every hit must lie
+     * within [CITY_MAX_KM] of it ([SHORT_NAME_MAX_KM] for shortened names), so a namesake elsewhere ("Mizuno" in
+     * Yokohama for an Osaka okonomiyaki place) is never taken; without one, a place in Japan must be in Japan.
+     * Returns the hit or why there is none ("not_found", "unavailable").
      */
     internal fun locate(p: FoundPlace, say: (String) -> Unit = {}): Pair<GeoHit?, String?> = try {
+        val city = p.city?.takeIf { it.isNotBlank() }?.let { geocoder.find(it) }
+        val inJapan = p.country.isNullOrBlank() || p.country.lowercase().let { "jap" in it || it == "jp" || "日本" in it }
+        fun fits(h: GeoHit, maxKm: Double): Boolean = when {
+            city != null -> distanceKm(city.lat, city.lng, h.lat, h.lng) <= maxKm
+            inJapan -> h.country == null || h.country.equals("JP", ignoreCase = true) || "japan" in h.country.lowercase() || "日本" in h.country
+            else -> true
+        }
         val full = listOfNotNull(listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name).distinct()
-        full.firstNotNullOfOrNull { geocoder.find(it) }?.let { return it to null }
+        full.firstNotNullOfOrNull { q ->
+            geocoder.find(q)?.let { h -> if (fits(h, CITY_MAX_KM)) h else { say("„$q“ liegt zu weit weg (Namensvetter?), verworfen"); null } }
+        }?.let { return it to null }
         val words = p.name.trim().split(Regex("\\s+"))
-        val city = p.city?.takeIf { it.isNotBlank() && words.size > 2 }?.let { geocoder.find(it) }
-        val shortHit = city?.let { c ->
+        val shortHit = city?.takeIf { words.size > 2 }?.let {
             (words.size - 1 downTo 2).asSequence()
                 .map { k -> words.take(k).joinToString(" ") }
                 .filter { it.length >= 4 }
                 .firstNotNullOfOrNull { short ->
                     geocoder.find("$short ${p.city}")
-                        ?.takeIf { distanceKm(c.lat, c.lng, it.lat, it.lng) <= SHORT_NAME_MAX_KM }
+                        ?.takeIf { h -> fits(h, SHORT_NAME_MAX_KM) }
                         ?.also { say("Lage über den kürzeren Namen „$short“ gefunden") }
                 }
         }
@@ -303,6 +313,9 @@ class Assistant(
 
         /** A hit for a shortened name must lie this close to the named city. */
         const val SHORT_NAME_MAX_KM = 25.0
+
+        /** How far from its city a reel place may lie (city areas plus their outskirts). */
+        const val CITY_MAX_KM = 40.0
         const val ASSESS_BATCH = 25
         internal val CATEGORIES = setOf("SIGHT", "FOOD", "SHOPPING", "NIGHTLIFE", "OTHER")
 
