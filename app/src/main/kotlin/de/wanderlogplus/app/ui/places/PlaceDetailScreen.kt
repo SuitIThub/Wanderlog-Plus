@@ -1,5 +1,8 @@
 package de.wanderlogplus.app.ui.places
 
+import de.wanderlogplus.app.ui.logistics.toDraft
+import de.wanderlogplus.app.ui.logistics.toWindow
+
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -151,6 +154,8 @@ fun PlaceDetailScreen(
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
     /** "Reserviert" for a place that needs a reservation. */
     onSetReserved: (savedPlaceId: String, reserved: Boolean) -> Unit = { _, _ -> },
+    /** "Fristen ändern" in the reservation card; null hides it. */
+    onSetReservationWindow: ((savedPlaceId: String, window: de.wanderlogplus.shared.model.ReservationWindow?) -> Unit)? = null,
     /** Own header image (null: default); null callback hides "Titelbild ändern". */
     onSetHeaderImage: ((savedPlaceId: String, ref: String?) -> Unit)? = null,
     /** Own links; null hides "Link". */
@@ -234,7 +239,19 @@ fun PlaceDetailScreen(
                 }
             }
             val reason = remember(saved) { de.wanderlogplus.shared.query.Reservations.reason(saved) }
-            if (reason != null || saved.reserved) ReservationRow(reason, saved.reserved) { onSetReserved(saved.id, it) }
+            val visit = remember(snapshot, saved, today) {
+                de.wanderlogplus.shared.query.ReservationDates.visitDate(
+                    saved, snapshot.days, snapshot.dayItems, snapshot.queries()?.days().orEmpty(), today ?: java.time.LocalDate.now().toString(),
+                )
+            }
+            val window = remember(saved, visit) { de.wanderlogplus.shared.query.ReservationDates.windowFor(saved, visit) }
+            val estimated = visit?.second == true && saved.reservationWindow == null
+            if (reason != null || saved.reserved || window != null) {
+                ReservationRow(
+                    reason, saved.reserved, window?.let { de.wanderlogplus.app.ui.logistics.reservationText(it, estimated) },
+                    onEditWindow = onSetReservationWindow?.let { set -> { set(saved.id, it) } }, current = saved.reservationWindow ?: window,
+                ) { onSetReserved(saved.id, it) }
+            }
         }
 
         val builtIn = remember(place, saved.category) { place?.let { GoogleExternalLinks.linksFor(it, saved.category) }.orEmpty() }
@@ -449,7 +466,15 @@ internal fun programDaysOf(snapshot: TripSnapshot, saved: SavedPlace): Int {
 
 /** "Reservierung nötig" with the reason and the "Reserviert" switch. */
 @Composable
-private fun ReservationRow(reason: String?, reserved: Boolean, onReserved: (Boolean) -> Unit) {
+private fun ReservationRow(
+    reason: String?,
+    reserved: Boolean,
+    windowText: String?,
+    onEditWindow: ((de.wanderlogplus.shared.model.ReservationWindow?) -> Unit)?,
+    current: de.wanderlogplus.shared.model.ReservationWindow?,
+    onReserved: (Boolean) -> Unit,
+) {
+    var editing by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
     androidx.compose.material3.Surface(
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
@@ -466,8 +491,28 @@ private fun ReservationRow(reason: String?, reserved: Boolean, onReserved: (Bool
             Column(Modifier.weight(1f)) {
                 Text(if (reserved) "Reserviert" else "Reservierung nötig", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 reason?.let { Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+                windowText?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
+                if (onEditWindow != null) {
+                    androidx.compose.material3.TextButton(onClick = { editing = true }, modifier = Modifier.testTag("place-reservation-edit")) { Text("Fristen ändern") }
+                }
             }
             androidx.compose.material3.Switch(checked = reserved, onCheckedChange = onReserved, modifier = Modifier.testTag("place-reserved-toggle"))
+        }
+    }
+    if (editing && onEditWindow != null) {
+        var draft by remember { mutableStateOf(current.toDraft()) }
+        val problem = de.wanderlogplus.app.ui.logistics.validateReservation(draft)
+        EditSheet("Reservierungsfristen", onDismiss = { editing = false }) {
+            de.wanderlogplus.app.ui.logistics.ReservationFields(draft, showDone = false, onChange = { draft = it })
+            problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.TextButton(onClick = { editing = false }) { Text("Abbrechen") }
+                androidx.compose.material3.Button(
+                    onClick = { onEditWindow(draft.toWindow(current)); editing = false },
+                    enabled = problem == null,
+                    modifier = Modifier.testTag("place-reservation-save"),
+                ) { Text("Speichern") }
+            }
         }
     }
 }

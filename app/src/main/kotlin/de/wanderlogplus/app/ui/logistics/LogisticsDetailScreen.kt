@@ -328,6 +328,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                     "Ankunft" to endpointText(f.arrive),
                     f.airline?.takeIf { it.isNotBlank() }?.let { "Airline" to it },
                     de.wanderlogplus.shared.seatmap.seatLine(f.travelClass, f.seats)?.let { "Sitzplätze" to it },
+                    f.reservation?.let { "Reservierung" to reservationText(it, estimated = false) },
                 ) + booking(f.confirmationNumber, f.travelerNames),
                 note = f.note,
                 liveStatus = true,
@@ -349,6 +350,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                     "Ankunft" to endpointText(t.arrive),
                     t.transit?.routes?.firstOrNull()?.let { r -> "Verbindung" to transitSummary(r) },
                     de.wanderlogplus.shared.seatmap.seatLine(t.travelClass, t.seats)?.let { "Sitzplätze" to it },
+                    t.reservation?.let { "Reservierung" to reservationText(it, estimated = false) },
                 ) + booking(t.confirmationNumber, t.travelerNames),
                 note = t.note,
                 liveStatus = true,
@@ -378,6 +380,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 ) + booking(s.confirmationNumber, s.travelerNames) + listOfNotNull(
                     deadline?.let { "Stornofrist" to it },
                     s.cancellationPolicy?.takeIf { it.isNotBlank() }?.let { "Stornobedingungen" to it },
+                    s.reservation?.let { "Reservierung" to reservationText(it, estimated = false) },
                 ),
                 note = s.note,
                 liveStatus = false,
