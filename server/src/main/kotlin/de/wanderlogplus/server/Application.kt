@@ -51,6 +51,7 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
@@ -92,6 +93,8 @@ class Services(
     val photos: PlacePhotosService = PlacePhotosService(store, config.dataDir.resolve("place-photos"), null),
     /** Google's Text Search for "Ort suchen"; without a key `/api/places/search` answers `places_search_not_configured`. */
     val placesSearch: GooglePlacesSearch = GooglePlacesSearch(null, store),
+    /** "Online suchen" for photos: Google (via [placesSearch]/[photos]) and Wikimedia Commons. */
+    val webPhotos: WebPhotosService = WebPhotosService(placesSearch, photos::media, HttpWikimediaTransport()),
     /** Live status of flights (AirLabs). */
     val flightLive: FlightLiveService = FlightLiveService(store, null, null),
     /** Live status of Shinkansen. */
@@ -297,6 +300,21 @@ fun Application.module(services: Services) {
                 val near = call.request.queryParameters["near"]?.let(::parseLatLng)
                 val bbox = call.request.queryParameters["bbox"]?.let(::parseBBox)
                 call.respond(de.wanderlogplus.shared.sync.PlaceSearchHits(withContext(Dispatchers.IO) { services.placesSearch.search(q, near, bbox) }))
+            }
+            get("/api/photos/search") {
+                val q = call.request.queryParameters["q"]?.trim().orEmpty()
+                if (q.length !in 2..200) throw BadInput()
+                val near = call.request.queryParameters["near"]?.let(::parseLatLng)
+                call.respond(de.wanderlogplus.shared.sync.WebPhotos(withContext(Dispatchers.IO) { services.webPhotos.search(q, near) }))
+            }
+            get("/api/photos/media") {
+                val id = call.request.queryParameters["id"] ?: throw BadInput()
+                val w = call.request.queryParameters["w"]?.toIntOrNull() ?: 1600
+                val photo = withContext(Dispatchers.IO) {
+                    try { services.webPhotos.media(id, w) } catch (e: IllegalArgumentException) { throw BadInput() }
+                }
+                call.response.headers.append("X-Content-Type-Options", "nosniff")
+                call.respondBytes(photo.bytes, ContentType.parse(photo.mime))
             }
             get("/api/places/photos/media") {
                 val name = call.request.queryParameters["name"] ?: throw BadInput()

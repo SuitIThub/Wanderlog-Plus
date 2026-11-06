@@ -82,6 +82,12 @@ class ApplicationTest {
     }
 
     @Test
+    fun photoMediaBadIdIs400() = app {
+        val r = client.get("/api/photos/media?id=x:1") { authed() }
+        assertEquals(HttpStatusCode.BadRequest, r.status)
+    }
+
+    @Test
     fun placesSearchShortQueryIs400() = app {
         val r = client.get("/api/places/search?q=a") { authed() }
         assertEquals(HttpStatusCode.BadRequest, r.status)

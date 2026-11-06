@@ -21,3 +21,24 @@ data class GooglePlaceHit(
 
 @Serializable
 data class PlaceSearchHits(val hits: List<GooglePlaceHit> = emptyList())
+
+/** Where a web photo comes from. */
+@Serializable
+enum class WebPhotoSource { GOOGLE, WIKIMEDIA }
+
+/**
+ * A photo found online (`GET /api/photos/search`); the image itself comes from `/api/photos/media?id=`. [id] is
+ * `g:<Google photo name>` or `w:<Commons file title without "File:">`.
+ */
+@Serializable
+data class WebPhoto(
+    val id: String,
+    val source: WebPhotoSource,
+    val title: String = "",
+    val credit: String = "",
+    val width: Int = 0,
+    val height: Int = 0,
+)
+
+@Serializable
+data class WebPhotos(val photos: List<WebPhoto> = emptyList())
