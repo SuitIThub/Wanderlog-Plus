@@ -104,11 +104,15 @@ class GooglePlaceDetails(
             if (now().toEpochMilli() - at < TTL.toMillis()) return if (text == "{}") null else json.decodeFromString(GoogleDetails.serializer(), text)
         }
         val (status, body) = transport.details(googlePlaceId)
-        if (status in 500..599 || status == 429) return null // try again another time
+        // Only "not found" is remembered; overload, a rejected key or a bad request is tried again another time.
+        if (status !in 200..299 && status != 404) return null
         val details = if (status in 200..299) parse(body) else null
         store.putCachedRoute(key, details?.let { json.encodeToString(GoogleDetails.serializer(), it) } ?: "{}", now().toEpochMilli())
         return details
     }
+
+    /** Whether Google answered for this id (with details or "not found"), so asking again would not help. */
+    fun known(googlePlaceId: String): Boolean = store.cachedRoute("gdetails:$googlePlaceId") != null
 
     internal fun parse(body: String): GoogleDetails? {
         val o = try { json.parseToJsonElement(body).jsonObject } catch (e: Exception) { return null }
@@ -184,7 +188,11 @@ class PlaceEnricher(
         places.filter { it.googlePlaceId.isNotBlank() && it.openingPeriods.isEmpty() && it.rating == null }.forEach { p ->
             val mark = "genrich:${p.googlePlaceId}"
             if (store.cachedRoute(mark) != null) return@forEach
-            val d = details.get(p.googlePlaceId) ?: run { store.putCachedRoute(mark, "{}", now().toEpochMilli()); return@forEach }
+            val d = details.get(p.googlePlaceId) ?: run {
+                // Done only when Google really does not know the place; after an error it is tried again.
+                if (details.known(p.googlePlaceId)) store.putCachedRoute(mark, "{}", now().toEpochMilli())
+                return@forEach
+            }
             val fields = buildMap<String, JsonElement> {
                 if (d.openingPeriods.isNotEmpty()) put("openingPeriods", json.encodeToJsonElement(ListSerializer(OpeningPeriod.serializer()), d.openingPeriods))
                 d.rating?.let { put("rating", JsonPrimitive(it)) }

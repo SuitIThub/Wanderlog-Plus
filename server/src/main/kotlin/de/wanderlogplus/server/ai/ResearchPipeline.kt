@@ -43,7 +43,12 @@ internal fun factLines(f: Facts): String = f.items.withIndex().joinToString("\n"
 }
 
 /** Place research in two steps: [facts] gathers what is known, [model] judges it for the trip and writes the dossier. */
-class PipelineResearcher(private val facts: FactSource, private val model: ChatModel) : PlaceResearcher {
+class PipelineResearcher(
+    private val facts: FactSource,
+    private val model: ChatModel,
+    /** Google's facts (hours, rating, price, contact) for a Google place id; none without a Places key. */
+    private val google: (String) -> List<Fact> = { emptyList() },
+) : PlaceResearcher {
     override fun research(query: ResearchQuery, config: AssessConfig, say: (String) -> Unit): ResearchOutcome? {
         val label = listOfNotNull(query.name, query.localName?.let { "($it)" }, query.city).joinToString(" ")
         val found = facts.facts(
@@ -61,8 +66,15 @@ class PipelineResearcher(private val facts: FactSource, private val model: ChatM
                 ),
             ),
             say,
-        ) ?: run { say("Recherche ohne Ergebnis"); return null }
-        say("${found.items.size} Fakten gefunden, Bewertung durch das Textmodell …")
+        )
+        val fromGoogle = query.googlePlaceId?.let { id -> try { google(id) } catch (e: Exception) { emptyList() } }.orEmpty()
+        if (fromGoogle.isNotEmpty()) say("${fromGoogle.size} Angaben von Google (Öffnungszeiten, Bewertung, Preis)")
+        val all = when {
+            found == null && fromGoogle.isEmpty() -> { say("Recherche ohne Ergebnis"); return null }
+            found == null -> Facts(fromGoogle, fromGoogle.flatMap { it.sources }.distinct())
+            else -> Facts(fromGoogle + found.items, (fromGoogle.flatMap { it.sources } + found.sources).distinct())
+        }
+        say("${all.items.size} Fakten gefunden, Bewertung durch das Textmodell …")
         val system = """
             Du bewertest für eine Reise-App einen Ort anhand recherchierter Fakten und schreibst sachlich auf Deutsch, wie ein guter Reiseführer.
             Behaupte nichts, was nicht in den Fakten steht, außer allgemein Bekanntem. Beziehe den Reisekontext ein (Region, was dort schon geplant ist).
@@ -72,13 +84,13 @@ class PipelineResearcher(private val facts: FactSource, private val model: ChatM
         val user = buildString {
             append(researchPrompt(query))
             if (query.tripContext.isNotBlank()) append("\nReisekontext: ").append(query.tripContext)
-            append("\n\nRecherchierte Fakten:\n").append(factLines(found))
+            append("\n\nRecherchierte Fakten:\n").append(factLines(all))
         }
         val o = completeJson(model, system, user, GERMAN_PLEASE) { o ->
             val verdict = (o["verdict"] as? JsonPrimitive)?.content.orEmpty()
             val description = (o["description"] as? JsonPrimitive)?.content.orEmpty()
             verdict.isNotBlank() && o["worth"] is JsonPrimitive && !mostlyJapanese(description + " " + verdict)
         }
-        return parseResearch(o, config, found.sources)
+        return parseResearch(o, config, all.sources)
     }
 }

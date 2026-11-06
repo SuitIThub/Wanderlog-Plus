@@ -72,6 +72,18 @@ class ResearchPipelineTest {
     }
 
     @Test
+    fun `google facts join the web facts, also when the web finds nothing`() {
+        val google = { id: String -> if (id == "ChIJinari") listOf(Fact("Öffnungszeiten laut Google: Mo 00:00–24:00", listOf("https://maps.google.com/?cid=9"))) else emptyList() }
+        val model = Scripted(listOf(good))
+        val r = PipelineResearcher(facts, model, google).research(query.copy(googlePlaceId = "ChIJinari"), AssessConfig())!!
+        assertTrue("Öffnungszeiten laut Google" in model.asked.single() && "Früh morgens ist es leer." in model.asked.single(), model.asked.single())
+        assertTrue("https://maps.google.com/?cid=9" in r.dossier.sources, r.dossier.sources.toString())
+        val alone = Scripted(listOf(good))
+        assertEquals("MUST", PipelineResearcher({ _, _ -> null }, alone, google).research(query.copy(googlePlaceId = "ChIJinari"), AssessConfig())!!.worth)
+        assertTrue("Öffnungszeiten laut Google" in alone.asked.single())
+    }
+
+    @Test
     fun `no facts means no outcome`() {
         val model = Scripted(listOf(good))
         assertNull(PipelineResearcher({ _, _ -> null }, model).research(query, AssessConfig()))

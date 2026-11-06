@@ -58,7 +58,7 @@ fun main() {
             val text = textModel ?: model
             // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
             val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
-            val researcher = PipelineResearcher(facts, text)
+            val researcher = PipelineResearcher(facts, text, google = { id -> googleDetails?.get(id)?.facts().orEmpty() })
             Assistant(model, photon, researcher, textModel = text, placeFinder = placeFinder)
         },
         ToolReelMedia(cookies = config.instagramCookies),

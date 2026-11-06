@@ -49,6 +49,14 @@ class GooglePlaceDetailsTest {
     }
 
     @Test
+    fun `a rejected key is not remembered as an unknown place`() {
+        val rejected = Fake(mapOf("ChIJmuni" to (403 to "")))
+        assertNull(GooglePlaceDetails(store, rejected).get("ChIJmuni"))
+        // Once the key works, the place is asked for again.
+        assertEquals(4.1, GooglePlaceDetails(store, Fake(mapOf("ChIJmuni" to (200 to answer)))).get("ChIJmuni")!!.rating)
+    }
+
+    @Test
     fun `facts for research name hours, rating and price`() {
         val d = GooglePlaceDetails(store, Fake(mapOf("ChIJmuni" to (200 to answer)))).get("ChIJmuni")!!
         val text = d.facts().joinToString("\n") { it.text }
@@ -65,6 +73,14 @@ class GooglePlaceDetailsTest {
     }
 
     private fun place(id: String) = EntityCodec.decode<Place>(store.get(EntityType.PLACE, id)!!)
+
+    @Test
+    fun `a place google could not answer for is tried again`() {
+        seedPlace(Place("p-muni", googlePlaceId = "ChIJmuni", name = "Munimuni"))
+        assertEquals(0, PlaceEnricher(store, sync, GooglePlaceDetails(store, Fake(mapOf("ChIJmuni" to (503 to ""))))).enrichAll())
+        assertEquals(1, PlaceEnricher(store, sync, GooglePlaceDetails(store, Fake(mapOf("ChIJmuni" to (200 to answer))))).enrichAll())
+        assertEquals(4.1, place("p-muni").rating)
+    }
 
     @Test
     fun `places with a google id get the empty fields filled once`() {
