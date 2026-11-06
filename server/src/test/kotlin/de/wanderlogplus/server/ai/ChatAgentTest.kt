@@ -96,6 +96,13 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `shortlisted places count as open ideas in the search`() {
+        val t = ChatTrip(trip.trip, trip.regions, trip.places, trip.saved.map { if (it.id == "s-market") it.copy(status = de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST) else it }, trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains)
+        val r = ChatTools(t, null) {}.search(buildJsonObject { put("regionId", "r-kyoto") })
+        assertTrue("s-market" in r, r)
+    }
+
+    @Test
     fun `openOn drops places known to be closed that weekday and unknown query falls back`() {
         // 2027-05-19 is a Wednesday: the market (Mondays only) is closed.
         val r = tools().search(buildJsonObject { put("regionId", "r-kyoto"); put("openOn", "2027-05-19") })

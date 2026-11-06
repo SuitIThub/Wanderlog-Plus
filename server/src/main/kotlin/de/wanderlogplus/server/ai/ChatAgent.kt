@@ -914,7 +914,7 @@ class ChatTools(
             s.status != PlaceStatus.DROPPED &&
                 (regionIds == null || s.regionId in regionIds) &&
                 (category == null || s.category == category) &&
-                (includePlanned || (s.status == PlaceStatus.IDEA && t.plannedDates[s.placeId].isNullOrEmpty())) &&
+                (includePlanned || ((s.status == PlaceStatus.IDEA || s.status == PlaceStatus.SHORTLIST) && t.plannedDates[s.placeId].isNullOrEmpty())) &&
                 (dow == null || t.places[s.placeId]?.let { p -> isOpenOn(p.openingPeriods, dow) } != false)
         }.filter { s ->
             if (near == null) return@filter true

@@ -699,7 +699,7 @@ class LocalEditor(
                     ),
                 )
                 if (v.kind == DayItemKind.PLACE && v.placeId != null) {
-                    snapshot.savedPlaces.filter { it.placeId == v.placeId && it.status == PlaceStatus.IDEA }
+                    snapshot.savedPlaces.filter { it.placeId == v.placeId && (it.status == PlaceStatus.IDEA || it.status == PlaceStatus.SHORTLIST) }
                         .forEach { write(EntityType.SAVED_PLACE, it.id, mapOf("status" to JsonPrimitive(PlaceStatus.PLANNED.name))) }
                 }
             }
