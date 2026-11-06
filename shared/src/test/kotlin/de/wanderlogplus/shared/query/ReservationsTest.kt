@@ -51,4 +51,26 @@ class ReservationsTest {
         assertEquals(listOf("s1" to "2027-05-05", "s6" to "2027-05-10"), open.map { it.saved.id to it.date })
         assertEquals("Reservierung nötig", open.first().reason)
     }
+
+    @Test
+    fun `negations with filler words do not count`() {
+        assertNull(Reservations.reason(SavedPlace("a", "pa", dossier = PlaceDossier(hints = listOf("Eine Reservierung ist nicht nötig.")))))
+        assertNull(Reservations.reason(SavedPlace("b", "pb", dossier = PlaceDossier(tips = listOf("Reservation not required, just walk in")))))
+        val denying = PlaceDossier(criteria = listOf(CriterionScore("booking", score = 2, note = "Reservierung ist nicht erforderlich, aber Andrang")))
+        assertNull(Reservations.reason(SavedPlace("c", "pc", dossier = denying)))
+    }
+
+    @Test
+    fun `explicit research advice wins over texts`() {
+        val notNeeded = PlaceDossier(reservation = de.wanderlogplus.shared.model.ReservationAdvice(de.wanderlogplus.shared.model.ReservationNeed.NOT_NEEDED))
+        assertNull(Reservations.reason(SavedPlace("a", "pa", tags = listOf("⚠️ Nur mit Reservierung"), dossier = notNeeded)))
+        fun advice(need: de.wanderlogplus.shared.model.ReservationNeed, note: String = "") =
+            SavedPlace("b", "pb", dossier = PlaceDossier(reservation = de.wanderlogplus.shared.model.ReservationAdvice(need, note = note)))
+        assertEquals("Tickets online", Reservations.reason(advice(de.wanderlogplus.shared.model.ReservationNeed.REQUIRED, "Tickets online")))
+        assertEquals("Reservierung nötig", Reservations.reason(advice(de.wanderlogplus.shared.model.ReservationNeed.REQUIRED)))
+        assertEquals("Reservierung empfohlen", Reservations.reason(advice(de.wanderlogplus.shared.model.ReservationNeed.RECOMMENDED)))
+        // Unknown: the texts decide as before.
+        val unknown = PlaceDossier(hints = listOf("Reservierung nötig"), reservation = de.wanderlogplus.shared.model.ReservationAdvice())
+        assertEquals("Reservierung nötig", Reservations.reason(SavedPlace("c", "pc", dossier = unknown)))
+    }
 }

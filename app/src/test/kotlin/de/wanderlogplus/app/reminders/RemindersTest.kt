@@ -61,4 +61,55 @@ class RemindersTest {
         val noName = dueReminders(listOf(stay().copy(placeId = "x")), places, LocalDate.parse("2026-11-10"), emptySet())
         assertEquals("Stornofrist: Unterkunft", noName.single().title)
     }
+
+    private fun window(kind: de.wanderlogplus.shared.query.DeadlineKind, date: String, type: de.wanderlogplus.shared.query.DeadlineTarget = de.wanderlogplus.shared.query.DeadlineTarget.TRAIN, status: de.wanderlogplus.shared.model.PlaceStatus? = null) =
+        de.wanderlogplus.shared.query.Deadline(kind, date, "Nozomi 21", type, "t1", de.wanderlogplus.shared.query.DeadlineState.UPCOMING, placeStatus = status)
+
+    @Test fun byRemindersUseOffsets() {
+        val by = window(de.wanderlogplus.shared.query.DeadlineKind.BY, "2027-04-20")
+        assertTrue(dueWindowReminders(listOf(by), LocalDate.parse("2027-03-20"), emptySet()).isEmpty())
+        val r = dueWindowReminders(listOf(by), LocalDate.parse("2027-04-13"), emptySet()).single()
+        assertEquals("win|TRAIN:t1|2027-04-20|7", r.key)
+        assertEquals("Reservieren: Nozomi 21", r.title)
+        assertTrue(r.text, r.text.startsWith("Noch 7 Tage (bis "))
+        assertEquals("TRAIN" to "t1", r.doneType to r.doneId)
+        assertTrue(dueWindowReminders(listOf(by), LocalDate.parse("2027-04-13"), setOf(r.key)).isEmpty())
+        assertTrue(dueWindowReminders(listOf(by), LocalDate.parse("2027-04-21"), emptySet()).isEmpty())
+    }
+
+    @Test fun opensOnTheDay() {
+        // Not yet open: nothing.
+        assertTrue(dueWindowReminders(listOf(window(de.wanderlogplus.shared.query.DeadlineKind.OPENS, "2027-04-12")), LocalDate.parse("2027-04-10"), emptySet()).isEmpty())
+        // Open now (from the opening day on): one "Jetzt reservierbar", then the usual "bis" steps.
+        val open = window(de.wanderlogplus.shared.query.DeadlineKind.BY, "2027-04-20").copy(state = de.wanderlogplus.shared.query.DeadlineState.OPEN_NOW)
+        val r = dueWindowReminders(listOf(open), LocalDate.parse("2027-04-10"), emptySet()).single()
+        assertEquals("win|TRAIN:t1|open|2027-04-20", r.key)
+        assertEquals("Jetzt reservierbar: Nozomi 21", r.title)
+        assertEquals(listOf("win|TRAIN:t1|2027-04-20|14"), r.covers)
+        assertTrue(dueWindowReminders(listOf(open), LocalDate.parse("2027-04-11"), setOf(r.key) + r.covers).isEmpty())
+        assertEquals("win|TRAIN:t1|2027-04-20|7", dueWindowReminders(listOf(open), LocalDate.parse("2027-04-13"), setOf(r.key) + r.covers).single().key)
+    }
+
+    @Test fun placesOnlyWhenPlanned() {
+        val idea = window(de.wanderlogplus.shared.query.DeadlineKind.BY, "2027-04-20", de.wanderlogplus.shared.query.DeadlineTarget.PLACE, de.wanderlogplus.shared.model.PlaceStatus.IDEA)
+        assertTrue(dueWindowReminders(listOf(idea), LocalDate.parse("2027-04-18"), emptySet()).isEmpty())
+        val planned = idea.copy(placeStatus = de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
+        assertEquals("PLACE" to "t1", dueWindowReminders(listOf(planned), LocalDate.parse("2027-04-18"), emptySet()).single().let { it.doneType to it.doneId })
+        // Cancellation deadlines and plain "needs a reservation" rows have their own reminders.
+        assertTrue(dueWindowReminders(listOf(window(de.wanderlogplus.shared.query.DeadlineKind.CANCEL, "2027-04-20")), LocalDate.parse("2027-04-18"), emptySet()).isEmpty())
+    }
+
+    @Test fun doneFromTheNotificationEndsTheWindow() {
+        val store = de.wanderlogplus.shared.sync.InMemoryEntityStore()
+        val editor = de.wanderlogplus.client.LocalEditor(store, de.wanderlogplus.client.InMemoryOutbox(), de.wanderlogplus.shared.sync.HlcClock("dev", now = { 1000L }))
+        val train = de.wanderlogplus.shared.model.Train("t1", reservation = de.wanderlogplus.shared.model.ReservationWindow(by = "2027-04-20"))
+        editor.create(de.wanderlogplus.shared.sync.EntityType.TRAIN, de.wanderlogplus.shared.model.EntityCodec.fields(train), id = "t1")
+        val snap = { de.wanderlogplus.client.TripSnapshot.from(store.all()) }
+        ReservationDoneReceiver.markWindowDone(editor, snap(), "TRAIN", "t1")
+        assertEquals(de.wanderlogplus.shared.model.ReservationWindow(by = "2027-04-20", done = true), snap().trains.single().reservation)
+        val list = de.wanderlogplus.shared.query.Deadlines.list(
+            de.wanderlogplus.shared.query.DeadlineInput(emptyMap(), emptyList(), emptyList(), snap().trains, emptyList(), emptyList(), emptyList(), emptyList()), "2027-04-10",
+        )
+        assertTrue(dueWindowReminders(list, LocalDate.parse("2027-04-13"), emptySet()).isEmpty())
+    }
 }

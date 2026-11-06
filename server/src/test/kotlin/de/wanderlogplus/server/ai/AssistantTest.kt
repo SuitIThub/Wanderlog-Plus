@@ -387,6 +387,19 @@ class AssistantTest {
         assertTrue(job.steps.any { it.text == "2 Orte mit den Ergebnissen aktualisiert" })
     }
 
+    @Test fun researchKeepsHandSetReservationData() {
+        seedTrip()
+        val sync = de.wanderlogplus.server.SyncService(store)
+        val hand = de.wanderlogplus.shared.model.ReservationWindow(opens = "2027-04-01", byHand = true)
+        val handJson = kotlinx.serialization.json.Json.encodeToJsonElement(de.wanderlogplus.shared.model.ReservationWindow.serializer(), hand)
+        sync.writeAsServer("t", listOf(de.wanderlogplus.server.ServerEdit(EntityType.SAVED_PLACE, "s-tempel", mapOf("reservationWindow" to handJson, "reserved" to kotlinx.serialization.json.JsonPrimitive(true)))))
+        val j = jobs(FakeModel(), sync = sync)
+        j.startResearch(listOf("s-tempel")); j.drain()
+        assertTrue(field(EntityType.SAVED_PLACE, "s-tempel", "dossier").toString().contains("Hinter dem Gipfel"))
+        assertEquals(handJson, field(EntityType.SAVED_PLACE, "s-tempel", "reservationWindow"))
+        assertEquals("true", field(EntityType.SAVED_PLACE, "s-tempel", "reserved").toString())
+    }
+
     @Test fun olderResultsNeverOverwriteNewerResearch() {
         seedTrip()
         val sync = de.wanderlogplus.server.SyncService(store)

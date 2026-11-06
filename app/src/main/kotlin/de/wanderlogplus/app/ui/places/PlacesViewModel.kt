@@ -254,6 +254,13 @@ class PlacesViewModel(
 
     fun setReserved(savedPlaceId: String, reserved: Boolean) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("reserved" to JsonPrimitive(reserved))) }
+
+    /** Reservation dates set by hand (null: back to the research's). */
+    fun setReservationWindow(savedPlaceId: String, window: de.wanderlogplus.shared.model.ReservationWindow?) =
+        write { e, _ ->
+            val v = window?.let { kotlinx.serialization.json.Json.encodeToJsonElement(de.wanderlogplus.shared.model.ReservationWindow.serializer(), it) } ?: kotlinx.serialization.json.JsonNull
+            e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("reservationWindow" to v))
+        }
 }
 
 /** At most this many places per research job (server limit). */

@@ -55,6 +55,23 @@ data class PlaceDossier(
     val researchedAt: Long = 0,
     /** Related spots near the place (other entrances, viewpoints, hidden corners, station), only with checked coordinates. */
     val pois: List<PlacePoi> = emptyList(),
+    /** Whether and when to reserve, as the research found it; null for older research. */
+    val reservation: ReservationAdvice? = null,
+)
+
+enum class ReservationNeed { REQUIRED, RECOMMENDED, NOT_NEEDED, UNKNOWN }
+
+/**
+ * The research's word on reserving: [need]; booking opens [opensDaysBefore] days before the visit or on the fixed day
+ * [opensOn] (yyyy-MM-dd); reserve at the latest [byDaysBefore] days before; [note] one German sentence.
+ */
+@Serializable
+data class ReservationAdvice(
+    val need: ReservationNeed = ReservationNeed.UNKNOWN,
+    val opensDaysBefore: Int? = null,
+    val opensOn: String? = null,
+    val byDaysBefore: Int? = null,
+    val note: String = "",
 )
 
 /** A spot belonging to or near a researched place; [kind] is a [PoiKinds] key. */

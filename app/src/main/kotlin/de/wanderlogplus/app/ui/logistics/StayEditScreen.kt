@@ -64,6 +64,7 @@ data class StayDraft(
     val note: String = "",
     /** Room and amenities (research, changed by hand). */
     val info: de.wanderlogplus.shared.model.StayInfo? = null,
+    val reservation: ReservationDraft = ReservationDraft(),
 )
 
 private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
@@ -82,6 +83,7 @@ fun stayDraftOf(snapshot: TripSnapshot, id: String): StayDraft? {
         confirmationNumber = s.confirmationNumber.orEmpty(), adults = s.adults?.toString().orEmpty(), rooms = s.rooms?.toString().orEmpty(),
         note = s.note,
         info = s.info,
+        reservation = s.reservation.toDraft(),
     )
 }
 
@@ -92,6 +94,7 @@ fun validateStay(d: StayDraft): String? = when {
     d.checkOut.trim() <= d.checkIn.trim() -> "Der Check-out muss nach dem Check-in liegen"
     listOf(d.checkInTime, d.checkOutTime).any { it.isNotBlank() && !TIME.matches(it.trim()) } -> "Uhrzeiten bitte als HH:MM"
     d.cancellationDeadline.isNotBlank() && !DATE.matches(d.cancellationDeadline.trim()) -> "Stornofrist bitte als JJJJ-MM-TT"
+    validateReservation(d.reservation) != null -> validateReservation(d.reservation)
     d.adults.isNotBlank() && d.adults.trim().toIntOrNull()?.takeIf { it in 1..20 } == null -> "Erwachsene als Zahl eintragen"
     d.rooms.isNotBlank() && d.rooms.trim().toIntOrNull()?.takeIf { it in 1..20 } == null -> "Zimmer als Zahl eintragen"
     else -> null
@@ -132,6 +135,7 @@ fun stayToSave(snapshot: TripSnapshot, d: StayDraft, existing: Stay?, newPlaceId
         rooms = d.rooms.trim().toIntOrNull(),
         note = d.note.trim(),
         info = d.info,
+        reservation = d.reservation.toWindow(base.reservation),
     )
     return StaySave(stay, newPlace)
 }
@@ -244,6 +248,8 @@ fun StayEditScreen(
             OutlinedTextField(d.cancellationDeadline, { d = d.copy(cancellationDeadline = it) }, label = { Text("Stornofrist (JJJJ-MM-TT)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("stay-deadline"))
             OutlinedTextField(d.cancellationPolicy, { d = d.copy(cancellationPolicy = it) }, label = { Text("Stornobedingungen") }, modifier = Modifier.fillMaxWidth().testTag("stay-policy"))
             OutlinedTextField(d.note, { d = d.copy(note = it) }, label = { Text("Notiz") }, minLines = 2, modifier = Modifier.fillMaxWidth().testTag("stay-note"))
+            SectionLabel("Reservierung")
+            ReservationFields(d.reservation, showDone = true, onChange = { d = d.copy(reservation = it) })
             SectionLabel("Zimmer & Ausstattung")
             StayInfoEditor(d.info) { d = d.copy(info = it) }
             Spacer(Modifier.padding(bottom = 24.dp))

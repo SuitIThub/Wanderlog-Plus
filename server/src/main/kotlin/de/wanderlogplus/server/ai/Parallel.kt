@@ -203,9 +203,22 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                                     put("additionalProperties", false)
                                 }
                             }
+                            putJsonObject("reservation") {
+                                put("type", "object")
+                                put("description", "ob man reservieren/Tickets vorab kaufen muss und ab/bis wann (Tage vor dem Besuch oder festes Datum); null wo unbekannt")
+                                putJsonObject("properties") {
+                                    putJsonObject("need") { put("type", "string"); putJsonArray("enum") { listOf("REQUIRED", "RECOMMENDED", "NOT_NEEDED", "UNKNOWN").forEach { add(JsonPrimitive(it)) } } }
+                                    putJsonObject("opensDaysBefore") { putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) } }
+                                    putJsonObject("opensOn") { putJsonArray("type") { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }; put("description", "yyyy-MM-dd") }
+                                    putJsonObject("byDaysBefore") { putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) } }
+                                    putJsonObject("note") { put("type", "string"); put("description", "ein Satz, Deutsch") }
+                                }
+                                putJsonArray("required") { listOf("need", "opensDaysBefore", "opensOn", "byDaysBefore", "note").forEach { add(JsonPrimitive(it)) } }
+                                put("additionalProperties", false)
+                            }
                         }
                         putJsonArray("required") {
-                            listOf("description", "category", "criteria", "worth", "verdict", "insiderTips", "hiddenSpots", "goodToKnow", "tips", "hints", "nearbyPoints").forEach { add(JsonPrimitive(it)) }
+                            listOf("description", "category", "criteria", "worth", "verdict", "insiderTips", "hiddenSpots", "goodToKnow", "tips", "hints", "nearbyPoints", "reservation").forEach { add(JsonPrimitive(it)) }
                         }
                         put("additionalProperties", false)
                     }

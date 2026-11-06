@@ -384,6 +384,7 @@ fun AppNavigation(
                 onOpenLink = onOpenLink, onSetTags = vm::setTags, onSetRegion = vm::setRegion, onSetCategory = vm::setCategory,
                 onSetHeaderImage = vm::setHeaderImage, onSetLinks = vm::setLinks,
                 onSetReserved = vm::setReserved,
+                onSetReservationWindow = vm::setReservationWindow,
                 onDelete = { sid -> vm.delete(sid); onBack?.invoke() },
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
@@ -537,6 +538,7 @@ fun AppNavigation(
                                 onOpenLink = onOpenLink,
                                 available = attachmentActions?.available ?: { true },
                                 onOpenPlace = { id -> nav.navigateToTab(Tab.ORTE); nav.navigate(placeRoute(id)) },
+                                onOpenLogistics = { t, id -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(t, id)) },
                             )
                             }
                         }

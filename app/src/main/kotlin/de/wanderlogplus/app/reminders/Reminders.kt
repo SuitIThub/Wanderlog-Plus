@@ -21,7 +21,45 @@ data class Reminder(
     val savedPlaceId: String? = null,
     /** Longer text for the expanded notification. */
     val detail: String? = null,
+    /** A reservation window to mark as done from the notification: a [de.wanderlogplus.shared.query.DeadlineTarget] name and its id. */
+    val doneType: String? = null,
+    val doneId: String? = null,
+    /** Further keys this reminder covers (stored as sent with [key]). */
+    val covers: List<String> = emptyList(),
 )
+
+/** Places get window reminders only in these states (ideas never). */
+val REMINDED_PLACE_STATES = setOf(de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
+
+/**
+ * Reminders for reservation windows: once "Jetzt reservierbar" when a window is open, and before "reservieren bis" at
+ * the smallest due offset of [Reservations.REMINDER_OFFSETS] (up to that day). Cancellations and plain "needs a
+ * reservation" rows have their own reminders.
+ */
+fun dueWindowReminders(deadlines: List<de.wanderlogplus.shared.query.Deadline>, today: LocalDate, alreadySent: Set<String>): List<Reminder> =
+    deadlines.mapNotNull { d ->
+        if (d.kind != de.wanderlogplus.shared.query.DeadlineKind.BY) return@mapNotNull null
+        if (d.targetType == de.wanderlogplus.shared.query.DeadlineTarget.PLACE && d.placeStatus !in REMINDED_PLACE_STATES) return@mapNotNull null
+        val date = try { LocalDate.parse(d.date) } catch (_: DateTimeParseException) { return@mapNotNull null }
+        if (today > date) return@mapNotNull null
+        val target = "${d.targetType.name}:${d.targetId}"
+        val days = ChronoUnit.DAYS.between(today, date)
+        val until = when (days) {
+            0L -> "Heute letzter Tag (${dayLabel(d.date)})"
+            1L -> "Morgen letzter Tag (${dayLabel(d.date)})"
+            else -> "Noch $days Tage (bis ${dayLabel(d.date)})"
+        }
+        val offset = Reservations.REMINDER_OFFSETS.filter { today >= date.minusDays(it.toLong()) }.minOrNull()
+        val key = offset?.let { "win|$target|${d.date}|$it" }
+        val openKey = "win|$target|open|${d.date}"
+        if (d.state == de.wanderlogplus.shared.query.DeadlineState.OPEN_NOW && openKey !in alreadySent) {
+            // The opening covers the step that is due right now.
+            return@mapNotNull Reminder(openKey, "", "Jetzt reservierbar: ${d.title}", until, doneType = d.targetType.name, doneId = d.targetId, covers = listOfNotNull(key))
+        }
+        if (key == null) return@mapNotNull null
+        if (key in alreadySent) return@mapNotNull null
+        Reminder(key, "", "Reservieren: ${d.title}", until, doneType = d.targetType.name, doneId = d.targetId)
+    }.sortedBy { it.key }
 
 /**
  * Reservation reminders for planned places that still need one: like [dueReminders], at most one per place for the

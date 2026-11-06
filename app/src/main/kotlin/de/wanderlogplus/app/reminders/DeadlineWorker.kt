@@ -48,8 +48,15 @@ class DeadlineWorker(
         val prefs = applicationContext.getSharedPreferences(de.wanderlogplus.app.AppProfile.scoped(applicationContext, PREFS), Context.MODE_PRIVATE)
         val sent = prefs.getStringSet(SENT, emptySet()).orEmpty().toSet()
         val s = input.snapshot
-        val open = de.wanderlogplus.shared.query.Reservations.open(s.savedPlaces, s.days, s.dayItems, input.today.toString())
-        val due = dueReminders(s.stays, s.places, input.today, sent) + dueReservationReminders(open, s.places, input.today, sent)
+        val deadlines = de.wanderlogplus.shared.query.Deadlines.list(
+            de.wanderlogplus.shared.query.DeadlineInput(s.places, s.savedPlaces, s.stays, s.trains, s.flights, s.days, s.dayItems, s.queries()?.days().orEmpty()),
+            input.today.toString(),
+        )
+        // Places with a reservation window are reminded by the window, not by their planned day.
+        val windowed = deadlines.filter { it.targetType == de.wanderlogplus.shared.query.DeadlineTarget.PLACE && it.kind != de.wanderlogplus.shared.query.DeadlineKind.PLACE }.map { it.targetId }.toSet()
+        val open = de.wanderlogplus.shared.query.Reservations.open(s.savedPlaces, s.days, s.dayItems, input.today.toString()).filter { it.saved.id !in windowed }
+        val due = dueReminders(s.stays, s.places, input.today, sent) + dueReservationReminders(open, s.places, input.today, sent) +
+            dueWindowReminders(deadlines, input.today, sent)
         if (due.isEmpty()) return Result.success()
         ensureChannel(applicationContext)
         val launch = PendingIntent.getActivity(
@@ -68,11 +75,15 @@ class DeadlineWorker(
                 .setAutoCancel(true)
             r.detail?.let { builder.setStyle(NotificationCompat.BigTextStyle().bigText(it)) }
             r.savedPlaceId?.let { id -> builder.addAction(0, "Reserviert", ReservationDoneReceiver.intent(applicationContext, id, r.key.hashCode())) }
+            if (r.doneType != null && r.doneId != null) {
+                builder.addAction(0, "Erledigt", ReservationDoneReceiver.windowIntent(applicationContext, r.doneType, r.doneId, r.key.hashCode()))
+            }
             val n = builder.build()
             try {
                 @Suppress("MissingPermission") // checked in canNotify
                 nm.notify(r.key.hashCode(), n)
                 posted += r.key
+                posted += r.covers
             } catch (_: SecurityException) {
                 break
             }
