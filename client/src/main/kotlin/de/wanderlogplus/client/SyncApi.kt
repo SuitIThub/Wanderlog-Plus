@@ -368,6 +368,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Writes or rewrites 1–30 travel guides (research, then the text model) as one job. */
+    suspend fun startGuides(asks: List<de.wanderlogplus.shared.sync.GuideAsk>): AiJobInfo = call {
+        client.post("$base/api/ai/guides") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.GuideRequest(asks))
+        }
+    }
+
     suspend fun aiJob(id: String): AiJobInfo = call { client.get("$base/api/ai/jobs/${id.encodeURLPathPart()}") { auth() } }
 
     suspend fun aiJobs(kind: String? = null, limit: Int = 20): List<AiJobInfo> = call {

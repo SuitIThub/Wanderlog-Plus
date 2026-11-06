@@ -356,6 +356,12 @@ fun Application.module(services: Services) {
                 if (req.savedPlaceIds.isEmpty() || req.savedPlaceIds.size > 300) throw BadInput()
                 call.respond(services.ai.startResearch(req.savedPlaceIds.distinct(), req.config))
             }
+            post("/api/ai/guides") {
+                if (!services.ai.guidesConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.GuideRequest>()
+                if (req.asks.isEmpty() || req.asks.size > 30) throw BadInput()
+                call.respond(services.ai.startGuides(req.asks))
+            }
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()

@@ -6,6 +6,7 @@ import de.wanderlogplus.server.ai.ParallelWebSearch
 import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
 import de.wanderlogplus.server.ai.ModelFacts
+import de.wanderlogplus.server.ai.GuideWriter
 import de.wanderlogplus.server.ai.ParallelFacts
 import de.wanderlogplus.server.ai.PipelineResearcher
 import de.wanderlogplus.server.ai.HttpParallelTransport
@@ -59,6 +60,9 @@ fun main() {
             ToolReelMedia(cookies = config.instagramCookies),
             config.dataDir.resolve("ai-work"),
             writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+            guideWriter = textModel?.let { text ->
+                GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
+            },
         ),
         transit = transit,
         weather = weather,
