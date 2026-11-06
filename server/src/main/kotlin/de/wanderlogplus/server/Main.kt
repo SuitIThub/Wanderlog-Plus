@@ -47,6 +47,9 @@ fun main() {
         override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) = routes.compute(req)
     }.takeIf { transit.configured || routes.configured }
     val weather = WeatherService(store, OpenMeteoHttp())
+    val photon = PhotonGeocoder()
+    // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
+    val placeFinder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
     val aiJobs = AiJobs(
         store,
         openRouter?.let { model ->
@@ -54,10 +57,7 @@ fun main() {
             // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
             val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
             val researcher = PipelineResearcher(facts, text)
-            val photon = PhotonGeocoder()
-            // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
-            val finder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
-            Assistant(model, photon, researcher, textModel = text, placeFinder = finder)
+            Assistant(model, photon, researcher, textModel = text, placeFinder = placeFinder)
         },
         ToolReelMedia(cookies = config.instagramCookies),
         config.dataDir.resolve("ai-work"),
@@ -90,7 +90,7 @@ fun main() {
             textModel?.let { model ->
                 // "Today" in Japan, where the trip happens.
                 ChatAgent(
-                    model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways,
+                    model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, placeFinder, ways,
                     weather = { trip, today -> weather.forTrip(trip, today) },
                     guides = chatGuides,
                 ) {

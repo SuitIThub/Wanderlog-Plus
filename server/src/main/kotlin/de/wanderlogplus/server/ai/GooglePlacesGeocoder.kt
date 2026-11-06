@@ -71,7 +71,8 @@ class GooglePlacesGeocoder(private val transport: PlacesSearchTransport) : Geoco
         val inJapan = lat in 24.0..46.0 && lng in 122.0..154.0
         val country = if (inJapan || address?.let { "Japan" in it || "日本" in it } == true) "JP"
         else address?.substringAfterLast(',')?.trim()?.ifBlank { null }
-        return GeoHit(lat, lng, address, country)
+        val id = (place["id"] as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() }
+        return GeoHit(lat, lng, address, country, id)
     }
 }
 

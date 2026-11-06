@@ -1236,7 +1236,7 @@ class ChatTools(
         }
         val region = day?.let { t.queries?.regionFor(it) } ?: known.filter { it.second != null }.minByOrNull { it.third }?.second
         return card.copy(
-            lat = hit.lat, lng = hit.lng, address = hit.address,
+            lat = hit.lat, lng = hit.lng, address = hit.address, googlePlaceId = hit.googlePlaceId,
             category = category?.let { c -> PlaceCategory.entries.firstOrNull { it.name.equals(c, ignoreCase = true) }?.name },
             regionId = region, savedPlaceId = same?.id,
         )

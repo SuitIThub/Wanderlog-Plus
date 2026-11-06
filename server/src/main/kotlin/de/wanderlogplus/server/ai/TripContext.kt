@@ -57,7 +57,11 @@ fun distanceKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
 }
 
 /** A geocoded place. */
-data class GeoHit(val lat: Double, val lng: Double, val address: String?, val country: String? = null)
+data class GeoHit(
+    val lat: Double, val lng: Double, val address: String?, val country: String? = null,
+    /** Google's id when the hit came from Google Places (photos and details later). */
+    val googlePlaceId: String? = null,
+)
 
 /** The geocoder did not answer (overloaded, rate-limited, offline) even after retries: unknown, not "not found". */
 class GeocoderUnavailable : RuntimeException()

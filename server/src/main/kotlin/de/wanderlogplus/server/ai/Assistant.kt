@@ -158,6 +158,7 @@ class Assistant(
             dossier = d,
             positionIssue = issue,
             main = p.main,
+            googlePlaceId = hit?.googlePlaceId,
         )
     }
 
