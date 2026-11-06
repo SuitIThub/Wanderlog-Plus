@@ -531,6 +531,21 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `guide jobs leave a card that follows the job`() {
+        val g = FakeGuides()
+        val tools = ChatTools(withGuides(), null, guides = g) {}
+        tools.run("update_guide", """{"guideId":"g1","wish":"mehr zu Tattoos"}""")
+        val card = tools.cards.single()
+        assertEquals(de.wanderlogplus.shared.sync.ChatCard.KIND_GUIDE, card.kind)
+        assertEquals("g1", card.guideId)
+        assertEquals("job-1", card.jobId)
+        assertEquals("Onsen & Sentō", card.title)
+        tools.run("create_guide", """{"title":"Kiso-Wanderwege"}""")
+        assertEquals(null, tools.cards.last().guideId)
+        assertEquals("Kiso-Wanderwege", tools.cards.last().title)
+    }
+
+    @Test
     fun `guide tools only exist with guides, and the cached context lists the guides`() {
         val names = { tools: ChatTools -> tools.definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content } }
         assertFalse("assign_guide" in names(ChatTools(withGuides(), null) {}))

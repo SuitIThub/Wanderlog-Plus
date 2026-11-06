@@ -76,7 +76,7 @@ fun guideRoute(id: String) = "guide/" + java.net.URLEncoder.encode(id, "UTF-8")
 fun GuidesScreen(
     snapshot: TripSnapshot,
     actions: GuideActions?,
-    running: AiJobInfo?,
+    jobs: List<AiJobInfo>,
     onOpen: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -88,13 +88,23 @@ fun GuidesScreen(
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Guides", style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
-            if (running != null && running.status != "DONE" && running.status != "FAILED") {
+            jobs.filter(GuideJobs::isActive).forEach { running ->
                 SurfaceCard(Modifier.testTag("guides-running")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Guides werden erstellt: ${running.progress} von ${running.total}", fontWeight = FontWeight.SemiBold)
+                        val what = if (running.guideIds.isNotEmpty()) "Wird überarbeitet" else "Wird erstellt"
+                        Text("$what: ${GuideJobs.names(running)}", fontWeight = FontWeight.SemiBold)
+                        if (running.total > 1) Text("${running.progress} von ${running.total}", style = MaterialTheme.typography.bodySmall)
                         LinearProgressIndicator(progress = { if (running.total == 0) 0f else running.progress / running.total.toFloat() }, Modifier.fillMaxWidth())
                         running.steps.lastOrNull()?.let { Text(it.text, style = MaterialTheme.typography.bodySmall) }
                     }
+                }
+            }
+            GuideJobs.recentFailures(jobs).forEach { (job, why) ->
+                SurfaceCard(Modifier.testTag("guides-failed")) {
+                    Text(
+                        "Guide-Auftrag „${GuideJobs.names(job)}“ fehlgeschlagen: $why",
+                        Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
             if (suggestions.isNotEmpty() && actions != null) {
@@ -158,6 +168,7 @@ fun GuideScreen(
     onOpenGuide: (String) -> Unit,
     onImprove: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    jobs: List<AiJobInfo> = emptyList(),
 ) {
     val g = snapshot.guides.firstOrNull { it.id == guideId }
     var menu by remember { mutableStateOf(false) }
@@ -187,6 +198,7 @@ fun GuideScreen(
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(g.title, style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
+            GuideJobs.stateOf(g, jobs)?.let { GuideJobBanner(it) }
             if (g.summary.isNotBlank()) SurfaceCard { Text(g.summary, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
             g.sections.forEach { s ->
                 SurfaceCard {
@@ -228,6 +240,13 @@ fun GuideScreen(
                 g.sources.forEach { url ->
                     TextButton(onClick = { runCatching { uri.openUri(url) } }) { Text(hostOf(url)) }
                 }
+            }
+            if (g.writtenAt > 0) {
+                Text(
+                    "Zuletzt recherchiert: " + GuideJobs.writtenText(g.writtenAt),
+                    Modifier.padding(bottom = 16.dp).testTag("guide-written-at"),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

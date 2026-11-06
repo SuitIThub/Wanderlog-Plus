@@ -330,7 +330,8 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.guides.GuidesViewModel(
             { block -> container.edit(block) }, container.scope,
             startGuides = { asks -> container.syncApi()?.startGuides(asks) },
-            job = { id -> container.syncApi()?.aiJob(id) },
+            recentJobs = { container.syncApi()?.aiJobs("guides", 5) },
+            syncNow = container.syncScheduler::requestNow,
         ) as T
     }
 

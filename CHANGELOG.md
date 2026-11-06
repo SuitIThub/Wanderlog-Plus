@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.42.0
+
+- **Guide-Aufträge sichtbar, auch aus dem Chat:** Die Guide-Übersicht holt laufende Aufträge vom Server und zeigt sie mit Fortschritt – egal ob in der App oder vom Chat gestartet. Fehlgeschlagene Aufträge stehen einen Tag lang dort.
+- **Hinweis am Guide:** Wird ein Guide gerade überarbeitet, steht oben „Wird gerade überarbeitet …“ mit dem aktuellen Schritt; schlägt es fehl, ein kurzer Hinweis (der alte Text bleibt). Ist der Auftrag fertig, synchronisiert die App sofort.
+- **„Zuletzt recherchiert“:** Jeder Guide zeigt unten, wann der Server ihn zuletzt geschrieben hat.
+- **Chat-Karte für Guides:** Startet der Chat einen Guide-Auftrag, erscheint unter der Antwort eine Karte mit dem Stand („läuft“, „fertig“, „fehlgeschlagen“); ein Tipp öffnet den Guide.
+
 ## 0.41.1
 
 - **Unterkunftsseite mit Reitern:** „Übersicht“, „Zimmer & Ausstattung“ (mit „Auf einen Blick“ als Stichpunktliste, Quellen eingeklappt) und „Fotos“. Auf der Übersicht steht ein Fotostreifen direkt unter dem Kopfbild (Zimmerfotos zuerst); ein Tipp aufs Kopfbild öffnet die Fotos groß.

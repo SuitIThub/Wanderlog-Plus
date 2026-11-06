@@ -319,7 +319,9 @@ private fun AssistantMessage(
 fun ChatCardView(c: ChatCard, snapshot: TripSnapshot?, onOpenPlace: (String) -> Unit, onOpenUrl: (String) -> Unit) {
     val placeId = c.savedPlaceId
     val url = c.url
-    if (c.kind == ChatCard.KIND_PLACE && placeId != null) {
+    if (c.kind == ChatCard.KIND_GUIDE) {
+        de.wanderlogplus.app.ui.guides.ChatGuideCard(c)
+    } else if (c.kind == ChatCard.KIND_PLACE && placeId != null) {
         val saved = snapshot?.savedPlaces?.firstOrNull { it.id == placeId }
         val place = saved?.let { snapshot.places[it.placeId] }
         val region = saved?.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
