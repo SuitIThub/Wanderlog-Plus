@@ -96,6 +96,12 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `the context marks shortlisted places`() {
+        val t = ChatTrip(trip.trip, trip.regions, trip.places, trip.saved.map { if (it.id == "s-market") it.copy(status = de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST) else it }, trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains)
+        assertTrue(ChatContextText.savedPlaces(t).lines().first { "s-market" in it }.contains("vorgemerkt"))
+    }
+
+    @Test
     fun `shortlisted places count as open ideas in the search`() {
         val t = ChatTrip(trip.trip, trip.regions, trip.places, trip.saved.map { if (it.id == "s-market") it.copy(status = de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST) else it }, trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains)
         val r = ChatTools(t, null) {}.search(buildJsonObject { put("regionId", "r-kyoto") })

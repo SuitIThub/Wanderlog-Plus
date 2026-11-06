@@ -253,6 +253,7 @@ object ChatContextText {
                     s.category.name,
                     ChatTools.worthLabel(s.worth),
                     "besucht".takeIf { s.status == PlaceStatus.VISITED },
+                    "vorgemerkt".takeIf { s.status == PlaceStatus.SHORTLIST },
                     "reserviert".takeIf { s.reserved },
                     t.plannedDates[s.placeId]?.takeIf { it.isNotEmpty() }?.let { "eingeplant " + it.joinToString(", ") { d -> shortDate(d) } },
                 ).forEach { append(" · ").append(it) }

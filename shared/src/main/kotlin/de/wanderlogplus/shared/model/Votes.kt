@@ -18,7 +18,10 @@ object Votes {
     /** One vote per place and voter. */
     fun id(savedPlaceId: String, voter: String) = "$savedPlaceId|$voter"
 
-    fun score(votes: List<Vote>, savedPlaceId: String): Int = votes.filter { it.savedPlaceId == savedPlaceId }.sumOf { it.value }
+    /** Only records stored under their own id ("<place>|<voter>") count: one vote per voter and place. */
+    fun valid(v: Vote): Boolean = v.voter.isNotBlank() && v.savedPlaceId.isNotBlank() && v.id == id(v.savedPlaceId, v.voter)
+
+    fun score(votes: List<Vote>, savedPlaceId: String): Int = votes.filter { it.savedPlaceId == savedPlaceId && valid(it) }.sumOf { it.value }
 
     /** IDEA with enough votes → SHORTLIST, SHORTLIST without → IDEA; every other status stays. */
     fun nextStatus(current: PlaceStatus, score: Int): PlaceStatus = when {
@@ -29,7 +32,7 @@ object Votes {
 
     /** A planned place that someone voted on and that has too little approval now. */
     fun planDoubt(current: PlaceStatus, votes: List<Vote>, savedPlaceId: String): Boolean {
-        val mine = votes.filter { it.savedPlaceId == savedPlaceId && it.value != 0 }
+        val mine = votes.filter { it.savedPlaceId == savedPlaceId && it.value != 0 && valid(it) }
         return current == PlaceStatus.PLANNED && mine.isNotEmpty() && mine.sumOf { it.value } < THRESHOLD
     }
 }
