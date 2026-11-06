@@ -400,7 +400,7 @@ class AiJobs(
                 t.step("${found.size} " + (if (found.size == 1) "Ort" else "Orte") + " erkannt: " + found.joinToString(", ") { it.name }, JobProgress.OK)
             }
             t.update { it.copy(status = "RESEARCHING", summary = summary, total = found.size) }
-            if (found.isNotEmpty()) t.step("Recherche startet, bis zu ${minOf(found.size, RESEARCH_PARALLELISM)} Orte gleichzeitig")
+            if (found.isNotEmpty()) t.step("Recherche startet, bis zu ${minOf(found.size, a.parallelism)} Orte gleichzeitig")
             val candidates = a.researchAll(found, context, config, t) { n -> t.update { it.copy(progress = n) } }
             t.done { it.copy(candidates = candidates, progress = found.size) }
         } catch (e: DownloadFailed) {
@@ -443,7 +443,7 @@ class AiJobs(
             t.step(
                 "Recherche für ${ids.size} " + (if (ids.size == 1) "Ort" else "Orte") + " nach ${config.criteria.size} Kriterien" +
                     (if (config.extraPrompt.isNotBlank()) " mit eigenen Anweisungen" else "") +
-                    ", bis zu ${minOf(ids.size, RESEARCH_PARALLELISM)} gleichzeitig",
+                    ", bis zu ${minOf(ids.size, a.parallelism)} gleichzeitig",
             )
             val before = start.total - ids.size // finished before a restart
             val written = java.util.concurrent.atomic.AtomicInteger()

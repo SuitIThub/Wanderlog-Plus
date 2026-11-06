@@ -40,8 +40,8 @@ data class FoundPlace(
 /** How far from the trip a reel's place may be to count as "on the route", in km (as for regions). */
 const val ON_ROUTE_KM = 50.0
 
-/** How many places are researched at the same time. */
-const val RESEARCH_PARALLELISM = 4
+/** How many places are researched at the same time unless configured (WLP_RESEARCH_PARALLELISM). */
+const val DEFAULT_RESEARCH_PARALLELISM = 10
 
 internal val WORTH_SCALE = """Gesamtfazit "worth": MUST = muss man gesehen haben, WORTH = lohnt sich, OPTIONAL = wenn Zeit ist, SKIP = eher auslassen."""
 
@@ -83,6 +83,8 @@ class Assistant(
     private val textModel: ChatModel = model,
     /** Finds a reel's places (Google Places, then Photon); the [geocoder] by default. Spots near a place use the [geocoder]. */
     private val placeFinder: Geocoder = geocoder,
+    /** Places researched at the same time. */
+    val parallelism: Int = DEFAULT_RESEARCH_PARALLELISM,
 ) {
 
     /** Places named or shown in the reel; empty when there are none. */
@@ -200,7 +202,7 @@ class Assistant(
         null to "unavailable"
     }
 
-    /** Researches several reel places at once (at most [RESEARCH_PARALLELISM] at a time), keeping their order. */
+    /** Researches several reel places at once (at most [parallelism] at a time), keeping their order. */
     fun researchAll(
         found: List<FoundPlace>,
         context: TripContext,
@@ -322,7 +324,7 @@ class Assistant(
 
     private fun <T, R> inParallel(items: List<T>, onDone: (Int) -> Unit, work: (T) -> R): List<R> {
         if (items.isEmpty()) return emptyList()
-        val pool = Executors.newFixedThreadPool(minOf(RESEARCH_PARALLELISM, items.size))
+        val pool = Executors.newFixedThreadPool(minOf(parallelism.coerceAtLeast(1), items.size))
         val done = AtomicInteger()
         try {
             return pool.invokeAll(items.map { item -> Callable { work(item).also { onDone(done.incrementAndGet()) } } }).map { it.get() }

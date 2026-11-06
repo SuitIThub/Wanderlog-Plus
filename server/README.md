@@ -19,6 +19,7 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter für Reels und Videos; muss Bilder und Ton verstehen. |
 | `WLP_TEXT_MODEL` | `anthropic/claude-sonnet-5-5` | Modell bei OpenRouter für Textarbeit: Chat, Orte einschätzen, Recherche auswerten. Der feste Teil des Chat-Kontexts wird für den Prompt-Cache markiert. |
 | `WLP_PARALLEL_KEY` | – | Optional; Parallel-Key für die Web-Recherche zu Orten aus Reels (Search + Task API). Ohne Key recherchiert das OpenRouter-Modell selbst. |
+| `WLP_RESEARCH_PARALLELISM` | `10` | Optional; wie viele Orte eine Recherche gleichzeitig bearbeitet (1–20). Recherche-Aufträge selbst laufen nacheinander. Bei Drosselung (429, OpenRouter-„in-flight budget“) wartet der Server und versucht es bis zu 3-mal erneut. |
 | `WLP_PARALLEL_PROCESSOR` | `base` | Parallel-Task-Prozessor (`lite`, `base`, `core`, …): gründlicher = langsamer und teurer. |
 | `WLP_ADMIN_TOKEN` | – | Optional; Admin-Token (mind. 16 Zeichen, nicht gleich einem Sync-Token) für die Zugangsverwaltung (`/api/admin/tokens`). Er gilt nur dort, nie für den Sync. Ohne ihn: `admin_not_configured`. |
 | `WLP_APIFY_TOKEN` | – | Optional; Apify-Token für ÖPNV-Verbindungen in Japan (`POST /api/transit`, Actor „Japan Train Route & Fare Finder“, Daten von Yahoo! 乗換案内). Ohne Token: `transit_not_configured`, die App fällt auf Google zurück. |

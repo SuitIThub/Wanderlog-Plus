@@ -23,6 +23,8 @@ data class ServerConfig(
     val textModel: String = DEFAULT_TEXT_MODEL,
     /** Parallel key for the web research of reel places (Search + Task API); without it OpenRouter researches. */
     val parallelKey: String? = null,
+    /** Places researched at the same time (WLP_RESEARCH_PARALLELISM, 1–20). */
+    val researchParallelism: Int = de.wanderlogplus.server.ai.DEFAULT_RESEARCH_PARALLELISM,
     val parallelProcessor: String = "base",
     /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
     val instagramCookies: Path? = null,
@@ -80,6 +82,8 @@ data class ServerConfig(
                 aiModel = env["WLP_AI_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_AI_MODEL,
                 textModel = env["WLP_TEXT_MODEL"]?.takeIf { it.isNotBlank() } ?: DEFAULT_TEXT_MODEL,
                 parallelKey = env["WLP_PARALLEL_KEY"]?.takeIf { it.isNotBlank() },
+                researchParallelism = env["WLP_RESEARCH_PARALLELISM"]?.trim()?.toIntOrNull()?.takeIf { it in 1..20 }
+                    ?: de.wanderlogplus.server.ai.DEFAULT_RESEARCH_PARALLELISM,
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
                 adminToken = env["WLP_ADMIN_TOKEN"]?.trim()?.takeIf { it.isNotBlank() }?.also { admin ->
