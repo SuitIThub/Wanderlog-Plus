@@ -3,6 +3,14 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.44.0
+
+- **Reservierungsfristen für Züge, Flüge und Unterkünfte:** Im Bearbeiten-Formular gibt es „Reservierbar ab“, „Reservieren bis“ und „Reservierung erledigt“; die Detailseite zeigt die Frist.
+- **Fristen für Orte aus der Recherche:** Die Ortsrecherche sagt jetzt ausdrücklich, ob eine Reservierung nötig, empfohlen oder nicht nötig ist und ab/bis wann (z. B. „30 Tage vorher“, „am 10. des Vormonats“). Daraus rechnet die App mit dem geplanten Tag die Daten aus – ohne geplanten Tag mit dem ersten Reisetag in der Region („geschätzt“). Von Hand lassen sich die Daten am Ort ändern („Fristen ändern“); die Recherche überschreibt sie dann nicht mehr.
+- **Behoben: „Reservierung nötig“, obwohl der Text „nicht nötig“ sagt.** Verneinungen wie „Eine Reservierung ist nicht nötig“ werden erkannt; neue Recherchen entscheiden ausdrücklich.
+- **Heute-Seite: nur Fristen, die jetzt zählen.** Fristen der nächsten 30 Tage, dazu „Jetzt reservierbar“ und überfällige Fristen (rot, oben). Höchstens 4 Zeilen, der Rest hinter „Alle Fristen (n)“. Ein Tipp öffnet Ort, Unterkunft, Zug oder Flug.
+- **Erinnerungen** auch für Reservierungsfristen: „Jetzt reservierbar“ und vor „reservieren bis“ (30/14/7/2 Tage), mit „Erledigt“-Knopf in der Benachrichtigung.
+
 ## 0.43.1
 
 - **Keine Lücke mehr über der Tastatur:** Textfelder (Chat, Bearbeiten-Seiten, Suche) sitzen jetzt direkt über der Tastatur. Bisher schob Android das Fenster zusätzlich zur App noch einmal um die Tastaturhöhe nach oben.
