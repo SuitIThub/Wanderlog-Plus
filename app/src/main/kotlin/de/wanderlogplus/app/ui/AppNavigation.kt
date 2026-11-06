@@ -421,6 +421,7 @@ fun AppNavigation(
                 onJoin = vm::joinJourney,
                 onSplit = vm::splitLegacy,
                 onStayResearch = stayInfoVm?.let { s -> s::research },
+                onSetPhotoLabel = vm::setPhotoLabel,
                 stayResearchJob = stayResearchJob,
             )
         }

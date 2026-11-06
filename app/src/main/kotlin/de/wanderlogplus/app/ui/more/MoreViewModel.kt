@@ -92,6 +92,10 @@ class MoreViewModel(
     fun setHeaderImage(type: EntityType, id: String, ref: String?) =
         write { e, _ -> e.set(type, id, mapOf("headerImage" to (ref?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))) }
 
+    /** What a photo shows (e.g. [de.wanderlogplus.shared.model.Attachment.LABEL_ROOM]); null removes the mark. */
+    fun setPhotoLabel(attachmentId: String, label: String?) =
+        write { e, _ -> e.set(EntityType.ATTACHMENT, attachmentId, mapOf("label" to (label?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))) }
+
     fun setLinks(type: EntityType, id: String, links: List<de.wanderlogplus.shared.model.CustomLink>) =
         write { e, _ -> e.set(type, id, mapOf("links" to kotlinx.serialization.json.Json.encodeToJsonElement(kotlinx.serialization.builtins.ListSerializer(de.wanderlogplus.shared.model.CustomLink.serializer()), links))) }
 

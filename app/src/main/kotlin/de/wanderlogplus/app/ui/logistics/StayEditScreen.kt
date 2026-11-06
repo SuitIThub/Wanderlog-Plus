@@ -62,6 +62,8 @@ data class StayDraft(
     val adults: String = "",
     val rooms: String = "",
     val note: String = "",
+    /** Room and amenities (research, changed by hand). */
+    val info: de.wanderlogplus.shared.model.StayInfo? = null,
 )
 
 private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
@@ -79,6 +81,7 @@ fun stayDraftOf(snapshot: TripSnapshot, id: String): StayDraft? {
         cancellationDeadline = s.cancellationDeadline?.take(10).orEmpty(), cancellationPolicy = s.cancellationPolicy.orEmpty(),
         confirmationNumber = s.confirmationNumber.orEmpty(), adults = s.adults?.toString().orEmpty(), rooms = s.rooms?.toString().orEmpty(),
         note = s.note,
+        info = s.info,
     )
 }
 
@@ -128,6 +131,7 @@ fun stayToSave(snapshot: TripSnapshot, d: StayDraft, existing: Stay?, newPlaceId
         adults = d.adults.trim().toIntOrNull(),
         rooms = d.rooms.trim().toIntOrNull(),
         note = d.note.trim(),
+        info = d.info,
     )
     return StaySave(stay, newPlace)
 }
@@ -240,6 +244,8 @@ fun StayEditScreen(
             OutlinedTextField(d.cancellationDeadline, { d = d.copy(cancellationDeadline = it) }, label = { Text("Stornofrist (JJJJ-MM-TT)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("stay-deadline"))
             OutlinedTextField(d.cancellationPolicy, { d = d.copy(cancellationPolicy = it) }, label = { Text("Stornobedingungen") }, modifier = Modifier.fillMaxWidth().testTag("stay-policy"))
             OutlinedTextField(d.note, { d = d.copy(note = it) }, label = { Text("Notiz") }, minLines = 2, modifier = Modifier.fillMaxWidth().testTag("stay-note"))
+            SectionLabel("Zimmer & Ausstattung")
+            StayInfoEditor(d.info) { d = d.copy(info = it) }
             Spacer(Modifier.padding(bottom = 24.dp))
         }
     }

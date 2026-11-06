@@ -102,6 +102,8 @@ fun LogisticsDetailScreen(
     onStayResearch: ((stayId: String, links: List<String>, fresh: Boolean) -> Unit)? = null,
     /** Stays: the research started last, to show its progress on its stay. */
     stayResearchJob: de.wanderlogplus.shared.sync.AiJobInfo? = null,
+    /** Stays: mark a photo as room photo or remove the mark; null: tapping a photo does nothing. */
+    onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -239,11 +241,28 @@ fun LogisticsDetailScreen(
 
             if (type == EntityType.STAY && attachments != null) {
                 SectionLabel("Fotos", color = view.accent)
+                val stayPhotos = snapshot.photosFor(EntityType.STAY, id)
+                var labelling by remember(id) { mutableStateOf<de.wanderlogplus.shared.model.Attachment?>(null) }
                 de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                    snapshot.photosFor(EntityType.STAY, id), attachments.files,
+                    stayPhotos, attachments.files,
                     onAdd = attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
-                    onOpen = {},
+                    onOpen = { i -> if (onSetPhotoLabel != null) labelling = stayPhotos.getOrNull(i) },
                 )
+                labelling?.let { a ->
+                    val room = a.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { labelling = null },
+                        title = { Text("Foto") },
+                        text = { Text(if (room) "Dieses Foto ist als Zimmerfoto markiert." else "Zeigt dieses Foto euer Zimmer?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = { onSetPhotoLabel?.invoke(a.id, toggledRoomLabel(a)); labelling = null },
+                                modifier = Modifier.testTag("photo-room-toggle"),
+                            ) { Text(if (room) "Markierung entfernen" else "Als Zimmerfoto markieren") }
+                        },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { labelling = null }) { Text("Abbrechen") } },
+                    )
+                }
             }
 
             SectionLabel("Anhänge", color = view.accent)
