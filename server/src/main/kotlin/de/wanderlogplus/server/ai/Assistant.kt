@@ -387,7 +387,9 @@ internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was d
 "criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
 "insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
 "goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"],
-"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|branch|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
+"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|branch|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}],
+"reservation": {"need": "REQUIRED|RECOMMENDED|NOT_NEEDED|UNKNOWN", "opensDaysBefore": "Zahl oder null", "opensOn": "yyyy-MM-dd oder null", "byDaysBefore": "Zahl oder null", "note": "ein Satz, Deutsch"}}
+reservation: ob man reservieren oder Tickets vorab kaufen muss (REQUIRED), es sich empfiehlt (RECOMMENDED) oder nicht nötig ist (NOT_NEEDED); UNKNOWN, wenn unklar. opensDaysBefore: die Buchung öffnet so viele Tage vor dem Besuch; opensOn: feste Freischaltung an einem Datum; byDaysBefore: spätestens so viele Tage vorher reservieren (weil es sonst ausgebucht ist). Nur angeben, was du gefunden hast, sonst null.
 nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0.
 Hat der Ort mehrere Filialen: Schreibe über die Filiale, die Stadtteil und Hinweise meinen, und nenne höchstens 3 andere Filialen derselben Stadt als nearbyPoints mit kind "branch" (Name mit Stadtteil, z. B. „Stand Fuji Ebisu“)."""
 
@@ -417,8 +419,19 @@ internal fun parseResearch(o: JsonObject, config: AssessConfig, extraSources: Li
             hints = strings("hints"),
             sources = extraSources.distinct().take(ParallelResearcher.MAX_SOURCES),
             pois = parsePois(o["nearbyPoints"] as? JsonArray),
+            reservation = parseReservation(o["reservation"] as? JsonObject),
         ),
     )
+}
+
+/** The research's "reservation" object; unknown values become UNKNOWN or null, dates must be yyyy-MM-dd. */
+internal fun parseReservation(o: JsonObject?): de.wanderlogplus.shared.model.ReservationAdvice? {
+    o ?: return null
+    fun int(k: String) = (o[k] as? JsonPrimitive)?.content?.toIntOrNull()?.takeIf { it in 0..400 }
+    val need = o.str("need")?.uppercase()?.let { v -> de.wanderlogplus.shared.model.ReservationNeed.entries.firstOrNull { it.name == v } }
+        ?: de.wanderlogplus.shared.model.ReservationNeed.UNKNOWN
+    val opensOn = o.str("opensOn")?.trim()?.takeIf { Regex("""\d{4}-\d{2}-\d{2}""").matches(it) }
+    return de.wanderlogplus.shared.model.ReservationAdvice(need, int("opensDaysBefore"), opensOn, int("byDaysBefore"), o.str("note").orEmpty().trim().take(300))
 }
 
 /** Raw related spots from a research answer (coordinates unchecked; 0 = unknown). */

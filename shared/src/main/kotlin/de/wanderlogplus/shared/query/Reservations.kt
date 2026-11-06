@@ -4,6 +4,7 @@ import de.wanderlogplus.shared.model.Day
 import de.wanderlogplus.shared.model.DayItem
 import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.model.PlaceStatus
+import de.wanderlogplus.shared.model.ReservationNeed
 import de.wanderlogplus.shared.model.SavedPlace
 
 /** A planned place that needs a reservation or tickets and is not marked as reserved yet. */
@@ -21,8 +22,9 @@ object Reservations {
         RegexOption.IGNORE_CASE,
     )
     private val NOT_NEEDED = Regex(
-        "keine reservierung|ohne reservierung|reservierung (nicht|nur selten|kaum) (nötig|notwendig|erforderlich)|" +
-            "nicht reservieren|no reservation|reservation not",
+        "keine reservierung|ohne reservierung|reservierung (ist |wird |muss )?(nicht|nur selten|kaum|selten) (nötig|notwendig|erforderlich)|" +
+            "nicht (nötig|notwendig|erforderlich),? (zu )?reservieren|nicht reservieren|no reservation|reservation (is )?not|" +
+            "not (required|necessary)|no need to (book|reserve)",
         RegexOption.IGNORE_CASE,
     )
 
@@ -31,9 +33,16 @@ object Reservations {
      * nothing says so. A research hint that says "keine Reservierung nötig" does not count.
      */
     fun reason(s: SavedPlace): String? {
+        s.dossier?.reservation?.takeIf { it.need != ReservationNeed.UNKNOWN }?.let { a ->
+            return when (a.need) {
+                ReservationNeed.NOT_NEEDED -> null
+                ReservationNeed.RECOMMENDED -> a.note.trim().ifBlank { "Reservierung empfohlen" }
+                else -> a.note.trim().ifBlank { "Reservierung nötig" }
+            }
+        }
         s.tags.firstOrNull { NEED.containsMatchIn(it) && !NOT_NEEDED.containsMatchIn(it) }?.let { return "Tag „$it“" }
         val d = s.dossier
-        d?.criteria?.firstOrNull { it.key == "booking" && it.score in 1..2 }?.let { c ->
+        d?.criteria?.firstOrNull { it.key == "booking" && it.score in 1..2 && !NOT_NEEDED.containsMatchIn(it.note) }?.let { c ->
             return c.note.takeIf { it.isNotBlank() } ?: "Buchbarkeit ${c.score}/5"
         }
         val texts = d?.let { it.hints + it.goodToKnow + it.tips + it.insiderTips }.orEmpty() + listOf(s.note)
