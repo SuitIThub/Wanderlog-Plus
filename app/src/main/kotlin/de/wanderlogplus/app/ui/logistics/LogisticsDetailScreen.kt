@@ -98,6 +98,10 @@ fun LogisticsDetailScreen(
     onJoin: ((List<Pair<EntityType, String>>) -> Unit)? = null,
     /** "In Teilstrecken aufteilen" for an old merged entry; null hides it. */
     onSplit: ((EntityType, String) -> Unit)? = null,
+    /** Stays: research room and amenities (links, fresh); null hides "Recherchieren". */
+    onStayResearch: ((stayId: String, links: List<String>, fresh: Boolean) -> Unit)? = null,
+    /** Stays: the research started last, to show its progress on its stay. */
+    stayResearchJob: de.wanderlogplus.shared.sync.AiJobInfo? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -220,6 +224,18 @@ fun LogisticsDetailScreen(
             }
 
             de.wanderlogplus.app.ui.budget.CostsSection(snapshot, id, today ?: java.time.LocalDate.now().toString(), view.accent)
+
+            if (stay != null) {
+                SectionLabel("Zimmer & Ausstattung", color = view.accent)
+                StayInfoCards(
+                    stay,
+                    roomPhotos = snapshot.photosFor(EntityType.STAY, id).filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
+                    files = attachments?.files,
+                    onResearch = onStayResearch?.let { r -> { links: List<String>, fresh: Boolean -> r(id, links, fresh) } },
+                    onEdit = onEdit?.let { e -> { e(EntityType.STAY, id) } },
+                    running = stayResearchJob?.takeIf { it.stayId == id },
+                )
+            }
 
             if (type == EntityType.STAY && attachments != null) {
                 SectionLabel("Fotos", color = view.accent)
