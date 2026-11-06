@@ -77,4 +77,37 @@ class AmenityGridTest {
         rule.onNodeWithText("+ 3 weitere").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithText("Ding 9").assertExists()
     }
+
+    @Test
+    fun longFactsSplitIntoTitleAndNote() {
+        assertEquals("Für 2 Erwachsene gebucht" to "Bettart laut Buchungsbestätigung nicht angegeben", splitText("Für 2 Erwachsene gebucht; Bettart laut Buchungsbestätigung nicht angegeben"))
+        assertEquals("Zimmer mit Open-Air-Bad" to "Hauptgebäude", splitText("Zimmer mit Open-Air-Bad (Hauptgebäude)"))
+        assertEquals("Flussblick" to "", splitText("Flussblick"))
+        val facts = stayFacts(StayInfo(room = RoomInfo(beds = "Für 2 Erwachsene gebucht; Bettart offen")))
+        assertEquals(StayFact("bed", "Für 2 Erwachsene gebucht", "Bettart offen"), facts.single())
+    }
+
+    @Test
+    fun longTilesTakeTheWholeRow() {
+        val rows = gridRows(listOf("a", "b", "c" + "x".repeat(70), "d", "e"), columns = 2) { it.length > 60 }
+        assertEquals(listOf(listOf("a", "b"), listOf("c" + "x".repeat(70)), listOf("d", "e")), rows)
+    }
+
+    @Test
+    fun longTextsAreNotCutOff() {
+        val long = "Gebucht: Hida-Rind-Bankettküche mit japanischem Frühstück und japanischem Abendessen im Speisesaal"
+        val note = "laut Hotelwebsite in allen Gästezimmern; Booking.com nennt nur die Lobby, das Hotel aber alle Zimmer"
+        val info = StayInfo(
+            room = RoomInfo(type = "Japanisches Zimmer", amenities = listOf(AmenityGroup("Technik", listOf(Amenity("Kostenloses WLAN", note))))),
+            property = PropertyInfo(meals = long),
+        )
+        rule.setContent { WanderlogPlusTheme { androidx.compose.foundation.layout.Column { StayFactTiles(stayFacts(info)); AmenityPanels(info) } } }
+        listOf(long, note).forEach { t ->
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            rule.onNodeWithText(t).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(results) }
+            val input = results.single().layoutInput
+            assertEquals(t, Int.MAX_VALUE, input.maxLines)
+            org.junit.Assert.assertNotEquals(t, androidx.compose.ui.text.style.TextOverflow.Ellipsis, input.overflow)
+        }
+    }
 }
