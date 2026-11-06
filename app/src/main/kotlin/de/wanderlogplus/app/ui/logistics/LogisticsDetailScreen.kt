@@ -98,6 +98,12 @@ fun LogisticsDetailScreen(
     onJoin: ((List<Pair<EntityType, String>>) -> Unit)? = null,
     /** "In Teilstrecken aufteilen" for an old merged entry; null hides it. */
     onSplit: ((EntityType, String) -> Unit)? = null,
+    /** Stays: research room and amenities (links, fresh); null hides "Recherchieren". */
+    onStayResearch: ((stayId: String, links: List<String>, fresh: Boolean) -> Unit)? = null,
+    /** Stays: the research started last, to show its progress on its stay. */
+    stayResearchJob: de.wanderlogplus.shared.sync.AiJobInfo? = null,
+    /** Stays: mark a photo as room photo or remove the mark; null: tapping a photo does nothing. */
+    onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -181,6 +187,16 @@ fun LogisticsDetailScreen(
                 if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
 
+            val train = if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id } else null
+            val flight = if (type == EntityType.FLIGHT) snapshot.flights.firstOrNull { it.id == id } else null
+            val seatModel = train?.let { de.wanderlogplus.shared.seatmap.SeatMaps.modelFor(it) } ?: flight?.let { de.wanderlogplus.shared.seatmap.SeatMaps.modelFor(it) }
+            val seats = train?.seats ?: flight?.seats.orEmpty()
+            val travelClass = train?.travelClass ?: flight?.travelClass
+            if (seats.isNotEmpty() || !travelClass.isNullOrBlank()) {
+                SectionLabel("Sitzplätze", color = view.accent)
+                InfoCard { SeatCard(seatModel, travelClass, seats) }
+            }
+
             val guideTarget = when (type) {
                 EntityType.STAY -> de.wanderlogplus.shared.model.GuideTargetType.STAY
                 EntityType.TRAIN -> de.wanderlogplus.shared.model.GuideTargetType.TRAIN
@@ -211,13 +227,42 @@ fun LogisticsDetailScreen(
 
             de.wanderlogplus.app.ui.budget.CostsSection(snapshot, id, today ?: java.time.LocalDate.now().toString(), view.accent)
 
+            if (stay != null) {
+                SectionLabel("Zimmer & Ausstattung", color = view.accent)
+                StayInfoCards(
+                    stay,
+                    roomPhotos = snapshot.photosFor(EntityType.STAY, id).filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
+                    files = attachments?.files,
+                    onResearch = onStayResearch?.let { r -> { links: List<String>, fresh: Boolean -> r(id, links, fresh) } },
+                    onEdit = onEdit?.let { e -> { e(EntityType.STAY, id) } },
+                    running = stayResearchJob?.takeIf { it.stayId == id },
+                )
+            }
+
             if (type == EntityType.STAY && attachments != null) {
                 SectionLabel("Fotos", color = view.accent)
+                val stayPhotos = snapshot.photosFor(EntityType.STAY, id)
+                var labelling by remember(id) { mutableStateOf<de.wanderlogplus.shared.model.Attachment?>(null) }
                 de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                    snapshot.photosFor(EntityType.STAY, id), attachments.files,
+                    stayPhotos, attachments.files,
                     onAdd = attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
-                    onOpen = {},
+                    onOpen = { i -> if (onSetPhotoLabel != null) labelling = stayPhotos.getOrNull(i) },
                 )
+                labelling?.let { a ->
+                    val room = a.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { labelling = null },
+                        title = { Text("Foto") },
+                        text = { Text(if (room) "Dieses Foto ist als Zimmerfoto markiert." else "Zeigt dieses Foto euer Zimmer?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = { onSetPhotoLabel?.invoke(a.id, toggledRoomLabel(a)); labelling = null },
+                                modifier = Modifier.testTag("photo-room-toggle"),
+                            ) { Text(if (room) "Markierung entfernen" else "Als Zimmerfoto markieren") }
+                        },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { labelling = null }) { Text("Abbrechen") } },
+                    )
+                }
             }
 
             SectionLabel("Anhänge", color = view.accent)
@@ -245,6 +290,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                     "Abflug" to endpointText(f.depart),
                     "Ankunft" to endpointText(f.arrive),
                     f.airline?.takeIf { it.isNotBlank() }?.let { "Airline" to it },
+                    de.wanderlogplus.shared.seatmap.seatLine(f.travelClass, f.seats)?.let { "Sitzplätze" to it },
                 ) + booking(f.confirmationNumber, f.travelerNames),
                 note = f.note,
                 liveStatus = true,
@@ -265,6 +311,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                     "Abfahrt" to endpointText(t.depart) + (t.platformText()?.let { " · $it" } ?: ""),
                     "Ankunft" to endpointText(t.arrive),
                     t.transit?.routes?.firstOrNull()?.let { r -> "Verbindung" to transitSummary(r) },
+                    de.wanderlogplus.shared.seatmap.seatLine(t.travelClass, t.seats)?.let { "Sitzplätze" to it },
                 ) + booking(t.confirmationNumber, t.travelerNames),
                 note = t.note,
                 liveStatus = true,

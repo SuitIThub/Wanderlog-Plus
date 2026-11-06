@@ -368,6 +368,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Researches the room and amenities of a stay (confirmations, [links], web); [fresh] replaces hand edits too. */
+    suspend fun startStayResearch(stayId: String, links: List<String>, fresh: Boolean = false): AiJobInfo = call {
+        client.post("$base/api/ai/stay") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.StayResearchRequest(stayId, links, fresh))
+        }
+    }
+
     /** Writes or rewrites 1–30 travel guides (research, then the text model) as one job. */
     suspend fun startGuides(asks: List<de.wanderlogplus.shared.sync.GuideAsk>): AiJobInfo = call {
         client.post("$base/api/ai/guides") {

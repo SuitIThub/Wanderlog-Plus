@@ -126,6 +126,10 @@ data class MoveDraft(
     val note: String = "",
     /** Trains: the connection taken over from the transit search. */
     val transit: TransitResult? = null,
+    val travelClass: String = "",
+    val seats: List<de.wanderlogplus.shared.model.Seat> = emptyList(),
+    /** Seat map chosen by hand; null: found by the number. */
+    val seatMap: String? = null,
 )
 
 /**
@@ -173,10 +177,10 @@ fun draftOf(snapshot: TripSnapshot, type: EntityType, id: String): MoveDraft? = 
     isNewId(id) && (type == EntityType.TRAIN || type == EntityType.FLIGHT) ->
         parseNewLeg(id)?.let { (_, prev, next) -> newLegDraft(snapshot, prev, next) } ?: MoveDraft("", "", Endpoint(), emptyList(), Endpoint())
     type == EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let {
-        MoveDraft(it.carrier.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, it.transit)
+        MoveDraft(it.carrier.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, it.transit, it.travelClass.orEmpty(), it.seats, it.seatMap)
     }
     type == EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let {
-        MoveDraft(it.airline.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note)
+        MoveDraft(it.airline.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, null, it.travelClass.orEmpty(), it.seats, it.seatMap)
     }
     else -> null
 }
@@ -202,6 +206,9 @@ fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDr
                     note = d.note.trim(),
                     transit = d.transit,
                     journeyId = if (isNew) journeyId else t.journeyId,
+                    travelClass = d.travelClass.trim().ifBlank { null },
+                    seats = d.seats.filter { it.seat.isNotBlank() }.map { it.copy(car = it.car?.trim()?.ifBlank { null }, seat = it.seat.trim(), traveler = it.traveler?.trim()?.ifBlank { null }) },
+                    seatMap = d.seatMap,
                 ),
             )
         }
@@ -216,6 +223,9 @@ fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDr
                     confirmationNumber = d.bookingNumber.trim().ifBlank { null },
                     note = d.note.trim(),
                     journeyId = if (isNew) journeyId else f.journeyId,
+                    travelClass = d.travelClass.trim().ifBlank { null },
+                    seats = d.seats.filter { it.seat.isNotBlank() }.map { it.copy(car = null, seat = it.seat.trim(), traveler = it.traveler?.trim()?.ifBlank { null }) },
+                    seatMap = d.seatMap,
                 ),
             )
         }
@@ -381,6 +391,8 @@ fun LogisticsEditScreen(
                 label = { Text("Buchungsnummer") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("edit-booking"),
             )
+            SectionLabel("Sitzplätze")
+            SeatFields(train = type == EntityType.TRAIN, draft = draft, onChange = { draft = it })
             OutlinedTextField(
                 draft.note, { draft = draft.copy(note = it) },
                 label = { Text("Notiz") }, minLines = 2,

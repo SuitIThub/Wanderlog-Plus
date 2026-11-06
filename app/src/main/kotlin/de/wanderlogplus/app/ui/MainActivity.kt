@@ -227,6 +227,7 @@ class MainActivity : ComponentActivity() {
                         chatViewModelFactory = remember { chatFactory(container) },
                         budgetViewModelFactory = remember { budgetFactory(container) },
                         guidesViewModelFactory = remember { guidesFactory(container) },
+                        stayInfoViewModelFactory = remember { stayInfoFactory(container) },
                         vaultScanViewModelFactory = remember { vaultScanFactory(container) },
                         hasAdminToken = hasAdminToken,
                         pendingReelJob = reelJob,
@@ -311,6 +312,16 @@ class MainActivity : ComponentActivity() {
             adminApi = { t -> container.adminApi(t) },
             loadToken = { container.settings.adminToken() },
             saveToken = { t -> container.settings.setAdminToken(t) },
+        ) as T
+    }
+
+    private fun stayInfoFactory(container: AppContainer) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.logistics.StayInfoViewModel(
+            container.scope,
+            start = { id, links, fresh -> container.syncApi()?.startStayResearch(id, links, fresh) },
+            job = { id -> container.syncApi()?.aiJob(id) },
+            syncNow = container.syncScheduler::requestNow,
         ) as T
     }
 

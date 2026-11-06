@@ -234,6 +234,8 @@ fun AppNavigation(
     budgetViewModelFactory: ViewModelProvider.Factory? = null,
     /** Travel guides (suggestions, jobs, pins); null: guides are read-only and cannot be created. */
     guidesViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Research of a stay's room and amenities; null hides "Recherchieren" on stays. */
+    stayInfoViewModelFactory: ViewModelProvider.Factory? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -257,6 +259,15 @@ fun AppNavigation(
     val chatVm: de.wanderlogplus.app.ui.chat.ChatViewModel? = chatViewModelFactory?.let { viewModel(factory = it) }
     val budgetVm: de.wanderlogplus.app.ui.budget.BudgetViewModel? = budgetViewModelFactory?.let { viewModel(factory = it) }
     val guidesVm: de.wanderlogplus.app.ui.guides.GuidesViewModel? = guidesViewModelFactory?.let { viewModel(factory = it) }
+    val stayInfoVm: de.wanderlogplus.app.ui.logistics.StayInfoViewModel? = stayInfoViewModelFactory?.let { viewModel(factory = it) }
+    val stayInfoMessage = stayInfoVm?.message?.collectAsState()?.value
+    val stayResearchJob = stayInfoVm?.running?.collectAsState()?.value
+    LaunchedEffect(stayInfoMessage) {
+        if (stayInfoMessage != null) {
+            snackbar.showSnackbar(stayInfoMessage)
+            stayInfoVm.messageShown()
+        }
+    }
     val guidesMessage = guidesVm?.message?.collectAsState()?.value
     LaunchedEffect(guidesMessage) {
         if (guidesMessage != null) {
@@ -409,6 +420,9 @@ fun AppNavigation(
                 onOpenJourney = { j -> nav.navigate(de.wanderlogplus.app.ui.logistics.journeyRoute(j)) },
                 onJoin = vm::joinJourney,
                 onSplit = vm::splitLegacy,
+                onStayResearch = stayInfoVm?.let { s -> s::research },
+                onSetPhotoLabel = vm::setPhotoLabel,
+                stayResearchJob = stayResearchJob,
             )
         }
 

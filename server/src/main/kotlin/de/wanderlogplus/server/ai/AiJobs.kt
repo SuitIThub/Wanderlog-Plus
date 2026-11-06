@@ -50,6 +50,10 @@ class AiJobs(
     private val writeResults: ((List<ServerEdit>) -> Int)? = null,
     /** Writes travel guides; null: guide jobs fail with `ai_not_configured`. */
     private val guideWriter: GuideWriter? = null,
+    /** Researches room and amenities of stays; null: stay jobs fail with `ai_not_configured`. */
+    private val stayResearch: StayResearch? = null,
+    /** Reads the stays' confirmations and keeps room photos. */
+    private val files: de.wanderlogplus.server.FileStore? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -57,6 +61,79 @@ class AiJobs(
     val configured: Boolean get() = assistant != null
 
     val guidesConfigured: Boolean get() = guideWriter != null
+
+    val staysConfigured: Boolean get() = stayResearch != null
+
+    /** Researches the room and amenities of a stay and writes them (hand edits stay unless [StayResearchRequest.fresh]). */
+    fun startStay(req: de.wanderlogplus.shared.sync.StayResearchRequest): AiJobInfo {
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "stay", now().toEpochMilli(), "QUEUED", total = 1, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, stayId = req.stayId,
+            ),
+        )
+        executor.execute { runStay(job, req) }
+        return job
+    }
+
+    private fun runStay(start: AiJobInfo, req: de.wanderlogplus.shared.sync.StayResearchRequest) {
+        val t = Tracker(start)
+        val r = stayResearch ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            val record = store.get(EntityType.STAY, req.stayId)?.takeIf { !it.isDeleted } ?: run { t.fail("not_found"); return }
+            val stay = EntityCodec.decode<de.wanderlogplus.shared.model.Stay>(record)
+            val place = store.get(EntityType.PLACE, stay.placeId)?.takeIf { !it.isDeleted }?.let { EntityCodec.decode<de.wanderlogplus.shared.model.Place>(it) }
+            val attachments = store.all(EntityType.ATTACHMENT).filter { !it.isDeleted }
+                .mapNotNull { a -> try { EntityCodec.decode<de.wanderlogplus.shared.model.Attachment>(a) } catch (e: Exception) { null } }
+                .filter { it.targetType == EntityType.STAY && it.targetId == stay.id }
+            val docs = attachments.filter { it.kind != "photo" && (it.mimeType == "application/pdf" || it.mimeType.startsWith("image/")) }
+                .mapNotNull { a -> files?.open(a.fileHash)?.let { de.wanderlogplus.server.ai.StayDocument(a.mimeType, java.nio.file.Files.readAllBytes(it), a.fileName) } }
+            val links = req.links.map { it.trim() }.filter { it.startsWith("http") }.ifEmpty { stay.infoLinks }
+            t.step("${docs.size} Bestätigung(en), ${links.size} Link(s)")
+            val found = r.research(stay, place, docs, links) { t.step(it) }
+            if (found == null) { t.fail("research_empty"); return }
+            val old = stay.info?.let { if (req.fresh) it.copy(editedByHand = emptySet()) else it }
+            val merged = de.wanderlogplus.shared.model.StayInfoMerge.merge(old, found.copy(researchedAt = now().toEpochMilli()))
+            val fields = mapOf(
+                "info" to json.encodeToJsonElement(de.wanderlogplus.shared.model.StayInfo.serializer(), merged),
+                "infoLinks" to kotlinx.serialization.json.JsonArray(links.map { kotlinx.serialization.json.JsonPrimitive(it) }),
+            )
+            writeResults?.invoke(listOf(ServerEdit(EntityType.STAY, stay.id, fields)))
+            val saved = saveRoomPhotos(r, stay.id, links, merged.room.type, attachments.map { it.fileHash }.toSet())
+            if (saved > 0) t.step("$saved Zimmerfoto(s) übernommen", JobProgress.OK)
+            t.done { it.copy(progress = 1) }
+        } catch (e: AiFailed) {
+            t.fail(e.code)
+        } catch (e: Exception) {
+            log.error("Stay research failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
+    /** Pictures of the room type from the links as "room" photos of the stay; failures only cost the photos. */
+    private fun saveRoomPhotos(r: StayResearch, stayId: String, links: List<String>, roomType: String, known: Set<String>): Int {
+        val source = r.photos ?: return 0
+        val store = files ?: return 0
+        val write = writeResults ?: return 0
+        val seen = known.toMutableSet()
+        var n = 0
+        links.forEach { url ->
+            val got = try { source.photos(url, roomType) } catch (e: Exception) { emptyList() }
+            got.forEach { (name, bytes) ->
+                if (n >= HttpRoomPhotoSource.MAX) return@forEach
+                val stored = try { store.save(java.io.ByteArrayInputStream(bytes)) } catch (e: Exception) { return@forEach }
+                if (!seen.add(stored.hash)) return@forEach
+                val mime = when (name.substringAfterLast('.').lowercase()) { "png" -> "image/png"; "webp" -> "image/webp"; else -> "image/jpeg" }
+                val a = de.wanderlogplus.shared.model.Attachment(
+                    UUID.randomUUID().toString(), EntityType.STAY, stayId, stored.hash, name, mime, stored.size,
+                    kind = "photo", label = de.wanderlogplus.shared.model.Attachment.LABEL_ROOM,
+                )
+                if (write(listOf(ServerEdit(EntityType.ATTACHMENT, a.id, EntityCodec.fields(a), create = true))) > 0) n++
+            }
+        }
+        return n
+    }
 
     /** Writes or rewrites travel guides one after the other; a failed one does not stop the rest. */
     fun startGuides(asks: List<GuideAsk>): AiJobInfo {
@@ -407,6 +484,7 @@ class AiJobs(
             "ai_unreachable" -> "KI nicht erreichbar"
             "research_timeout" -> "Recherche dauerte zu lange"
             "research_empty" -> "Recherche ohne Ergebnis"
+            "not_found" -> "Unterkunft nicht gefunden"
             "ai_bad_answer" -> "KI-Antwort unbrauchbar"
             "interrupted" -> "Server wurde neu gestartet"
             else -> "Fehler ($code)"

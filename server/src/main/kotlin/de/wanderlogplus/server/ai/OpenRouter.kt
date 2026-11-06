@@ -29,7 +29,8 @@ class AiFailed(val code: String = "ai_failed") : RuntimeException(code)
 /** One part of a user message: text, an image (JPEG bytes) or audio (MP3 bytes). */
 sealed interface AiPart {
     data class Text(val text: String) : AiPart
-    data class Image(val jpeg: ByteArray) : AiPart
+    data class Image(val jpeg: ByteArray, val mime: String = "image/jpeg") : AiPart
+    data class Pdf(val bytes: ByteArray, val name: String = "dokument.pdf") : AiPart
     data class Audio(val mp3: ByteArray) : AiPart
 }
 
@@ -152,7 +153,14 @@ class OpenRouterModel(private val apiKey: String, private val model: String) : C
             is AiPart.Text -> buildJsonObject { put("type", "text"); put("text", p.text) }
             is AiPart.Image -> buildJsonObject {
                 put("type", "image_url")
-                putJsonObject("image_url") { put("url", "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(p.jpeg)) }
+                putJsonObject("image_url") { put("url", "data:${p.mime};base64," + Base64.getEncoder().encodeToString(p.jpeg)) }
+            }
+            is AiPart.Pdf -> buildJsonObject {
+                put("type", "file")
+                putJsonObject("file") {
+                    put("filename", p.name)
+                    put("file_data", "data:application/pdf;base64," + Base64.getEncoder().encodeToString(p.bytes))
+                }
             }
             is AiPart.Audio -> buildJsonObject {
                 put("type", "input_audio")

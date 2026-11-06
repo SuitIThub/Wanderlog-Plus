@@ -78,7 +78,7 @@ class ParallelFacts(private val transport: ParallelTransport, private val proces
         return ParallelResearcher.parseSearch(text)
     }
 
-    private fun taskBody(q: FactQuery, sources: List<WebSource>): String = buildJsonObject {
+    internal fun taskBody(q: FactQuery, sources: List<WebSource>): String = buildJsonObject {
         put(
             "input",
             buildString {

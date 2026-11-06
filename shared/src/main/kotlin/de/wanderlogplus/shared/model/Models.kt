@@ -107,6 +107,10 @@ data class Stay(
     /** "HH:mm" from which one can check in, and until which one has to check out; null: unknown. */
     val checkInTime: String? = null,
     val checkOutTime: String? = null,
+    /** The booked room and what the stay offers (research, corrected by hand). */
+    val info: StayInfo? = null,
+    /** Pages to read when researching the room and amenities (hotel site, booking page). */
+    val infoLinks: List<String> = emptyList(),
 )
 
 @Serializable
@@ -139,7 +143,11 @@ data class Flight(
     /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
     val journeyId: String? = null,
     /** Position in its journey when sorted by hand; null: by departure time. */
-    val journeyOrder: Int? = null,
+    val journeyOrder: Int? = null,    /** "Economy", "2. Klasse", "Green Car" …; null: not given. */
+    val travelClass: String? = null,
+    val seats: List<Seat> = emptyList(),
+    /** Key of the seat map chosen by hand ([de.wanderlogplus.shared.seatmap.SeatMaps]); null: found by the number. */
+    val seatMap: String? = null,
 )
 
 @Serializable
@@ -162,7 +170,11 @@ data class Train(
     /** Legs with the same id form one journey (changes between them); null: a ride on its own. */
     val journeyId: String? = null,
     /** Position in its journey when sorted by hand; null: by departure time. */
-    val journeyOrder: Int? = null,
+    val journeyOrder: Int? = null,    /** "Economy", "2. Klasse", "Green Car" …; null: not given. */
+    val travelClass: String? = null,
+    val seats: List<Seat> = emptyList(),
+    /** Key of the seat map chosen by hand ([de.wanderlogplus.shared.seatmap.SeatMaps]); null: found by the number. */
+    val seatMap: String? = null,
 )
 
 @Serializable
@@ -239,7 +251,13 @@ data class Attachment(
     val size: Long = 0,
     /** "file" (Anhänge: tickets, PDFs …) or "photo" (the gallery of a place or a day). */
     val kind: String = "file",
-)
+    /** What a photo shows, e.g. [LABEL_ROOM] for the booked room of a stay; null: nothing special. */
+    val label: String? = null,
+) {
+    companion object {
+        const val LABEL_ROOM = "room"
+    }
+}
 
 /**
  * A cost of the trip, or with [kind] [Expense.KIND_TRANSFER] a settlement payment from [paidBy] to [toTraveler].
