@@ -36,20 +36,6 @@ fun stayTimeText(date: String, time: String?, checkIn: Boolean): String {
     return de.wanderlogplus.app.ui.dayLabel(date) + (if (checkIn) " ab " else " bis ") + t
 }
 
-/** "Auf einen Blick": room type, beds, bath, view, meals, then every amenity of room and property once. */
-fun amenityOverview(info: de.wanderlogplus.shared.model.StayInfo): List<String> {
-    val r = info.room
-    val head = listOf(r.type, r.beds, r.bath, r.view).filter { it.isNotBlank() } +
-        listOfNotNull(info.property.meals.takeIf { it.isNotBlank() }?.let { "Verpflegung: $it" })
-    val items = (r.amenities + info.property.amenities).flatMap { it.items }
-        .filter { it.name.isNotBlank() }
-        .map { a -> a.name.trim() + (a.note.trim().takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "") }
-    return (head + items).distinct()
-}
-
-/** "Bad: Rotenburo – privat, Dusche" */
-internal fun amenityLine(g: AmenityGroup): String = g.name + ": " + g.items.joinToString(", ") { a -> a.name + (a.note.takeIf { it.isNotBlank() }?.let { " – $it" } ?: "") }
-
 /**
  * The room and the property of a stay: what research found or was entered by hand, the room photos, the sources;
  * "Recherchieren" asks for links (the stored ones are used too) and offers "Alles neu recherchieren".
@@ -82,30 +68,15 @@ fun StayInfoCards(
             }
             if (onEdit != null && info != null) OutlinedButton(onClick = onEdit, modifier = Modifier.testTag("stay-info-edit")) { Text("Bearbeiten") }
         }
-        val glance = info?.let(::amenityOverview).orEmpty()
-        if (glance.isNotEmpty()) {
-            SurfaceCard(Modifier.testTag("stay-glance")) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Auf einen Blick", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    glance.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
-                }
-            }
-        }
+        info?.let { StayFactTiles(remember(it) { stayFacts(it) }) }
+        info?.let { AmenityPanels(it) }
         val room = info?.room
-        if (room != null && (room.type.isNotBlank() || room.amenities.isNotEmpty() || room.description.isNotBlank())) {
+        if (room != null && (room.description.isNotBlank() || roomPhotos.isNotEmpty())) {
             SurfaceCard(Modifier.testTag("stay-room")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Zimmer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (room.type.isNotBlank()) Text(room.type, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    listOfNotNull(
-                        room.sizeSqm?.let { "%.0f m²".format(it) },
-                        room.beds.ifBlank { null },
-                        room.bath.ifBlank { null },
-                        room.view.ifBlank { null },
-                        room.maxGuests?.let { "bis $it Personen" },
-                    ).takeIf { it.isNotEmpty() }?.let { Text(it.joinToString(" · ")) }
                     if (room.description.isNotBlank()) Text(room.description, style = MaterialTheme.typography.bodyMedium)
-                    room.amenities.forEach { Text(amenityLine(it), style = MaterialTheme.typography.bodyMedium) }
                     if (roomPhotos.isNotEmpty()) {
                         de.wanderlogplus.app.ui.attachments.PhotoGrid(roomPhotos, files, onAdd = null, onOpen = onOpenPhoto)
                     }
@@ -113,14 +84,12 @@ fun StayInfoCards(
             }
         }
         val property = info?.property
-        if (property != null && (property.description.isNotBlank() || property.amenities.isNotEmpty() || property.meals.isNotBlank() || property.houseRules.isNotBlank())) {
+        if (property != null && (property.description.isNotBlank() || property.houseRules.isNotBlank())) {
             SurfaceCard(Modifier.testTag("stay-property")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Unterkunft", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (property.description.isNotBlank()) Text(property.description, style = MaterialTheme.typography.bodyMedium)
-                    if (property.meals.isNotBlank()) Text("Verpflegung: " + property.meals)
                     if (property.houseRules.isNotBlank()) Text("Hausregeln: " + property.houseRules)
-                    property.amenities.forEach { Text(amenityLine(it), style = MaterialTheme.typography.bodyMedium) }
                 }
             }
         }
