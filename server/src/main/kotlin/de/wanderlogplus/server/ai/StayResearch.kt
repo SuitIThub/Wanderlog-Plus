@@ -42,7 +42,10 @@ class StayResearch(
 
     fun research(stay: Stay, place: Place?, documents: List<StayDocument>, links: List<String>, say: (String) -> Unit): StayInfo? {
         val secrets = secretsOf(stay)
-        fun clean(text: String) = text.lines().filterNot { line -> secrets.any { line.contains(it, ignoreCase = true) } }.joinToString("\n").trim()
+        val numberDigits = stay.confirmationNumber.orEmpty().filter { it.isDigit() }.takeIf { it.length >= 6 }
+        fun leaks(line: String) = secrets.any { line.contains(it, ignoreCase = true) } ||
+            (numberDigits != null && numberDigits in line.filter { it.isDigit() })
+        fun clean(text: String) = text.lines().filterNot(::leaks).joinToString("\n").trim()
         val name = place?.name?.ifBlank { null } ?: "die Unterkunft"
 
         val booking = documents.takeIf { it.isNotEmpty() }?.let { docs ->
@@ -120,6 +123,10 @@ class StayResearch(
         // Defence in depth: whatever the writer made of it, no booking data is kept.
         var text = json.encodeToString(StayInfo.serializer(), decoded)
         secrets.forEach { s -> text = text.replace(s, "", ignoreCase = true) }
+        // The number also written with spaces, dashes or dots.
+        if (numberDigits != null) {
+            text = Regex("""\d[\d\s\-./]*\d""").replace(text) { m -> if (numberDigits in m.value.filter { it.isDigit() }) "" else m.value }
+        }
         val info = json.decodeFromString(StayInfo.serializer(), text)
         val sources = (links + fromPages.flatMap { it.sources } + fromWeb?.sources.orEmpty() + fromGoogle.flatMap { it.sources }).distinct()
         return info.copy(room = if (roomKnown) info.room else RoomInfo(), sources = sources, editedByHand = emptySet())
@@ -147,9 +154,52 @@ class ParallelPageReader(private val transport: ParallelTransport, private val p
     }
 }
 
+/** Which URLs the server may fetch for the travellers: https to public hosts only (no local or private networks). */
+fun interface UrlGuard {
+    fun resolve(host: String): List<java.net.InetAddress>
+
+    fun allowed(url: String): Boolean = try {
+        val u = URI(url)
+        val host = u.host?.removePrefix("[")?.removeSuffix("]")
+        if (u.scheme != "https" || host.isNullOrBlank() || host.equals("localhost", ignoreCase = true)) {
+            false
+        } else {
+            // An IP address in the link is checked itself, not looked up.
+            val literal = host.contains(':') || Regex("""\d{1,3}(\.\d{1,3}){3}""").matches(host)
+            val addresses = if (literal) listOf(java.net.InetAddress.getByName(host)) else resolve(host)
+            addresses.isNotEmpty() && addresses.none { a ->
+                val b = a.address
+                a.isLoopbackAddress || a.isSiteLocalAddress || a.isLinkLocalAddress || a.isAnyLocalAddress || a.isMulticastAddress ||
+                    (b.size == 16 && (b[0].toInt() and 0xFE) == 0xFC) || // IPv6 unique local
+                    (b.size == 4 && (b[0].toInt() and 0xFF) == 100 && (b[1].toInt() and 0xC0) == 64) // carrier-grade NAT
+            }
+        }
+    } catch (e: Exception) {
+        false
+    }
+
+    companion object {
+        val DNS = UrlGuard { java.net.InetAddress.getAllByName(it).toList() }
+    }
+}
+
+/** At most [max] bytes of [input]; null when there are more (the rest is never read). */
+fun readCapped(input: java.io.InputStream, max: Int): ByteArray? = input.use { s ->
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(16 * 1024)
+    while (true) {
+        val n = s.read(buf)
+        if (n < 0) break
+        out.write(buf, 0, n)
+        if (out.size() > max) return null
+    }
+    out.toByteArray()
+}
+
 /** Pictures from a hotel page: its preview image and pictures named like the room type or "room", at most [MAX]. */
-class HttpRoomPhotoSource : RoomPhotoSource {
-    private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build()
+class HttpRoomPhotoSource(private val guard: UrlGuard = UrlGuard.DNS) : RoomPhotoSource {
+    // Redirects are followed by hand, so every hop passes the guard.
+    private val http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NEVER).build()
 
     override fun photos(url: String, roomType: String): List<Pair<String, ByteArray>> {
         val page = get(url)?.let { String(it, Charsets.UTF_8) } ?: return emptyList()
@@ -166,12 +216,30 @@ class HttpRoomPhotoSource : RoomPhotoSource {
     }
 
     private fun get(url: String, image: Boolean = false): ByteArray? = try {
-        val r = http.send(
-            HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).header("User-Agent", "Mozilla/5.0 (Wanderlog Plus)").GET().build(),
-            HttpResponse.BodyHandlers.ofByteArray(),
-        )
-        val type = r.headers().firstValue("content-type").orElse("")
-        r.body().takeIf { r.statusCode() in 200..299 && it.size <= MAX_BYTES && (!image || type.startsWith("image/")) }
+        var current = url
+        var result: ByteArray? = null
+        for (hop in 0..MAX_REDIRECTS) {
+            if (!guard.allowed(current)) break
+            val r = http.send(
+                HttpRequest.newBuilder(URI.create(current)).timeout(Duration.ofSeconds(20)).header("User-Agent", "Mozilla/5.0 (Wanderlog Plus)").GET().build(),
+                HttpResponse.BodyHandlers.ofInputStream(),
+            )
+            val location = r.headers().firstValue("location").orElse(null)
+            if (r.statusCode() in 300..399 && location != null) {
+                r.body().close()
+                current = URI(current).resolve(location).toString()
+                continue
+            }
+            val type = r.headers().firstValue("content-type").orElse("")
+            val length = r.headers().firstValueAsLong("content-length").orElse(-1)
+            if (r.statusCode() !in 200..299 || length > MAX_BYTES || (image && !type.startsWith("image/"))) {
+                r.body().close()
+                break
+            }
+            result = readCapped(r.body(), MAX_BYTES)
+            break
+        }
+        result
     } catch (e: Exception) {
         null
     }
@@ -179,5 +247,6 @@ class HttpRoomPhotoSource : RoomPhotoSource {
     companion object {
         const val MAX = 8
         const val MAX_BYTES = 5_000_000
+        const val MAX_REDIRECTS = 3
     }
 }

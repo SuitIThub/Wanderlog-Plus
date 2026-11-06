@@ -73,6 +73,35 @@ class StayResearchTest {
     }
 
     @Test
+    fun `a booking number with separators is removed too`() {
+        val spaced = Recorder { "Zimmertyp: Twin\nBuchungsnummer 2131-5092-583975" }
+        val writer = Recorder { writerAnswer.replace("Traditionelles", "Ref 2131 5092 583975 Traditionelles") }
+        val info = StayResearch(spaced, writer, web, pages).research(stay, place, listOf(StayDocument("image/png", byteArrayOf(1), "s.png")), emptyList()) {}!!
+        assertFalse("583975" in writer.asked.single(), writer.asked.single())
+        assertFalse("583975" in EntityCodec.fields(info).toString())
+    }
+
+    @Test
+    fun `room photos are only fetched from public https hosts`() {
+        val guard = UrlGuard { host -> if (host == "intern.example") listOf(java.net.InetAddress.getByName("10.0.0.5")) else listOf(java.net.InetAddress.getByName("93.184.216.34")) }
+        assertTrue(guard.allowed("https://hotel.example/rooms"))
+        assertFalse(guard.allowed("http://hotel.example/rooms"), "plain http")
+        assertFalse(guard.allowed("https://intern.example/x"), "private network")
+        assertFalse(guard.allowed("https://localhost/x"))
+        assertFalse(guard.allowed("https://169.254.169.254/latest/meta-data"))
+        assertFalse(guard.allowed("https://[::1]/x"))
+        assertFalse(guard.allowed("not a url"))
+        // A private link yields no photos (and is never requested).
+        assertEquals(emptyList(), HttpRoomPhotoSource(guard).photos("https://intern.example/rooms", "Twin"))
+    }
+
+    @Test
+    fun `large answers are cut off instead of read into memory`() {
+        assertEquals(3, readCapped(java.io.ByteArrayInputStream(byteArrayOf(1, 2, 3)), 5)!!.size)
+        assertEquals(null, readCapped(java.io.ByteArrayInputStream(ByteArray(10)), 5))
+    }
+
+    @Test
     fun `a broken link does not stop the research`() {
         val said = mutableListOf<String>()
         val info = StayResearch(gemini, Recorder { writerAnswer }, web, pages).research(stay, place, emptyList(), listOf("https://broken.example", "https://ryokan.example")) { said += it }
