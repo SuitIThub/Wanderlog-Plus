@@ -359,6 +359,12 @@ fun Application.module(services: Services) {
                 if (req.savedPlaceIds.isEmpty() || req.savedPlaceIds.size > 300) throw BadInput()
                 call.respond(services.ai.startResearch(req.savedPlaceIds.distinct(), req.config))
             }
+            post("/api/ai/stay") {
+                if (!services.ai.staysConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.StayResearchRequest>()
+                if (req.stayId.isBlank() || req.links.size > 10) throw BadInput()
+                call.respond(services.ai.startStay(req))
+            }
             post("/api/ai/guides") {
                 if (!services.ai.guidesConfigured) throw AiNotConfigured()
                 val req = call.receive<de.wanderlogplus.shared.sync.GuideRequest>()

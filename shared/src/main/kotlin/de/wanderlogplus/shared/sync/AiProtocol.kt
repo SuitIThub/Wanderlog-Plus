@@ -31,6 +31,10 @@ data class ResearchRequest(val savedPlaceIds: List<String>, val config: AssessCo
 @Serializable
 data class GuideAsk(val topic: String? = null, val title: String = "", val parentId: String? = null, val wish: String = "", val guideId: String? = null)
 
+/** `POST /api/ai/stay`: research the room and amenities of a stay; [fresh] also replaces what was changed by hand. */
+@Serializable
+data class StayResearchRequest(val stayId: String, val links: List<String> = emptyList(), val fresh: Boolean = false)
+
 /** `POST /api/ai/guides`: 1 to 30 guides, written one after the other. */
 @Serializable
 data class GuideRequest(val asks: List<GuideAsk>)
@@ -111,6 +115,8 @@ data class AiJobInfo(
     val config: AssessConfig? = null,
     /** Guides: the guides written so far. */
     val guideIds: List<String> = emptyList(),
+    /** Stay research: the stay it is about. */
+    val stayId: String? = null,
 )
 
 /** One line of a job's log; [level] is INFO, OK, WARN or ERROR. */

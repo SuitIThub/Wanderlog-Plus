@@ -7,6 +7,9 @@ import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
 import de.wanderlogplus.server.ai.ModelFacts
 import de.wanderlogplus.server.ai.GuideWriter
+import de.wanderlogplus.server.ai.StayResearch
+import de.wanderlogplus.server.ai.ParallelPageReader
+import de.wanderlogplus.server.ai.HttpRoomPhotoSource
 import de.wanderlogplus.server.ai.FallbackGeocoder
 import de.wanderlogplus.server.ai.GooglePlacesGeocoder
 import de.wanderlogplus.server.ai.HttpPlacesSearchTransport
@@ -64,6 +67,17 @@ fun main() {
         ToolReelMedia(cookies = config.instagramCookies),
         config.dataDir.resolve("ai-work"),
         writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+        stayResearch = openRouter?.let { media ->
+            val text = textModel ?: media
+            StayResearch(
+                media, text,
+                config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text),
+                config.parallelKey?.let { ParallelPageReader(HttpParallelTransport(it), config.parallelProcessor) },
+                google = { id -> googleDetails?.get(id)?.facts().orEmpty() },
+                photos = HttpRoomPhotoSource(),
+            )
+        },
+        files = FileStore.forConfig(config),
         guideWriter = textModel?.let { text ->
             GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
         },
