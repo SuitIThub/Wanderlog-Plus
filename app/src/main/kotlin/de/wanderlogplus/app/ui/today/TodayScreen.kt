@@ -136,6 +136,7 @@ private fun Before(
     val today = now.toLocalDate().toString()
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
     val deadlines = remember(snapshot, today) { deadlineRows(snapshot, today) }
+    val ideaDeadlines = remember(snapshot, today) { ideaDeadlineRows(snapshot, today) }
     Column(modifier.verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
         Box(Modifier.fillMaxWidth().height(150.dp).background(heroGradient(accent))) {
             Column(Modifier.align(Alignment.BottomStart).padding(start = 18.dp, end = 18.dp, bottom = 16.dp)) {
@@ -163,7 +164,7 @@ private fun Before(
                     DayWeatherCard(w, title = w.place.takeIf { it.isNotBlank() })
                 }
             }
-            if (deadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace)
+            if (deadlines.isNotEmpty() || ideaDeadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace, ideas = ideaDeadlines)
         }
     }
 }
@@ -199,6 +200,7 @@ private fun During(
     }
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
     val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date) }
+    val ideaDeadlines = remember(snapshot, date) { ideaDeadlineRows(snapshot, date) }
     val openNow = remember(snapshot, date, now) {
         val dow = now.dayOfWeek.value % 7 // 0 = Sunday
         val time = now.format(HH_MM)
@@ -234,7 +236,7 @@ private fun During(
         }
         WeatherAndStay(date, todayWeather, tomorrowWeather, stay, stayPlace, accent, onOpenLink)
         todayWeather?.let { RainHint(it, outdoor, openChat) }
-        if (deadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace)
+        if (deadlines.isNotEmpty() || ideaDeadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace, ideas = ideaDeadlines)
         if (openNow.isNotEmpty()) OpenNowWidget(openNow, accent)
     }
 

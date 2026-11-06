@@ -72,4 +72,28 @@ class DeadlineRowsTest {
         rule.onNodeWithTag("window-0").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(DeadlineTarget.FLIGHT to "fl-2", opened)
     }
+
+    private fun withGarden(status: de.wanderlogplus.shared.model.PlaceStatus, by: String) = Fixtures.trip().let { s ->
+        s.copy(savedPlaces = s.savedPlaces.map { if (it.id == "s-garten") it.copy(status = status, reservationWindow = ReservationWindow(by = by, byHand = true)) else it })
+    }
+
+    @Test
+    fun ideasAreSummarised() {
+        val soon = withGarden(de.wanderlogplus.shared.model.PlaceStatus.IDEA, "2027-03-06")
+        assertEquals(emptyList<String>(), deadlineRows(soon, "2027-03-01").mapNotNull { it.savedPlaceId })
+        assertEquals(listOf("s-garten"), ideaDeadlineRows(soon, "2027-03-01").map { it.targetId })
+        assertEquals(emptyList<String>(), ideaDeadlineRows(withGarden(de.wanderlogplus.shared.model.PlaceStatus.IDEA, "2027-03-21"), "2027-03-01").map { it.targetId })
+        rule.setContent { WanderlogPlusTheme { DeadlinesWidget(emptyList(), Color.Red, onOpen = null, ideas = ideaDeadlineRows(soon, "2027-03-01")) } }
+        rule.onNodeWithText("1 Idee mit Fristen").assertExists()
+        rule.onNodeWithText("Moosgarten").assertDoesNotExist()
+        rule.onNodeWithTag("deadlines-ideas").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithText("Moosgarten").assertExists()
+    }
+
+    @Test
+    fun shortlistShowsItsDeadlines() {
+        val s = withGarden(de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST, "2027-03-21")
+        assertEquals(listOf("s-garten"), deadlineRows(s, "2027-03-01").mapNotNull { it.savedPlaceId })
+        assertEquals(emptyList<String>(), ideaDeadlineRows(s, "2027-03-01").map { it.targetId })
+    }
 }

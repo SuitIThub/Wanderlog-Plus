@@ -476,23 +476,60 @@ internal data class DeadlineRow(
     val state: de.wanderlogplus.shared.query.DeadlineState = de.wanderlogplus.shared.query.DeadlineState.UPCOMING,
     val targetType: de.wanderlogplus.shared.query.DeadlineTarget? = null,
     val targetId: String? = null,
+    val placeStatus: de.wanderlogplus.shared.model.PlaceStatus? = null,
 )
+
+/** Places show their deadlines on the today screen only in these states; ideas get a folded summary. */
+internal val DEADLINE_PLACE_STATES = setOf(de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST, de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
+
+/** Ideas are summarised when a deadline is this close (or open now / overdue). */
+internal const val IDEA_DEADLINE_DAYS = 14L
 
 /** Deadlines shown on the today screen: from [today] up to this many days ahead (overdue and open-now always). */
 internal const val DEADLINE_DAYS = 30L
 
-/** The "Fristen" rows: check-out today first, then overdue, then the rest of the next [DEADLINE_DAYS] days by date. */
+/**
+ * The "Fristen" rows: check-out today first, then overdue, then the rest of the next [DEADLINE_DAYS] days by date;
+ * places only when „Vorgemerkt“ or „Geplant“ (ideas: [ideaDeadlineRows]).
+ */
 internal fun deadlineRows(snapshot: TripSnapshot, today: String): List<DeadlineRow> {
     val last = LocalDate.parse(today).plusDays(DEADLINE_DAYS).toString()
+    val rows = allDeadlineRows(snapshot, today)
+        .filter { it.placeStatus == null || it.placeStatus in DEADLINE_PLACE_STATES }
+        .filter { it.state != DeadlineState.UPCOMING || it.date <= last }
+        .let(::retag)
+    // Check-out today (with its time when known) comes first.
+    val out = snapshot.stays.filter { it.checkOut == today }.mapIndexed { i, s ->
+        DeadlineRow(today, snapshot.places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft", de.wanderlogplus.app.ui.design.checkOutText(s) + " (heute)", "checkout-$i", targetType = DeadlineTarget.STAY, targetId = s.id)
+    }
+    return out + rows
+}
+
+/** Deadlines of ideas within [IDEA_DEADLINE_DAYS] days (or open now / overdue), for the folded "n Ideen mit Fristen". */
+internal fun ideaDeadlineRows(snapshot: TripSnapshot, today: String): List<DeadlineRow> {
+    val last = LocalDate.parse(today).plusDays(IDEA_DEADLINE_DAYS).toString()
+    return allDeadlineRows(snapshot, today)
+        .filter { it.placeStatus == de.wanderlogplus.shared.model.PlaceStatus.IDEA && (it.state != DeadlineState.UPCOMING || it.date <= last) }
+        .mapIndexed { i, r -> r.copy(tag = "idea-$i") }
+}
+
+/** Numbers the tags per kind ("deadline-0", "reservation-0", "window-0") in the order shown. */
+private fun retag(rows: List<DeadlineRow>): List<DeadlineRow> {
+    val counters = mutableMapOf<String, Int>()
+    return rows.map { r ->
+        val prefix = r.tag
+        r.copy(tag = "$prefix-" + counters.getOrDefault(prefix, 0).also { counters[prefix] = it + 1 })
+    }
+}
+
+/** Every deadline as a row; [tag] holds only the kind prefix until [retag]. */
+private fun allDeadlineRows(snapshot: TripSnapshot, today: String): List<DeadlineRow> {
     val input = de.wanderlogplus.shared.query.DeadlineInput(
         snapshot.places, snapshot.savedPlaces, snapshot.stays, snapshot.trains, snapshot.flights, snapshot.days, snapshot.dayItems,
         snapshot.queries()?.days().orEmpty(),
     )
     val savedById = snapshot.savedPlaces.associateBy { it.id }
-    val counters = mutableMapOf<String, Int>()
-    fun tag(prefix: String) = "$prefix-" + counters.getOrDefault(prefix, 0).also { counters[prefix] = it + 1 }
-    val rows = de.wanderlogplus.shared.query.Deadlines.list(input, today)
-        .filter { it.state != DeadlineState.UPCOMING || it.date <= last }
+    return de.wanderlogplus.shared.query.Deadlines.list(input, today)
         .map { d ->
             val est = if (d.estimated) " (geschätzt)" else ""
             val text = when {
@@ -508,13 +545,8 @@ internal fun deadlineRows(snapshot: TripSnapshot, today: String): List<DeadlineR
                 d.targetType == DeadlineTarget.PLACE -> "reservation"
                 else -> "window"
             }
-            DeadlineRow(d.date, d.title, text, tag(prefix), d.targetId.takeIf { d.targetType == DeadlineTarget.PLACE }, d.state, d.targetType, d.targetId)
+            DeadlineRow(d.date, d.title, text, prefix, d.targetId.takeIf { d.targetType == DeadlineTarget.PLACE }, d.state, d.targetType, d.targetId, d.placeStatus)
         }
-    // Check-out today (with its time when known) comes first.
-    val out = snapshot.stays.filter { it.checkOut == today }.mapIndexed { i, s ->
-        DeadlineRow(today, snapshot.places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft", de.wanderlogplus.app.ui.design.checkOutText(s) + " (heute)", "checkout-$i", targetType = DeadlineTarget.STAY, targetId = s.id)
-    }
-    return out + rows
 }
 
 /** Rows shown before "Alle Fristen (n)". */
@@ -527,38 +559,50 @@ internal fun DeadlinesWidget(
     accent: Color,
     onOpen: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)?,
     modifier: Modifier = Modifier,
+    /** Ideas with deadlines soon: one folded line, opened on tap. */
+    ideas: List<DeadlineRow> = emptyList(),
 ) {
     var all by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    var showIdeas by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     Widget("Fristen", "today-deadlines", modifier, accent) {
-        (if (all) rows else rows.take(DEADLINES_FOLDED)).forEach { r ->
-            val type = r.targetType
-            val id = r.targetId
-            val click = if (type != null && id != null) onOpen?.let { open -> { open(type, id) } } else null
-            val overdue = r.state == de.wanderlogplus.shared.query.DeadlineState.OVERDUE
-            Row(
-                Modifier.fillMaxWidth().then(if (click != null) Modifier.clickable(onClick = click) else Modifier).padding(vertical = 3.dp).testTag(r.tag),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    if (r.savedPlaceId != null || type != de.wanderlogplus.shared.query.DeadlineTarget.STAY) Icons.Filled.ConfirmationNumber else Icons.Filled.EventBusy,
-                    contentDescription = if (r.tag.startsWith("deadline")) "Stornofrist" else "Reservierung",
-                    tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(r.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        r.text, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (overdue) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
-                    )
-                }
-            }
-        }
+        (if (all) rows else rows.take(DEADLINES_FOLDED)).forEach { r -> DeadlineLine(r, onOpen) }
         if (rows.size > DEADLINES_FOLDED) {
             androidx.compose.material3.TextButton(onClick = { all = !all }, modifier = Modifier.testTag("deadlines-more")) {
                 Text(if (all) "Weniger anzeigen" else "Alle Fristen (${rows.size})")
             }
+        }
+        if (ideas.isNotEmpty()) {
+            androidx.compose.material3.TextButton(onClick = { showIdeas = !showIdeas }, modifier = Modifier.testTag("deadlines-ideas")) {
+                Text(if (ideas.size == 1) "1 Idee mit Fristen" else "${ideas.size} Ideen mit Fristen")
+            }
+            if (showIdeas) ideas.forEach { r -> DeadlineLine(r, onOpen) }
+        }
+    }
+}
+
+@Composable
+private fun DeadlineLine(r: DeadlineRow, onOpen: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)?) {
+    val type = r.targetType
+    val id = r.targetId
+    val click = if (type != null && id != null) onOpen?.let { open -> { open(type, id) } } else null
+    val overdue = r.state == de.wanderlogplus.shared.query.DeadlineState.OVERDUE
+    Row(
+        Modifier.fillMaxWidth().then(if (click != null) Modifier.clickable(onClick = click) else Modifier).padding(vertical = 3.dp).testTag(r.tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            if (r.savedPlaceId != null || type != de.wanderlogplus.shared.query.DeadlineTarget.STAY) Icons.Filled.ConfirmationNumber else Icons.Filled.EventBusy,
+            contentDescription = if (r.tag.startsWith("deadline")) "Stornofrist" else "Reservierung",
+            tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(r.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                r.text, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                color = if (overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (overdue) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
+            )
         }
     }
 }

@@ -29,7 +29,7 @@ data class Reminder(
 )
 
 /** Places get window reminders only in these states (ideas never). */
-val REMINDED_PLACE_STATES = setOf(de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
+val REMINDED_PLACE_STATES = setOf(de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST, de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
 
 /**
  * Reminders for reservation windows: once "Jetzt reservierbar" when a window is open, and before "reservieren bis" at

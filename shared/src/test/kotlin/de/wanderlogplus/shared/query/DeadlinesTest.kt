@@ -79,4 +79,11 @@ class DeadlinesTest {
         assertEquals(listOf(DeadlineKind.OPENS to "2027-04-13"), est.map { it.kind to it.date })
         assertTrue(est.single().estimated)
     }
+
+    @Test
+    fun `a place on a day counts as planned`() {
+        val need = PlaceDossier(hints = listOf("Tickets mindestens 2 Wochen vorher online kaufen"))
+        val list = Deadlines.list(input(saved = listOf(SavedPlace("s1", "p1", dossier = need, status = PlaceStatus.IDEA))), today)
+        assertEquals(PlaceStatus.PLANNED, list.single().placeStatus)
+    }
 }

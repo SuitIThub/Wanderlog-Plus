@@ -93,6 +93,7 @@ class RemindersTest {
     @Test fun placesOnlyWhenPlanned() {
         val idea = window(de.wanderlogplus.shared.query.DeadlineKind.BY, "2027-04-20", de.wanderlogplus.shared.query.DeadlineTarget.PLACE, de.wanderlogplus.shared.model.PlaceStatus.IDEA)
         assertTrue(dueWindowReminders(listOf(idea), LocalDate.parse("2027-04-18"), emptySet()).isEmpty())
+        assertEquals(1, dueWindowReminders(listOf(idea.copy(placeStatus = de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST)), LocalDate.parse("2027-04-18"), emptySet()).size)
         val planned = idea.copy(placeStatus = de.wanderlogplus.shared.model.PlaceStatus.PLANNED)
         assertEquals("PLACE" to "t1", dueWindowReminders(listOf(planned), LocalDate.parse("2027-04-18"), emptySet()).single().let { it.doneType to it.doneId })
         // Cancellation deadlines and plain "needs a reservation" rows have their own reminders.
