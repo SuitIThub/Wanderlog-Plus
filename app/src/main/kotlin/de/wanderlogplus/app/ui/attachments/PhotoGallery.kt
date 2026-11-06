@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.attachments
 
+import androidx.compose.foundation.horizontalScroll
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -90,6 +92,24 @@ fun PhotoGrid(
                         repeat(columns - chunk.size) { Box(Modifier.weight(1f)) }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A row of square thumbnails that scrolls sideways (photos of a stay under its header); [order] are indexes into the
+ * full gallery in the order shown, so [onOpen] gets the gallery index. Tags: [tag] and "[tag]-position".
+ */
+@Composable
+fun PhotoStrip(photos: List<Attachment>, order: List<Int>, files: AttachmentFiles?, onOpen: (index: Int) -> Unit, tag: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).testTag(tag),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        order.forEachIndexed { pos, i ->
+            photos.getOrNull(i)?.let { p ->
+                Thumbnail(p, files, Modifier.size(84.dp).clip(RoundedCornerShape(8.dp)).clickable { onOpen(i) }.testTag("$tag-$pos"))
             }
         }
     }
