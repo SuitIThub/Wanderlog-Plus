@@ -52,7 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.shared.model.Amenity
@@ -72,8 +71,39 @@ enum class AmenityCategory(val label: String, val iconKey: String) {
 /** Amenities regrouped into one [category], each once. */
 data class AmenityPanel(val category: AmenityCategory, val items: List<Amenity>)
 
-/** One fact at the top of the room tab: icon key and text. */
-data class StayFact(val iconKey: String, val text: String)
+/** One fact at the top of the room tab: icon key, short text and the rest as a smaller note. */
+data class StayFact(val iconKey: String, val text: String, val note: String = "")
+
+/**
+ * A long research sentence as title and note, like the amenity tiles: "A; B" → (A, B), "A (B)" → (A, B), else (text, "").
+ */
+fun splitText(text: String): Pair<String, String> {
+    val t = text.trim()
+    val semi = t.indexOf("; ")
+    if (semi > 0) return t.substring(0, semi).trim() to t.substring(semi + 2).trim()
+    Regex("""^(.+?)\s*\((.+)\)$""").matchEntire(t)?.let { m -> return m.groupValues[1].trim() to m.groupValues[2].trim() }
+    return t to ""
+}
+
+/** A tile this long takes a whole row instead of a narrow column. */
+internal fun isWide(text: String, note: String) = text.length > 32 || text.length + note.length > 60
+
+/** [items] in rows of [columns]; an item that is [wide] gets a row of its own (order kept). */
+fun <T> gridRows(items: List<T>, columns: Int, wide: (T) -> Boolean): List<List<T>> {
+    val rows = mutableListOf<List<T>>()
+    var current = mutableListOf<T>()
+    items.forEach { item ->
+        if (wide(item)) {
+            if (current.isNotEmpty()) { rows += current; current = mutableListOf() }
+            rows += listOf(item)
+        } else {
+            current += item
+            if (current.size == columns) { rows += current; current = mutableListOf() }
+        }
+    }
+    if (current.isNotEmpty()) rows += current
+    return rows
+}
 
 object AmenityCategories {
     private val ITEM_KEYS: List<Pair<AmenityCategory, List<String>>> = listOf(
@@ -135,14 +165,15 @@ object AmenityCategories {
 /** Room type, size, beds, bath, view, guests and meals, each with an icon. */
 fun stayFacts(info: StayInfo): List<StayFact> {
     val r = info.room
+    fun fact(key: String, text: String) = splitText(text).let { (t, n) -> StayFact(key, t, n) }
     return listOfNotNull(
-        r.type.ifBlank { null }?.let { StayFact("room", it) },
+        r.type.ifBlank { null }?.let { fact("room", it) },
         r.sizeSqm?.let { StayFact("size", "%.0f m²".format(it)) },
-        r.beds.ifBlank { null }?.let { StayFact("bed", it) },
-        r.bath.ifBlank { null }?.let { StayFact("bath", it) },
-        r.view.ifBlank { null }?.let { StayFact("view", it) },
+        r.beds.ifBlank { null }?.let { fact("bed", it) },
+        r.bath.ifBlank { null }?.let { fact("bath", it) },
+        r.view.ifBlank { null }?.let { fact("view", it) },
         r.maxGuests?.let { StayFact("guests", "bis $it Personen") },
-        info.property.meals.ifBlank { null }?.let { StayFact("restaurant", it) },
+        info.property.meals.ifBlank { null }?.let { fact("restaurant", it) },
     )
 }
 
@@ -179,14 +210,18 @@ internal fun amenityIcon(key: String): ImageVector = when (key) {
     else -> Icons.Filled.Check
 }
 
-/** Cells in rows of [columns], each cell the same width. */
+/** Cells in rows of [columns], each cell the same width; [wide] cells take a whole row. */
 @Composable
-private fun <T> Grid(items: List<T>, columns: Int, cell: @Composable (T) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(columns).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { item -> Column(Modifier.weight(1f)) { cell(item) } }
-                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+private fun <T> Grid(items: List<T>, columns: Int, wide: (T) -> Boolean, cell: @Composable (T) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        gridRows(items, columns, wide).forEach { row ->
+            if (row.size == 1 && wide(row[0])) {
+                Column(Modifier.fillMaxWidth()) { cell(row[0]) }
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { item -> Column(Modifier.weight(1f)) { cell(item) } }
+                    repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                }
             }
         }
     }
@@ -203,8 +238,9 @@ private fun IconLine(iconKey: String, text: String, note: String = "") {
     Row(verticalAlignment = Alignment.Top) {
         Icon(amenityIcon(iconKey), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 2.dp, end = 8.dp).size(18.dp))
         Column {
-            Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            if (note.isNotBlank()) Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            // Never cut off: research texts are only useful when they can be read in full.
+            Text(text, style = MaterialTheme.typography.bodyMedium)
+            if (note.isNotBlank()) Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -216,7 +252,7 @@ fun StayFactTiles(facts: List<StayFact>, modifier: Modifier = Modifier) {
     SurfaceCard(modifier.testTag("stay-glance")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Auf einen Blick", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            AdaptiveGrid { columns -> Grid(facts, columns) { f -> IconLine(f.iconKey, f.text) } }
+            AdaptiveGrid { columns -> Grid(facts, columns, wide = { isWide(it.text, it.note) }) { f -> IconLine(f.iconKey, f.text, f.note) } }
         }
     }
 }
@@ -248,7 +284,11 @@ private fun PanelSection(title: String, key: String, panels: List<AmenityPanel>)
                         Text(p.category.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
                     val shown = if (all || p.items.size <= PANEL_FOLDED) p.items else p.items.take(PANEL_FOLDED)
-                    AdaptiveGrid { columns -> Grid(shown, columns) { a -> IconLine(AmenityCategories.iconKey(a.name), a.name, a.note) } }
+                    // A name with its note inside ("WLAN; nur Lobby") is split like the facts.
+                    val tiles = shown.map { a -> if (a.note.isBlank()) splitText(a.name) else a.name to a.note }
+                    AdaptiveGrid { columns ->
+                        Grid(tiles, columns, wide = { (t, n) -> isWide(t, n) }) { (t, n) -> IconLine(AmenityCategories.iconKey(t), t, n) }
+                    }
                     if (p.items.size > PANEL_FOLDED) {
                         TextButton(onClick = { all = !all }) { Text(if (all) "Weniger" else "+ ${p.items.size - PANEL_FOLDED} weitere") }
                     }

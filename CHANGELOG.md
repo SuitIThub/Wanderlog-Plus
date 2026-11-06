@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.46.3
+
+- **Ausstattung: lange Texte lesbar.** Nichts wird mehr abgeschnitten: Texte umbrechen vollständig, lange Kacheln nehmen die ganze Breite ein.
+- **„Auf einen Blick“ wie die Ausstattung:** Lange Angaben werden in Titel und kleinen Untertext geteilt (an „;“ oder einer Klammer), z. B. „Für 2 Erwachsene gebucht“ mit „Bettart laut Buchungsbestätigung nicht angegeben“ darunter.
+
 ## 0.46.2
 
 - **Abstimmen abgesichert:** Der Server zählt pro Zugang und Ort genau eine Stimme (Stimmen unter fremden oder zusätzlichen Kennungen werden verworfen); Zugangsnamen mit „|“ funktionieren.
