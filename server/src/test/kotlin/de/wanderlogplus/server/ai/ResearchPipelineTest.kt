@@ -55,6 +55,23 @@ class ResearchPipelineTest {
     }
 
     @Test
+    fun `a japanese answer is asked again in german`() {
+        val japanese = """{"description":"浜松町にある大衆酒場。中華そばが人気で、仕事帰りに一杯飲むのに最適です。","worth":"WORTH","verdict":"気軽に立ち寄れる良い店です。"}"""
+        val model = Scripted(listOf(japanese, good))
+        val r = PipelineResearcher(facts, model).research(query, AssessConfig())!!
+        assertEquals("Ikonisch, früh hingehen.", r.dossier.verdict)
+        assertEquals(2, model.asked.size)
+        assertTrue("auf Deutsch" in model.asked[1], model.asked[1])
+    }
+
+    @Test
+    fun `japanese names inside german text are fine`() {
+        assertEquals(false, mostlyJapanese("Stand Fuji (浜松町 スタンド富士) ist eine moderne Kneipen-Kantine in Hamamatsucho."))
+        assertEquals(true, mostlyJapanese("浜松町にある大衆酒場。中華そばが人気です。"))
+        assertEquals(false, mostlyJapanese(""))
+    }
+
+    @Test
     fun `no facts means no outcome`() {
         val model = Scripted(listOf(good))
         assertNull(PipelineResearcher({ _, _ -> null }, model).research(query, AssessConfig()))
