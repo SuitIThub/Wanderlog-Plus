@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.46.1
+
+- **Ausstattung der Unterkunft übersichtlich:** „Auf einen Blick“ zeigt Zimmertyp, Größe, Betten, Bad, Aussicht, Personen und Verpflegung als Kacheln mit Symbol. Die Ausstattung steht getrennt nach „Im Zimmer“ und „In der Unterkunft“ in festen Gruppen (Bad & Onsen, Schlafen & Zimmer, Technik & Internet, Essen & Trinken, Service, Sonstiges), jeder Punkt mit passendem Symbol im Raster (2 Spalten, auf breiten Bildschirmen 3); Hinweise wie „privat“ stehen klein darunter. Lange Gruppen zeigen erst 6 Punkte („+ n weitere“). Nichts steht mehr doppelt.
+
 ## 0.46.0
 
 - **Abstimmen über Orte:** Am Ort gibt jeder Zugang 👍 (+1), 👍👍 (+2, „will ich unbedingt“) oder 👎 (−2); nochmal tippen nimmt die Stimme zurück. Wer wie gestimmt hat, steht mit Namen darunter; in der Ortsliste steht die Punktzahl.

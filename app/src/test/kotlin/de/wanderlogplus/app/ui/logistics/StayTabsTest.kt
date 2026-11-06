@@ -42,15 +42,6 @@ class StayTabsTest {
     }
 
     @Test
-    fun theOverviewListsEverythingOnceAtAGlance() {
-        assertEquals(
-            listOf("Japanisches Zimmer", "2 Futons", "eigenes Rotenburo", "Verpflegung: Kaiseki 18:00", "Rotenburo (privat)", "Wäscherei"),
-            amenityOverview(info),
-        )
-        assertEquals(emptyList<String>(), amenityOverview(StayInfo()))
-    }
-
-    @Test
     fun stayPageHasTabsPhotosUpTopAndFoldedSources() {
         val base = Fixtures.trip()
         val stay = base.stays.first().copy(info = info, checkInTime = "15:00", checkOutTime = "10:00")
@@ -67,7 +58,8 @@ class StayTabsTest {
         rule.onNodeWithText("Japanisches Zimmer").assertDoesNotExist()
         rule.onNodeWithTag("stay-tab-room").performClick()
         rule.onNodeWithText("Auf einen Blick").assertExists()
-        rule.onNodeWithText("• Wäscherei").assertExists()
+        rule.onNodeWithText("Wäscherei").assertExists()
+        rule.onNodeWithTag("amenity-panel-room-BATH").assertExists()
         rule.onNodeWithText("ryokan.example").assertDoesNotExist()
         rule.onNodeWithTag("stay-sources").performScrollTo().performClick()
         rule.onNodeWithText("ryokan.example").assertExists()

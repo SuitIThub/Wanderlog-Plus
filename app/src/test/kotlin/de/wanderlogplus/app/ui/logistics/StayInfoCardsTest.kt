@@ -35,13 +35,17 @@ class StayInfoCardsTest {
     @Test
     fun cardsShowRoomPropertyAndSources() {
         rule.setContent { WanderlogPlusTheme { StayInfoCards(Stay("st", info = info), emptyList(), null, onResearch = null, onEdit = null, running = null) } }
-        // The overview list and the detailed room card both name the room.
-        rule.onNodeWithText("• Japanisches Zimmer").assertExists()
+        // Facts as tiles, amenities once, grouped in panels with their notes.
+        rule.onNodeWithTag("stay-glance").assertExists()
         rule.onNodeWithText("Japanisches Zimmer").assertExists()
-        rule.onNodeWithText("2 Futons · eigenes Rotenburo").assertExists()
-        rule.onNodeWithText("Bad: Rotenburo – privat").assertExists()
-        rule.onNodeWithText("Service: Wäscherei").assertExists()
-        rule.onNodeWithText("Verpflegung: Kaiseki 18:00").assertExists()
+        rule.onNodeWithText("2 Futons").assertExists()
+        rule.onNodeWithText("Kaiseki 18:00").assertExists()
+        rule.onNodeWithTag("amenity-panel-room-BATH").assertExists()
+        rule.onNodeWithText("Rotenburo").assertExists()
+        rule.onNodeWithText("privat").assertExists()
+        rule.onNodeWithTag("amenity-panel-property-SERVICE").assertExists()
+        rule.onNodeWithText("Wäscherei").assertExists()
+        rule.onNodeWithText("Bad: Rotenburo – privat").assertDoesNotExist()
         // Sources are folded away until asked for.
         rule.onNodeWithText("ryokan.example").assertDoesNotExist()
         rule.onNodeWithTag("stay-sources").performSemanticsAction(SemanticsActions.OnClick)
