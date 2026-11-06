@@ -14,6 +14,10 @@ import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.TriggerOn
+import de.wanderlogplus.shared.query.DayFlow
+import de.wanderlogplus.shared.query.DayFlowView
+import de.wanderlogplus.shared.query.FlowEntry
+import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.query.PlaceMatch
 
 /** What the matching looks at; built from the app's TripSnapshot or the server's chat trip. */
@@ -27,6 +31,9 @@ data class GuideWorld(
     val days: List<Day> = emptyList(),
     val dayItems: List<DayItem> = emptyList(),
 )
+
+/** A guide of the day: at [atMinutes] (null: the whole day), [done] when everything it is about has passed. */
+data class DayGuide(val guide: Guide, val atMinutes: Int?, val done: Boolean)
 
 /** One thing of the trip a guide can be about. */
 internal sealed interface GuideThing {
@@ -84,6 +91,54 @@ object GuideMatch {
         }
         return hits.distinctBy { it.id }.sortedWith(compareBy({ GuideTopics.orderOf(it.topic) }, { it.title.lowercase() }, { it.id }))
     }
+
+    /**
+     * The day's guides in the order things happen: each at the time of the first not yet passed entry of [flow] it is
+     * about ([nowMinutes] null: nothing passed); tonight's stay never passes. Guides of the whole day (language,
+     * money) have no time. Upcoming by time first, then the timeless, then the passed ones.
+     */
+    fun forDay(date: String, flow: DayFlowView, w: GuideWorld, nowMinutes: Int?): List<DayGuide> {
+        val stamps = flowStamps(flow, w)
+        val items = guidesFor(GuideTarget(GuideTargetType.DAY, date), w).map { g ->
+            val own = stamps.filter { (th, _, _) -> th.target !in g.hiddenFrom && (th.target in g.pinnedTo || triggersOf(g).any { fires(it, th) }) }
+            val open = own.filter { (_, min, lasting) -> lasting || nowMinutes == null || min >= nowMinutes }
+            when {
+                own.isEmpty() -> DayGuide(g, null, false)
+                open.isNotEmpty() -> DayGuide(g, open.minOf { it.second }, false)
+                else -> DayGuide(g, own.minOf { it.second }, true)
+            }
+        }
+        return items.sortedWith(
+            compareBy<DayGuide>({ if (it.done) 2 else if (it.atMinutes == null) 1 else 0 }, { it.atMinutes ?: 0 }, { GuideTopics.orderOf(it.guide.topic) }, { it.guide.title.lowercase() }),
+        )
+    }
+
+    /** Every flow entry as (thing, minutes, lasts the evening); entries without a time take the time before them. */
+    private fun flowStamps(flow: DayFlowView, w: GuideWorld): List<Triple<GuideThing, Int, Boolean>> {
+        var clock = 0
+        fun at(t: String?, fallback: Int = clock) = (DayFlow.mins(t) ?: fallback).also { clock = maxOf(clock, it) }
+        return flow.entries.flatMap { e ->
+            when (e) {
+                is FlowEntry.Start -> listOf(Triple(GuideThing.AtStay(e.stay, w.places[e.stay.placeId]) as GuideThing, at(e.stay.checkOutTime, 0), false))
+                is FlowEntry.Item -> {
+                    val min = at(e.item.time)
+                    listOfNotNull(
+                        w.saved.firstOrNull { it.placeId == e.item.placeId && it.status != PlaceStatus.DROPPED }?.let { Triple(GuideThing.AtPlace(it, w.places[it.placeId]) as GuideThing, min, false) },
+                        e.checkIn?.let { Triple(GuideThing.AtStay(it, w.places[it.placeId]) as GuideThing, at(it.checkInTime, min), true) },
+                    )
+                }
+                is FlowEntry.Ride -> listOf(
+                    when (val m = e.movement) {
+                        is Movement.TrainMove -> Triple(GuideThing.OnTrain(m.train) as GuideThing, at(m.time), false)
+                        is Movement.FlightMove -> Triple(GuideThing.OnFlight(m.flight) as GuideThing, at(m.time), false)
+                    },
+                )
+                is FlowEntry.Night -> listOf(Triple(GuideThing.AtStay(e.stay, w.places[e.stay.placeId]) as GuideThing, at(e.stay.checkInTime, maxOf(clock, EVENING)), true))
+            }
+        }
+    }
+
+    private const val EVENING = 18 * 60
 
     /** An existing guide on the same catalog topic, or with (nearly) the same title. */
     fun duplicateOf(topic: String?, title: String, guides: List<Guide>): Guide? {
