@@ -29,6 +29,24 @@ import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.sync.AiJobInfo
 
+/** "Do, 14.05. ab 15:00" (check-in) or "Sa, 16.05. bis 10:00" (check-out); only the day without a time, "–" without a date. */
+fun stayTimeText(date: String, time: String?, checkIn: Boolean): String {
+    if (date.isBlank()) return "–"
+    val t = time?.trim()?.takeIf { it.isNotEmpty() } ?: return de.wanderlogplus.app.ui.dayLabel(date)
+    return de.wanderlogplus.app.ui.dayLabel(date) + (if (checkIn) " ab " else " bis ") + t
+}
+
+/** "Auf einen Blick": room type, beds, bath, view, meals, then every amenity of room and property once. */
+fun amenityOverview(info: de.wanderlogplus.shared.model.StayInfo): List<String> {
+    val r = info.room
+    val head = listOf(r.type, r.beds, r.bath, r.view).filter { it.isNotBlank() } +
+        listOfNotNull(info.property.meals.takeIf { it.isNotBlank() }?.let { "Verpflegung: $it" })
+    val items = (r.amenities + info.property.amenities).flatMap { it.items }
+        .filter { it.name.isNotBlank() }
+        .map { a -> a.name.trim() + (a.note.trim().takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: "") }
+    return (head + items).distinct()
+}
+
 /** "Bad: Rotenburo – privat, Dusche" */
 internal fun amenityLine(g: AmenityGroup): String = g.name + ": " + g.items.joinToString(", ") { a -> a.name + (a.note.takeIf { it.isNotBlank() }?.let { " – $it" } ?: "") }
 
@@ -49,11 +67,29 @@ fun StayInfoCards(
 ) {
     val info = stay.info
     var asking by remember { mutableStateOf(false) }
+    var showSources by remember { mutableStateOf(false) }
     val uri = LocalUriHandler.current
     Column(modifier.fillMaxWidth().testTag("stay-info"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (running != null && running.status != "DONE" && running.status != "FAILED") {
             Text(running.steps.lastOrNull()?.text ?: "Recherche läuft …", style = MaterialTheme.typography.bodySmall)
             LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onResearch != null) {
+                OutlinedButton(onClick = { asking = true }, modifier = Modifier.testTag("stay-research")) {
+                    Text(if (info == null) "Zimmer & Ausstattung recherchieren" else "Recherchieren")
+                }
+            }
+            if (onEdit != null && info != null) OutlinedButton(onClick = onEdit, modifier = Modifier.testTag("stay-info-edit")) { Text("Bearbeiten") }
+        }
+        val glance = info?.let(::amenityOverview).orEmpty()
+        if (glance.isNotEmpty()) {
+            SurfaceCard(Modifier.testTag("stay-glance")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Auf einen Blick", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    glance.forEach { Text("• $it", style = MaterialTheme.typography.bodyMedium) }
+                }
+            }
         }
         val room = info?.room
         if (room != null && (room.type.isNotBlank() || room.amenities.isNotEmpty() || room.description.isNotBlank())) {
@@ -90,17 +126,11 @@ fun StayInfoCards(
         }
         if (info != null && info.sources.isNotEmpty()) {
             Column {
-                Text("Quellen", style = MaterialTheme.typography.labelMedium)
-                info.sources.forEach { s -> TextButton(onClick = { runCatching { uri.openUri(s) } }) { Text(hostOf(s)) } }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (onResearch != null) {
-                OutlinedButton(onClick = { asking = true }, modifier = Modifier.testTag("stay-research")) {
-                    Text(if (info == null) "Zimmer & Ausstattung recherchieren" else "Recherchieren")
+                TextButton(onClick = { showSources = !showSources }, modifier = Modifier.testTag("stay-sources")) {
+                    Text((if (showSources) "Quellen ausblenden" else "Quellen") + " (${info.sources.size})")
                 }
+                if (showSources) info.sources.forEach { s -> TextButton(onClick = { runCatching { uri.openUri(s) } }) { Text(hostOf(s)) } }
             }
-            if (onEdit != null && info != null) OutlinedButton(onClick = onEdit, modifier = Modifier.testTag("stay-info-edit")) { Text("Bearbeiten") }
         }
         if (info == null && onResearch == null) Text("Noch keine Angaben zu Zimmer und Ausstattung.", style = MaterialTheme.typography.bodySmall)
     }

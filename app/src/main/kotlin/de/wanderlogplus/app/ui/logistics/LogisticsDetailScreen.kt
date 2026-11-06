@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.logistics
 
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -69,6 +71,7 @@ private class BookingView(
  * "Details" (endpoints, times, confirmation number, travelers, cancellation), "Notiz", "Navigation" (stays only) and
  * "Anhänge". The page scrolls. An unknown [type] (null: bad route segment) or [id] shows "Buchung nicht gefunden" with back.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun LogisticsDetailScreen(
     snapshot: TripSnapshot,
@@ -104,6 +107,8 @@ fun LogisticsDetailScreen(
     stayResearchJob: de.wanderlogplus.shared.sync.AiJobInfo? = null,
     /** Stays: mark a photo as room photo or remove the mark; null: tapping a photo does nothing. */
     onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
+    /** Stays: open the stay's photos large at this gallery index (header image, photo strip); null: no viewer. */
+    onOpenPhoto: ((index: Int) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -119,6 +124,8 @@ fun LogisticsDetailScreen(
     // The one-line hero cuts long names (stays); the full name then opens the page body.
     var titleCut by remember(type, id) { mutableStateOf(false) }
     var choosingImage by remember(type, id) { mutableStateOf(false) }
+    // Stays: 0 Übersicht, 1 Zimmer & Ausstattung, 2 Fotos.
+    var stayTab by remember(type, id) { mutableStateOf(0) }
     val stay = if (type == EntityType.STAY) snapshot.stays.firstOrNull { it.id == id } else null
     val customLinks = when (type) {
         EntityType.STAY -> stay?.links
@@ -136,7 +143,12 @@ fun LogisticsDetailScreen(
     }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("logistics-detail")) {
+        val stayPhotosAll = if (type == EntityType.STAY) snapshot.photosFor(EntityType.STAY, id) else emptyList()
+        // Tapping the header shows the stay's photos, starting with the chosen header photo.
+        val headerIndex = snapshot.stays.firstOrNull { it.id == id }?.headerImage?.removePrefix("att:")
+            ?.let { ref -> stayPhotosAll.indexOfFirst { it.id == ref } }?.takeIf { it >= 0 } ?: 0
         HeroHeader(
+            modifier = if (onOpenPhoto != null && stayPhotosAll.isNotEmpty()) Modifier.clickable { onOpenPhoto(headerIndex) } else Modifier,
             title = view.title,
             kicker = view.kicker,
             imageUrl = view.imageUrl,
@@ -169,6 +181,11 @@ fun LogisticsDetailScreen(
             LegActions(snapshot, type, id, journey?.id, onEdit, onJoin, onSplit, onDelete)
         } else if (type == EntityType.STAY) {
             MoveActions(snapshot, type, id, onEdit, null, onDelete)
+            androidx.compose.material3.PrimaryTabRow(selectedTabIndex = stayTab) {
+                de.wanderlogplus.app.ui.design.ScreenTab("Übersicht", stayTab == 0, "stay-tab-overview") { stayTab = 0 }
+                de.wanderlogplus.app.ui.design.ScreenTab("Zimmer & Ausstattung", stayTab == 1, "stay-tab-room", maxLines = 2) { stayTab = 1 }
+                de.wanderlogplus.app.ui.design.ScreenTab(if (stayPhotosAll.isEmpty()) "Fotos" else "Fotos (${stayPhotosAll.size})", stayTab == 2, "stay-tab-photos") { stayTab = 2 }
+            }
         }
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -179,6 +196,17 @@ fun LogisticsDetailScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 12.dp).testTag("logistics-full-title"),
                 )
+            }
+            if (stay == null || stayTab == 0) {
+            if (stay != null && stayPhotosAll.isNotEmpty()) {
+                // Room photos first, then the rest.
+                val order = stayPhotosAll.indices.sortedBy { if (stayPhotosAll[it].label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM) 0 else 1 }.take(8)
+                Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    de.wanderlogplus.app.ui.attachments.PhotoStrip(
+                        stayPhotosAll, order, attachments?.files, onOpen = { i -> onOpenPhoto?.invoke(i) }, tag = "stay-photo-strip", modifier = Modifier.weight(1f),
+                    )
+                    androidx.compose.material3.TextButton(onClick = { stayTab = 2 }) { Text("Alle") }
+                }
             }
             SectionLabel("Details", color = view.accent)
             InfoCard {
@@ -226,11 +254,12 @@ fun LogisticsDetailScreen(
             }
 
             de.wanderlogplus.app.ui.budget.CostsSection(snapshot, id, today ?: java.time.LocalDate.now().toString(), view.accent)
+            }
 
-            if (stay != null) {
-                SectionLabel("Zimmer & Ausstattung", color = view.accent)
+            if (stay != null && stayTab == 1) {
                 StayInfoCards(
-                    stay,
+                    modifier = Modifier.padding(top = 12.dp),
+                    stay = stay,
                     roomPhotos = snapshot.photosFor(EntityType.STAY, id).filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
                     files = attachments?.files,
                     onResearch = onStayResearch?.let { r -> { links: List<String>, fresh: Boolean -> r(id, links, fresh) } },
@@ -239,9 +268,8 @@ fun LogisticsDetailScreen(
                 )
             }
 
-            if (type == EntityType.STAY && attachments != null) {
-                SectionLabel("Fotos", color = view.accent)
-                val stayPhotos = snapshot.photosFor(EntityType.STAY, id)
+            if (stay != null && stayTab == 2 && attachments != null) {
+                val stayPhotos = stayPhotosAll
                 var labelling by remember(id) { mutableStateOf<de.wanderlogplus.shared.model.Attachment?>(null) }
                 de.wanderlogplus.app.ui.attachments.PhotoGrid(
                     stayPhotos, attachments.files,
@@ -260,16 +288,25 @@ fun LogisticsDetailScreen(
                                 modifier = Modifier.testTag("photo-room-toggle"),
                             ) { Text(if (room) "Markierung entfernen" else "Als Zimmerfoto markieren") }
                         },
-                        dismissButton = { androidx.compose.material3.TextButton(onClick = { labelling = null }) { Text("Abbrechen") } },
+                        dismissButton = {
+                            Row {
+                                if (onOpenPhoto != null) {
+                                    androidx.compose.material3.TextButton(onClick = { onOpenPhoto(stayPhotos.indexOf(a)); labelling = null }) { Text("Groß ansehen") }
+                                }
+                                androidx.compose.material3.TextButton(onClick = { labelling = null }) { Text("Abbrechen") }
+                            }
+                        },
                     )
                 }
             }
 
-            SectionLabel("Anhänge", color = view.accent)
-            if (attachments == null) {
-                EmptyHint("Anhänge sind hier nicht verfügbar", Modifier.padding(top = 6.dp))
-            } else {
-                AttachmentsFor(snapshot.attachmentsFor(type, id), attachments, onAdd = { attachments.onAdd(type, id) }, showTitle = false)
+            if (stay == null || stayTab == 0) {
+                SectionLabel("Anhänge", color = view.accent)
+                if (attachments == null) {
+                    EmptyHint("Anhänge sind hier nicht verfügbar", Modifier.padding(top = 6.dp))
+                } else {
+                    AttachmentsFor(snapshot.attachmentsFor(type, id), attachments, onAdd = { attachments.onAdd(type, id) }, showTitle = false)
+                }
             }
         }
     }
@@ -335,8 +372,8 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 accent = region?.let { regionColor(it.color) } ?: primary,
                 route = null,
                 details = listOfNotNull(
-                    "Check-in" to s.checkIn.ifBlank { "–" }.let(::dayLabel),
-                    "Check-out" to s.checkOut.ifBlank { "–" }.let(::dayLabel),
+                    "Check-in" to stayTimeText(s.checkIn, s.checkInTime, checkIn = true),
+                    "Check-out" to stayTimeText(s.checkOut, s.checkOutTime, checkIn = false),
                     guests.takeIf { it.isNotEmpty() }?.let { "Gäste" to it },
                 ) + booking(s.confirmationNumber, s.travelerNames) + listOfNotNull(
                     deadline?.let { "Stornofrist" to it },

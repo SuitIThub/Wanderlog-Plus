@@ -422,6 +422,7 @@ fun AppNavigation(
                 onSplit = vm::splitLegacy,
                 onStayResearch = stayInfoVm?.let { s -> s::research },
                 onSetPhotoLabel = vm::setPhotoLabel,
+                onOpenPhoto = if (type == EntityType.STAY) ({ i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(EntityType.STAY, id, i)) }) else null,
                 stayResearchJob = stayResearchJob,
             )
         }

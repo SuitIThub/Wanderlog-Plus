@@ -35,11 +35,16 @@ class StayInfoCardsTest {
     @Test
     fun cardsShowRoomPropertyAndSources() {
         rule.setContent { WanderlogPlusTheme { StayInfoCards(Stay("st", info = info), emptyList(), null, onResearch = null, onEdit = null, running = null) } }
+        // The overview list and the detailed room card both name the room.
+        rule.onNodeWithText("• Japanisches Zimmer").assertExists()
         rule.onNodeWithText("Japanisches Zimmer").assertExists()
-        rule.onNodeWithText("2 Futons", substring = true).assertExists()
+        rule.onNodeWithText("2 Futons · eigenes Rotenburo").assertExists()
         rule.onNodeWithText("Bad: Rotenburo – privat").assertExists()
         rule.onNodeWithText("Service: Wäscherei").assertExists()
-        rule.onNodeWithText("Kaiseki 18:00", substring = true).assertExists()
+        rule.onNodeWithText("Verpflegung: Kaiseki 18:00").assertExists()
+        // Sources are folded away until asked for.
+        rule.onNodeWithText("ryokan.example").assertDoesNotExist()
+        rule.onNodeWithTag("stay-sources").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithText("ryokan.example").assertExists()
     }
 
