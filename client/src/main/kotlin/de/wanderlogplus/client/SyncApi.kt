@@ -229,6 +229,17 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }.photos
 
+    /** Google's Text Search via the server: near a point and/or inside a map area. */
+    suspend fun searchPlaces(q: String, near: Pair<Double, Double>?, bbox: BBox?): List<de.wanderlogplus.shared.sync.GooglePlaceHit> =
+        call<de.wanderlogplus.shared.sync.PlaceSearchHits> {
+            client.get("$base/api/places/search") {
+                auth()
+                parameter("q", q)
+                near?.let { (lat, lng) -> parameter("near", "$lat,$lng") }
+                bbox?.normalized()?.let { parameter("bbox", it.param()) }
+            }
+        }.hits
+
     /** The JPEG bytes of a place photo, at most [maxWidth] pixels wide. */
     suspend fun placePhoto(name: String, maxWidth: Int): ByteArray {
         val response = client.get("$base/api/places/photos/media") {

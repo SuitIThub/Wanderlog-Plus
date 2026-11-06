@@ -459,8 +459,8 @@ internal fun PlaceSearchPanel(
     var hits by remember { mutableStateOf<List<GeoPlace>>(emptyList()) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(query) {
-        if (query.isBlank()) { hits = emptyList(); return@LaunchedEffect }
-        delay(400) // debounce while typing
+        if (query.trim().length < 3) { hits = emptyList(); return@LaunchedEffect }
+        delay(600) // debounce while typing: every Google search costs
         hits = try {
             search(query, near).also { failed = false }
         } catch (e: CancellationException) {

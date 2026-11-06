@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.47.0
+
+- **„Ort suchen“ über Google:** Die Ortssuche (Orte, Region, Tag, Reel-Lage, Unterkunft und Bahnhöfe/Flughäfen beim Bearbeiten) fragt jetzt Google Places über den eigenen Server. Gefundene Orte bekommen gleich ihre Google-Verknüpfung, also kommen Öffnungszeiten, Bewertung und Google-Fotos von selbst dazu.
+- **Ohne Google weiter nutzbar:** Hat der Server keinen Google-Key oder ist er nicht erreichbar, sucht die App wie bisher über OpenStreetMap und zeigt „Suche ohne Google (OpenStreetMap)“.
+- **Sparsam:** Beim Bearbeiten sucht die App erst ab 3 Zeichen und nach einer kurzen Tipppause; gleiche Suchen beantwortet der Server 24 Stunden aus dem Zwischenspeicher.
+
 ## 0.46.3
 
 - **Ausstattung: lange Texte lesbar.** Nichts wird mehr abgeschnitten: Texte umbrechen vollständig, lange Kacheln nehmen die ganze Breite ein.

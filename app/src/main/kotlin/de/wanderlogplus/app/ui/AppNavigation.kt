@@ -175,6 +175,8 @@ fun AppNavigation(
     placeSearch: PlaceSearch? = null,
     /** Place search with map for the day program ("Ort suchen"); null hides it. */
     geoSearch: GeoSearch? = null,
+    /** Google first (via the server), OpenStreetMap as fallback; null: Photon only. */
+    placeFinder: de.wanderlogplus.client.PlaceFinder? = null,
     snapshot: TripSnapshot? = null,
     syncStatus: SyncStatus = SyncStatus(),
     onRefresh: () -> Unit = {},
@@ -663,7 +665,7 @@ fun AppNavigation(
                         if (s != null && geo != null) {
                             val start = remember(date, position) { searchStart(s, date, (position as? ItemPosition.After)?.itemId) }
                             val model = rememberPlaceSearchModel(
-                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                 lookup = { lat, lng -> geo.reverse(lat, lng) },
                                 home = start,
                             )
@@ -716,7 +718,7 @@ fun AppNavigation(
                                 }
                             }
                             val model = rememberPlaceSearchModel(
-                                search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                 lookup = { lat, lng -> geo.reverse(lat, lng) },
                                 home = start,
                             )
@@ -911,7 +913,7 @@ fun AppNavigation(
                                     } ?: de.wanderlogplus.app.maps.LatLngD(36.2, 138.25) // never a world map: its area is no search filter
                                 }
                                 val model = rememberPlaceSearchModel(
-                                    search = { q, near, bbox -> geo.search(q, near, limit = 15, bbox = bbox) },
+                                    search = { q, near, bbox -> (placeFinder ?: de.wanderlogplus.client.PlaceFinder(null, geo)).search(q, near, bbox) },
                                     lookup = { lat, lng -> geo.reverse(lat, lng) },
                                     home = start,
                                 )

@@ -42,7 +42,7 @@ class InsertScreenshotTest {
             GeoPlace("Tsumago Honjin", "Nagiso, Japan", 35.577, 137.595, "tourism", "museum"),
             GeoPlace("Yoshimura-ya", "Nagiso, Japan", 35.576, 137.597, "amenity", "restaurant"),
         )
-        val model = PlaceSearchModel({ _, _, _ -> hits }, { _, _ -> null }, null)
+        val model = PlaceSearchModel(finder({ _, _, _ -> hits }), { _, _ -> null }, null)
         model.query = "Tsumago"
         runBlocking { model.submit() }
         model.selected = hits[1]

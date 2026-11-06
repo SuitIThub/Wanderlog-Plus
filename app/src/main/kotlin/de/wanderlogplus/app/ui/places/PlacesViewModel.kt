@@ -256,7 +256,7 @@ class PlacesViewModel(
 
     /** A place found by search goes into [regionId]'s collection as an idea (null: no region). */
     fun addFoundPlace(place: de.wanderlogplus.client.GeoPlace, regionId: String?) = write { e, _ ->
-        e.addPlaceToCollection(place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, regionId)
+        e.addPlaceToCollection(place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, regionId, googlePlaceId = place.googlePlaceId)
     }
 
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =

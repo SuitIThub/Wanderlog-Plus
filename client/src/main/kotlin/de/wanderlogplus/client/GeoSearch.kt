@@ -29,10 +29,14 @@ data class GeoPlace(
     val lng: Double,
     val osmKey: String? = null,
     val osmValue: String? = null,
+    /** Google's place id when the hit came from Google: the server then adds hours, rating and photos. */
+    val googlePlaceId: String? = null,
+    /** The category from Google's place types; null: guessed from the OpenStreetMap tag. */
+    val googleCategory: PlaceCategory? = null,
 ) {
-    /** Best guess of the trip category from the OpenStreetMap tag. */
+    /** Google's category when known, else the best guess from the OpenStreetMap tag. */
     val category: PlaceCategory
-        get() = when {
+        get() = googleCategory ?: when {
             osmKey == "amenity" && osmValue in setOf("bar", "pub", "nightclub", "biergarten") -> PlaceCategory.NIGHTLIFE
             osmKey == "amenity" && osmValue in setOf("restaurant", "cafe", "fast_food", "food_court", "ice_cream") -> PlaceCategory.FOOD
             osmKey == "shop" -> PlaceCategory.SHOPPING

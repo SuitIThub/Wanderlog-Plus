@@ -104,7 +104,7 @@ class TripViewModel(
 
     /** A place found by name or on the map becomes a planned place of the day's region and a program item at [position]. */
     fun addSearchedPlace(date: String, position: ItemPosition, place: GeoPlace) = write { e, s ->
-        e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position)
+        e.addPlaceToDay(s, date, place.name, place.lat, place.lng, place.detail.ifBlank { null }, place.category, position, googlePlaceId = place.googlePlaceId)
     }
 
     /** Applies a chat's day plan; the program before is saved as a version at [at] (epoch ms). */

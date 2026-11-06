@@ -141,6 +141,14 @@ fun PlaceSearchScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).testTag("search-status"),
                 )
             }
+            if (!model.viaGoogle && model.status != SearchStatus.IDLE && model.status != SearchStatus.LOADING) {
+                Text(
+                    "Suche ohne Google (OpenStreetMap)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("search-no-google"),
+                )
+            }
         }
         val hits: @Composable (Modifier) -> Unit = { m ->
             LazyColumn(m) {
@@ -208,5 +216,5 @@ fun PlaceSearchScreen(
 
 /** A [PlaceSearchModel] kept for the screen's lifetime. */
 @Composable
-fun rememberPlaceSearchModel(search: AreaSearch, lookup: PointLookup, home: LatLngD?): PlaceSearchModel =
+fun rememberPlaceSearchModel(search: FinderSearch, lookup: PointLookup, home: LatLngD?): PlaceSearchModel =
     remember { PlaceSearchModel(search, lookup, home?.let { it.lat to it.lng }) }
