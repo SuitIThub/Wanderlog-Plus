@@ -1191,6 +1191,7 @@ private fun chatActions(vm: TripViewModel, snapshot: () -> TripSnapshot?, notify
         vm.addFoundToPlaces(
             card.title, lat, lng, card.address, card.placeCategory(), region?.id,
             note = card.url?.let { "Gefunden im Reise-Chat: $it" }.orEmpty(),
+            googlePlaceId = card.googlePlaceId,
         )
         notify("Zu Orten hinzugefügt" + (region?.let { " (${it.name})" } ?: ""))
     }

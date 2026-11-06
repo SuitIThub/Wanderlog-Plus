@@ -120,8 +120,8 @@ class TripViewModel(
         write { e, s -> e.addPlaceToDay(s, date, name, lat, lng, address, category, position) }
 
     /** A chat's web find goes into [regionId]'s collection as an idea. */
-    fun addFoundToPlaces(name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory, regionId: String?, note: String = "") =
-        write { e, _ -> e.addPlaceToCollection(name, lat, lng, address, category, regionId, note = note) }
+    fun addFoundToPlaces(name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory, regionId: String?, note: String = "", googlePlaceId: String? = null) =
+        write { e, _ -> e.addPlaceToCollection(name, lat, lng, address, category, regionId, note = note, googlePlaceId = googlePlaceId) }
 
     fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
 
