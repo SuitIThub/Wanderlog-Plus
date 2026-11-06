@@ -202,6 +202,9 @@ class PlacesViewModel(
         }
     }
 
+    /** One research job per region batch (name, place ids), queued in this order. */
+    fun researchRegions(batches: List<Pair<String, List<String>>>) = batches.forEach { (name, ids) -> research(ids, name) }
+
     /** Follows the first unfinished job until none is left. */
     private suspend fun work() {
         while (true) {

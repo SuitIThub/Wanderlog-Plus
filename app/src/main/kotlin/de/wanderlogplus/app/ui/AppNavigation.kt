@@ -704,13 +704,17 @@ fun AppNavigation(
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
                             else -> {
-                                val assessing by vm.assessing.collectAsState()
+                                val researching by vm.researching.collectAsState()
+                                val status by vm.researchStatus.collectAsState()
+                                val researchJob by vm.researchJob.collectAsState()
+                                ResearchSnack(vm, snackbar)
                                 PlacesScreen(
                                     s,
                                     onOpenRegion = { nav.navigate(regionRoute(it)) },
                                     onSearch = geoSearch?.let { { nav.navigate(placesSearchRoute(ALL_REGIONS)) } },
-                                    onAssess = if (vm.canAssess) vm::assessAll else null,
-                                    assessing = assessing,
+                                    onResearchRegions = if (vm.canAssess) vm::researchRegions else null,
+                                    researchStatus = status.takeIf { researching.isNotEmpty() },
+                                    onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
                                     onReels = reelsViewModelFactory?.let { { nav.navigate(REELS_ROUTE) } },
                                 )
                             }

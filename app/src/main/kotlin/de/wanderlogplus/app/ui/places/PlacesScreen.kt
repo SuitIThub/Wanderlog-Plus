@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.filled.Search
@@ -123,10 +125,12 @@ fun PlacesScreen(
     modifier: Modifier = Modifier,
     /** Opens the place search (name or map); null hides it. */
     onSearch: (() -> Unit)? = null,
-    /** Starts the assistant's judgement of all places; null hides it. */
-    onAssess: (() -> Unit)? = null,
-    /** Progress/outcome of the judgement, shown below the buttons. */
-    assessing: String? = null,
+    /** Full research of the chosen regions (one batch of name and place ids per region); null hides „Recherchieren“. */
+    onResearchRegions: ((List<Pair<String, List<String>>>) -> Unit)? = null,
+    /** Progress/outcome of the research queue, shown below the buttons. */
+    researchStatus: String? = null,
+    /** Opens the running research's "Ablauf"; null hides the link. */
+    onShowProgress: (() -> Unit)? = null,
     /** Opens the reel analyses (results also reachable when the notification is gone); null hides it. */
     onReels: (() -> Unit)? = null,
 ) {
@@ -138,6 +142,10 @@ fun PlacesScreen(
             savedPlacesIn(snapshot, NO_REGION).size.takeIf { it > 0 }
                 ?.let { RegionTile(NO_REGION, "Ohne Region", it, false, NO_REGION_ACCENT, null) },
         )
+    }
+    var choosing by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    if (choosing && onResearchRegions != null) {
+        RegionResearchSheet(remember(snapshot) { regionChoices(snapshot) }, onStart = onResearchRegions, onDismiss = { choosing = false })
     }
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -152,8 +160,8 @@ fun PlacesScreen(
                 onReels?.let { reels ->
                     androidx.compose.material3.TextButton(onClick = reels, modifier = Modifier.padding(top = 8.dp).testTag("places-reels")) { Text("Reels") }
                 }
-                onAssess?.let { assess ->
-                    androidx.compose.material3.TextButton(onClick = assess, modifier = Modifier.padding(top = 8.dp).testTag("places-assess")) { Text("Einschätzen (KI)") }
+                if (onResearchRegions != null) {
+                    androidx.compose.material3.TextButton(onClick = { choosing = true }, modifier = Modifier.padding(top = 8.dp).testTag("places-research")) { Text("Recherchieren (KI)") }
                 }
                 onSearch?.let { search ->
                     androidx.compose.material3.FilledTonalButton(onClick = search, modifier = Modifier.padding(top = 8.dp).testTag("places-search")) {
@@ -163,9 +171,17 @@ fun PlacesScreen(
                 }
             }
         }
-        assessing?.let { msg ->
-            item(key = "assessing", span = { GridItemSpan(maxLineSpan) }) {
-                Text(msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("places-assessing"))
+        researchStatus?.let { msg ->
+            item(key = "research-status", span = { GridItemSpan(maxLineSpan) }) {
+                androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        msg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).testTag("places-research-status"),
+                    )
+                    onShowProgress?.let { show ->
+                        androidx.compose.material3.TextButton(onClick = show, modifier = Modifier.testTag("places-research-progress")) { Text("Ablauf") }
+                    }
+                }
             }
         }
         items(tiles, key = { it.key }) { RegionTileCard(it, onOpenRegion) }

@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.51.0
+
+- **Regionen recherchieren aus der Orte-Übersicht:** „Einschätzen (KI)“ heißt jetzt „Recherchieren (KI)“ und macht eine volle Recherche statt nur einer Einschätzung. Ein Tipp öffnet die Auswahl der Regionen („Kyoto · 12 Orte, 5 neu“, „Alle auswählen“); danach „Nur unrecherchierte“ oder „Alle“, jeweils mit Anzahl und Kosten. Jede gewählte Region wird als eigene Recherche nacheinander abgearbeitet, der Fortschritt steht unter den Knöpfen („Ablauf“ öffnet die laufende). Verworfene Orte werden nicht recherchiert.
+
 ## 0.50.0
 
 - **Recherchen nacheinander:** Startet man mehrere Recherchen (z. B. zwei Regionen), laufen sie jetzt nacheinander statt gleichzeitig. Die Statuszeile zeigt nur die laufende, z. B. „Kyoto: Recherche: 3 von 12 Orten … · danach: Osaka“, statt zwischen beiden hin- und herzuspringen; „Ablauf“ öffnet immer die gerade laufende. Orte, die schon in einer wartenden Recherche stecken, werden nicht doppelt eingereiht.
