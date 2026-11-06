@@ -101,6 +101,7 @@ fun main() {
         flightLive = FlightLiveService(store, OpenMeteoHttp(), config.airlabsKey),
         trainLive = TrainLiveService(store, OpenMeteoHttp()),
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
+        placesSearch = GooglePlacesSearch(config.googlePlacesKey?.let { de.wanderlogplus.server.ai.HttpPlacesSearchTransport(it, SEARCH_FIELD_MASK) }, store),
         placeEnricher = googleDetails?.let { PlaceEnricher(store, sync, it) },
         chats = ChatService(
             store,

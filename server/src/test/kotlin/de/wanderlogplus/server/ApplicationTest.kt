@@ -75,6 +75,19 @@ class ApplicationTest {
     }
 
     @Test
+    fun placesSearchWithoutKeyIs503() = app {
+        val r = client.get("/api/places/search?q=Ichiran") { authed() }
+        assertEquals(HttpStatusCode.ServiceUnavailable, r.status)
+        assertEquals("""{"error":"places_search_not_configured"}""", r.bodyAsText())
+    }
+
+    @Test
+    fun placesSearchShortQueryIs400() = app {
+        val r = client.get("/api/places/search?q=a") { authed() }
+        assertEquals(HttpStatusCode.BadRequest, r.status)
+    }
+
+    @Test
     fun missingToken401() = app {
         val r = client.get("/api/whoami") { header(PROTOCOL_HEADER, "1") }
         assertEquals(HttpStatusCode.Unauthorized, r.status)

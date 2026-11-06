@@ -90,6 +90,8 @@ class Services(
     val rates: RatesService = RatesService(store, null),
     /** Google photos of places (Places API); without a key `/api/places/photos` answers `photos_not_configured`. */
     val photos: PlacePhotosService = PlacePhotosService(store, config.dataDir.resolve("place-photos"), null),
+    /** Google's Text Search for "Ort suchen"; without a key `/api/places/search` answers `places_search_not_configured`. */
+    val placesSearch: GooglePlacesSearch = GooglePlacesSearch(null, store),
     /** Live status of flights (AirLabs). */
     val flightLive: FlightLiveService = FlightLiveService(store, null, null),
     /** Live status of Shinkansen. */
@@ -178,6 +180,8 @@ fun Application.module(services: Services) {
         exception<FlightLiveNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("flight_live_not_configured")) }
         exception<PhotosNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("photos_not_configured")) }
         exception<PhotosUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("photos_unavailable")) }
+        exception<PlacesSearchNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("places_search_not_configured")) }
+        exception<PlacesSearchUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("places_search_unavailable")) }
         exception<RoutesUnavailable> { call, _ -> call.respond(HttpStatusCode.BadGateway, ErrorResponse("routes_unavailable")) }
         exception<AiNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("ai_not_configured")) }
         exception<ChatBusy> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("chat_busy")) }
@@ -286,6 +290,13 @@ fun Application.module(services: Services) {
             get("/api/places/photos") {
                 val id = call.request.queryParameters["placeId"] ?: throw BadInput()
                 call.respond(de.wanderlogplus.shared.sync.PlacePhotos(withContext(Dispatchers.IO) { services.photos.list(id) }))
+            }
+            get("/api/places/search") {
+                val q = call.request.queryParameters["q"]?.trim().orEmpty()
+                if (q.length !in 2..200) throw BadInput()
+                val near = call.request.queryParameters["near"]?.let(::parseLatLng)
+                val bbox = call.request.queryParameters["bbox"]?.let(::parseBBox)
+                call.respond(de.wanderlogplus.shared.sync.PlaceSearchHits(withContext(Dispatchers.IO) { services.placesSearch.search(q, near, bbox) }))
             }
             get("/api/places/photos/media") {
                 val name = call.request.queryParameters["name"] ?: throw BadInput()
@@ -430,4 +441,21 @@ fun Application.module(services: Services) {
             }
         }
     }
+}
+
+/** "35.0,135.7" → (lat, lng); anything else is bad input. */
+internal fun parseLatLng(s: String): Pair<Double, Double> {
+    val p = s.split(',').map { it.trim().toDoubleOrNull() }
+    val lat = p.getOrNull(0); val lng = p.getOrNull(1)
+    if (p.size != 2 || lat == null || lng == null || lat !in -90.0..90.0 || lng !in -180.0..180.0) throw BadInput()
+    return lat to lng
+}
+
+/** "w,s,e,n" → a map area; anything else is bad input. */
+internal fun parseBBox(s: String): BBox4 {
+    val p = s.split(',').map { it.trim().toDoubleOrNull() }
+    if (p.size != 4 || p.any { it == null || it.isNaN() }) throw BadInput()
+    val (w, so, e, n) = p.map { it!! }
+    if (so !in -90.0..90.0 || n !in -90.0..90.0 || so >= n || w >= e) throw BadInput()
+    return BBox4(w, so, e, n)
 }
