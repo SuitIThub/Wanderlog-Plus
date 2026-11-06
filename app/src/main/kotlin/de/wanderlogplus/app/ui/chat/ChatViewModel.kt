@@ -137,7 +137,8 @@ class ChatViewModel(
         }
     }
 
-    fun send(text: String) {
+    /** Sends [text]; [refs] are the objects picked with "@" (only those still in the text go out). */
+    fun send(text: String, refs: List<de.wanderlogplus.shared.sync.ChatRef> = emptyList()) {
         val t = text.trim()
         if (t.isEmpty() || _sending.value || _chat.value?.pending == true) return
         _sending.value = true
@@ -151,7 +152,7 @@ class ChatViewModel(
                 } else {
                     null
                 }
-                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext(), location))
+                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext(), location, Mentions.kept(t, refs)))
                 _chat.value = sent
                 poll(sent.id)
             }

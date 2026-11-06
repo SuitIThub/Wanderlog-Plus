@@ -109,6 +109,8 @@ data class ChatMessage(
     val cards: List<ChatCard> = emptyList(),
     /** Who wrote a user message (token name). */
     val author: String? = null,
+    /** What the user's "@Name" mentions in [text] point to. */
+    val refs: List<ChatRef> = emptyList(),
 ) {
     companion object {
         const val ROLE_USER = "user"
@@ -141,7 +143,27 @@ data class ChatSendRequest(
     val context: ChatContext = ChatContext(),
     /** Where the user is, if they share it; used for this answer only, never stored in the chat. */
     val location: ChatLocation? = null,
+    /** The objects picked with "@" while typing; stored with the message. */
+    val refs: List<ChatRef> = emptyList(),
 )
+
+/**
+ * An object the user picked with "@" in a chat message: [type] (one of the constants), its [id] (saved place, stay,
+ * train, flight, guide or region id; yyyy-MM-dd for a day) and the [label] that stands after the "@" in the text.
+ */
+@Serializable
+data class ChatRef(val type: String, val id: String, val label: String) {
+    companion object {
+        const val PLACE = "place"
+        const val DAY = "day"
+        const val STAY = "stay"
+        const val TRAIN = "train"
+        const val FLIGHT = "flight"
+        const val GUIDE = "guide"
+        const val REGION = "region"
+        val TYPES = listOf(PLACE, DAY, STAY, TRAIN, FLIGHT, GUIDE, REGION)
+    }
+}
 
 /** A device position: degrees and the accuracy radius in metres. */
 @Serializable

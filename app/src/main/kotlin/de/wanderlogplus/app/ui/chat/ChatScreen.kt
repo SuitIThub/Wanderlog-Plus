@@ -87,6 +87,8 @@ fun ChatRoute(
     onOpenPlace: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     actions: ChatActions? = null,
+    /** Opens what an "@" mention points to; null: mentions are only highlighted. */
+    onOpenRef: ((de.wanderlogplus.shared.sync.ChatRef) -> Unit)? = null,
 ) {
     val chat by vm.chat.collectAsState()
     val chats by vm.chats.collectAsState()
@@ -100,9 +102,9 @@ fun ChatRoute(
     ) { granted -> if (granted.values.any { it }) vm.setShareLocation(true) else vm.locationDenied() }
     ChatScreen(
         chat, chats, context, sending, message, snapshot,
-        onBack = onBack, onSend = vm::send, onRetry = vm::retry, onClearContext = vm::clearContext, onNewChat = vm::newChat,
+        onBack = onBack, onSend = { t, r -> vm.send(t, r) }, onRetry = vm::retry, onClearContext = vm::clearContext, onNewChat = vm::newChat,
         onShowList = vm::refreshList, onSelect = vm::select, onDelete = vm::delete, onConsumeMessage = vm::consumeMessage,
-        onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl, actions = actions,
+        onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl, actions = actions, onOpenRef = onOpenRef,
         shareLocation = shareLocation,
         onToggleLocation = if (!vm.canShareLocation) null else { on ->
             when {
@@ -124,7 +126,8 @@ fun ChatScreen(
     message: String?,
     snapshot: TripSnapshot?,
     onBack: () -> Unit,
-    onSend: (String) -> Unit,
+    /** The text and the objects picked with "@" that it still mentions. */
+    onSend: (String, List<de.wanderlogplus.shared.sync.ChatRef>) -> Unit,
     onRetry: () -> Unit,
     onClearContext: () -> Unit,
     onNewChat: () -> Unit,
@@ -139,10 +142,24 @@ fun ChatScreen(
     shareLocation: Boolean = false,
     /** "Standort mitsenden" on/off; null hides the switch. */
     onToggleLocation: ((Boolean) -> Unit)? = null,
+    /** Opens what an "@" mention points to; null: mentions are only highlighted. */
+    onOpenRef: ((de.wanderlogplus.shared.sync.ChatRef) -> Unit)? = null,
 ) {
-    var draft by rememberSaveable { mutableStateOf("") }
+    var field by rememberSaveable(stateSaver = androidx.compose.ui.text.input.TextFieldValue.Saver) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
+    var refs by remember { mutableStateOf(emptyList<de.wanderlogplus.shared.sync.ChatRef>()) }
+    val draft = field.text
+    val mentionOptions = remember(snapshot) { snapshot?.let { Mentions.options(it) }.orEmpty() }
+    val mention = Mentions.queryAt(draft, field.selection.end, refs)
+    val mentionHits = if (mention == null || !field.selection.collapsed) emptyList() else Mentions.search(mentionOptions, mention.query)
     var showList by remember { mutableStateOf(false) }
     val busy = sending || chat?.pending == true
+    fun send() {
+        if (!busy && draft.isNotBlank()) {
+            onSend(draft, Mentions.kept(draft, refs))
+            field = androidx.compose.ui.text.input.TextFieldValue("")
+            refs = emptyList()
+        }
+    }
     val messages = chat?.messages.orEmpty()
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size, chat?.pending) {
@@ -176,11 +193,11 @@ fun ChatScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (messages.isEmpty()) {
-                item(key = "empty") { EmptyChat(onExample = { if (!busy) onSend(it) }) }
+                item(key = "empty") { EmptyChat(onExample = { if (!busy) onSend(it, emptyList()) }) }
             }
             items(messages, key = { it.id }) { m ->
                 when (m.role) {
-                    ChatMessage.ROLE_USER -> UserBubble(m)
+                    ChatMessage.ROLE_USER -> UserBubble(m, onOpenRef)
                     ChatMessage.ROLE_ERROR -> ErrorBubble(m, showRetry = m == messages.last() && !busy, onRetry)
                     else -> AssistantMessage(m, snapshot, onOpenPlace, onOpenUrl, actions, context?.date)
                 }
@@ -214,6 +231,13 @@ fun ChatScreen(
                 modifier = Modifier.padding(start = 12.dp, top = 4.dp).testTag("chat-context"),
             )
         }
+        if (mentionHits.isNotEmpty() && mention != null) {
+            MentionList(mentionHits) { picked ->
+                val (text, cursor) = Mentions.insert(draft, field.selection.end, mention, picked.ref.label)
+                field = androidx.compose.ui.text.input.TextFieldValue(text, androidx.compose.ui.text.TextRange(cursor))
+                refs = (refs + picked.ref).distinct()
+            }
+        }
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onToggleLocation != null) {
                 androidx.compose.material3.IconToggleButton(
@@ -230,16 +254,21 @@ fun ChatScreen(
             } else {
                 Spacer(Modifier.size(8.dp))
             }
+            val mentionColor = MaterialTheme.colorScheme.primary
             OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it.take(4000) },
+                value = field,
+                onValueChange = { v ->
+                    field = if (v.text.length > 4000) v.copy(text = v.text.take(4000)) else v
+                    refs = Mentions.kept(field.text, refs)
+                },
+                visualTransformation = remember(refs, mentionColor) { MentionHighlight(refs, mentionColor) },
                 placeholder = { Text(if (shareLocation) "Frag, was hier in der Nähe geht …" else "Frag nach Vorschlägen oder Wünschen …") },
                 modifier = Modifier.weight(1f).testTag("chat-input"),
                 maxLines = 5,
                 shape = RoundedCornerShape(20.dp),
             )
             IconButton(
-                onClick = { if (!busy && draft.isNotBlank()) { onSend(draft); draft = "" } },
+                onClick = { send() },
                 enabled = draft.isNotBlank() && !busy,
                 modifier = Modifier.testTag("chat-send"),
             ) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Senden") }
@@ -268,12 +297,31 @@ private fun EmptyChat(onExample: (String) -> Unit) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun UserBubble(m: ChatMessage) {
+private fun UserBubble(m: ChatMessage, onOpenRef: ((de.wanderlogplus.shared.sync.ChatRef) -> Unit)?) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
         Column(horizontalAlignment = Alignment.End) {
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp), modifier = Modifier.widthIn(max = 320.dp)) {
-                Text(m.text, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(
+                    highlighted(m.text, m.refs, MaterialTheme.colorScheme.primary),
+                    Modifier.padding(horizontal = 14.dp, vertical = 9.dp), color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            val refs = Mentions.kept(m.text, m.refs)
+            if (onOpenRef != null && refs.isNotEmpty()) {
+                androidx.compose.foundation.layout.FlowRow(
+                    Modifier.widthIn(max = 320.dp).padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                ) {
+                    refs.forEachIndexed { i, r ->
+                        androidx.compose.material3.SuggestionChip(
+                            onClick = { onOpenRef(r) },
+                            label = { Text(refSymbol(r.type) + " " + r.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            modifier = Modifier.testTag("chat-ref-${m.id}-$i"),
+                        )
+                    }
+                }
             }
             val meta = listOfNotNull(m.author, m.context?.label).joinToString(" · ")
             if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp, end = 4.dp))
@@ -389,6 +437,60 @@ fun ChatTopBar(title: String, onOpenChat: () -> Unit) {
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1)
         IconButton(onClick = onOpenChat, modifier = Modifier.testTag("chat-open")) {
             Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Reise-Chat", tint = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+/** Symbol of a mention's kind, in lists and chips. */
+internal fun refSymbol(type: String): String = when (type) {
+    de.wanderlogplus.shared.sync.ChatRef.PLACE -> "📍"
+    de.wanderlogplus.shared.sync.ChatRef.DAY -> "📅"
+    de.wanderlogplus.shared.sync.ChatRef.STAY -> "🏨"
+    de.wanderlogplus.shared.sync.ChatRef.TRAIN -> "🚆"
+    de.wanderlogplus.shared.sync.ChatRef.FLIGHT -> "✈️"
+    de.wanderlogplus.shared.sync.ChatRef.GUIDE -> "📖"
+    else -> "🗺️"
+}
+
+/** [text] with each "@label" of [refs] in [color], semi-bold. */
+internal fun highlighted(text: String, refs: List<de.wanderlogplus.shared.sync.ChatRef>, color: androidx.compose.ui.graphics.Color): androidx.compose.ui.text.AnnotatedString =
+    androidx.compose.ui.text.buildAnnotatedString {
+        append(text)
+        Mentions.spans(text, refs).forEach { (range, _) ->
+            addStyle(androidx.compose.ui.text.SpanStyle(color = color, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold), range.first, range.last + 1)
+        }
+    }
+
+/** Colors the picked mentions in the input; the text itself is unchanged. */
+private class MentionHighlight(
+    private val refs: List<de.wanderlogplus.shared.sync.ChatRef>,
+    private val color: androidx.compose.ui.graphics.Color,
+) : androidx.compose.ui.text.input.VisualTransformation {
+    override fun filter(text: androidx.compose.ui.text.AnnotatedString) =
+        androidx.compose.ui.text.input.TransformedText(highlighted(text.text, refs, color), androidx.compose.ui.text.input.OffsetMapping.Identity)
+}
+
+/** The objects matching what follows the "@", above the input. */
+@Composable
+private fun MentionList(hits: List<MentionOption>, onPick: (MentionOption) -> Unit) {
+    Surface(
+        tonalElevation = 3.dp, shadowElevation = 2.dp, shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("chat-mentions"),
+    ) {
+        Column(Modifier.padding(vertical = 4.dp)) {
+            hits.forEach { o ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(o) }.padding(horizontal = 14.dp, vertical = 8.dp)
+                        .testTag("chat-mention-${o.ref.type}-${o.ref.id}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(refSymbol(o.ref.type), Modifier.padding(end = 10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(o.ref.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (o.subtitle.isNotBlank()) Text(o.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
         }
     }
 }

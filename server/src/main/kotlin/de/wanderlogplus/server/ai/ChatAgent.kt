@@ -164,6 +164,36 @@ internal fun distanceText(km: Double): String =
 
 /** Turns where the chat was opened into German prompt text. */
 object ChatContextText {
+    /**
+     * What the "@" mentions of a user message point to, as a block after the text; unknown objects are left out.
+     * [detailed]: the newest message also gets each object's details, so the model need not look them up.
+     */
+    fun refs(refs: List<de.wanderlogplus.shared.sync.ChatRef>, t: ChatTrip, detailed: Boolean): String {
+        val R = de.wanderlogplus.shared.sync.ChatRef
+        val lines = refs.mapNotNull { r ->
+            val (what, detail) = when (r.type) {
+                R.PLACE -> t.savedById[r.id]?.let { s -> "Ort [id=${s.id}]" to { placeDetail(s, t) } }
+                R.DAY -> t.queries?.days()?.firstOrNull { it.date == r.id }?.let { d -> "Tag ${d.date}" to { day(d.date, t) } }
+                R.STAY -> t.stays.firstOrNull { it.id == r.id }?.let { s -> "Unterkunft „${t.stayName(s)}“ [id=${s.id}]" to { stay(s, t) } }
+                R.TRAIN -> t.trains.firstOrNull { it.id == r.id }?.let { x -> "Zug ${listOfNotNull(x.carrier, x.number).joinToString(" ")} [id=${x.id}]".replace("  ", " ") to { ride(x.depart, x.arrive) + (de.wanderlogplus.shared.seatmap.seatLine(x.travelClass, x.seats)?.let { " · $it" } ?: "") } }
+                R.FLIGHT -> t.flights.firstOrNull { it.id == r.id }?.let { x -> "Flug ${listOfNotNull(x.airlineCode ?: x.airline, x.number).joinToString(" ")} [id=${x.id}]".replace("  ", " ") to { ride(x.depart, x.arrive) + (de.wanderlogplus.shared.seatmap.seatLine(x.travelClass, x.seats)?.let { " · $it" } ?: "") } }
+                R.GUIDE -> t.guides.firstOrNull { it.id == r.id }?.let { g -> "Guide „${g.title}“ [id=${g.id}]" to { g.summary } }
+                R.REGION -> t.regionsById[r.id]?.let { g -> "Region „${g.name}“ [id=${g.id}]" to { "" } }
+                else -> null
+            } ?: return@mapNotNull null
+            val more = if (detailed) detail().trim().take(MAX_REF_DETAIL).takeIf { it.isNotEmpty() }?.let { "\n  " + it.replace("\n", "\n  ") }.orEmpty() else ""
+            "- @${r.label} = $what$more"
+        }
+        return if (lines.isEmpty()) "" else "\n\n[Mit @ gemeint:\n" + lines.joinToString("\n") + "]"
+    }
+
+    private const val MAX_REF_DETAIL = 1500
+
+    private fun ride(from: Endpoint, to: Endpoint): String {
+        fun ep(e: Endpoint) = listOfNotNull(e.name.ifBlank { null } ?: e.code, e.date, e.time).joinToString(" ")
+        return ep(from) + " → " + ep(to)
+    }
+
     /** Trip, regions, stays and the plan of every day: what the trip screens show, compact. */
     fun overview(t: ChatTrip): String = buildString {
         val trip = t.trip
@@ -1339,7 +1369,7 @@ class ChatAgent(
         val messages = mutableListOf(cachedSystem(stable, volatile))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
-                msg("user", (m.context?.label?.let { "[Geöffnet bei: $it] " } ?: "") + m.text)
+                msg("user", (m.context?.label?.let { "[Geöffnet bei: $it] " } ?: "") + m.text + ChatContextText.refs(m.refs, trip, detailed = m === last))
             } else {
                 msg("assistant", m.text + (m.cards.takeIf { it.isNotEmpty() }?.let { c -> "\n(Gezeigte Karten: " + c.joinToString(", ") { k -> k.title + (k.savedPlaceId?.let { " [id=$it]" } ?: k.url?.let { " [$it]" } ?: "") } + ")" } ?: ""))
             }

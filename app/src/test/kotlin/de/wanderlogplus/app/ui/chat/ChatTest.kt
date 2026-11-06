@@ -107,9 +107,11 @@ class ChatTest {
 
         // Without context the next message goes out with an empty one; a new chat starts empty.
         vm.clearContext()
-        vm.send("Und dann?")
+        val ref = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.DAY, "2027-04-03", "Tag 3, 03.04.")
+        vm.send("Und an @Tag 3, 03.04.?", listOf(ref))
         waitUntil { vm.chat.value?.messages?.size == 4 }
         assertEquals(ChatContext(), backend.sent.last().context)
+        assertEquals(listOf(ref), backend.sent.last().refs)
         vm.newChat()
         waitUntil { last.id == null }
         assertNull(vm.chat.value)
@@ -144,7 +146,7 @@ class ChatTest {
         var on by androidx.compose.runtime.mutableStateOf(false)
         rule.setContent {
             WanderlogPlusTheme {
-                ChatScreen(null, emptyList(), null, false, null, null, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, shareLocation = on, onToggleLocation = { on = it })
+                ChatScreen(null, emptyList(), null, false, null, null, {}, { _, _ -> }, {}, {}, {}, {}, {}, {}, {}, {}, {}, shareLocation = on, onToggleLocation = { on = it })
             }
         }
         rule.onNodeWithTag("chat-location").performSemanticsAction(SemanticsActions.OnClick)
@@ -189,7 +191,7 @@ class ChatTest {
             WanderlogPlusTheme {
                 ChatScreen(
                     chat, emptyList(), ChatContext(label = "Tag Fr 02.04."), sending = false, message = null, snapshot = Fixtures.trip(),
-                    onBack = {}, onSend = { sentText = it }, onRetry = {}, onClearContext = {}, onNewChat = {}, onShowList = {},
+                    onBack = {}, onSend = { t, _ -> sentText = t }, onRetry = {}, onClearContext = {}, onNewChat = {}, onShowList = {},
                     onSelect = {}, onDelete = {}, onConsumeMessage = {}, onOpenPlace = { opened = it }, onOpenUrl = { url = it },
                 )
             }
@@ -208,6 +210,37 @@ class ChatTest {
         rule.onNodeWithTag("chat-send").assertIsNotEnabled()
         rule.onNodeWithTag("chat-send").performSemanticsAction(SemanticsActions.OnClick)
         assertNull(sentText)
+    }
+
+    @Test fun atSignOffersObjectsAndSendsThePickedOnes() {
+        var sent: Pair<String, List<de.wanderlogplus.shared.sync.ChatRef>>? = null
+        var openedRef: de.wanderlogplus.shared.sync.ChatRef? = null
+        val tempel = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.PLACE, "s-tempel", "Alter Bergtempel")
+        val chat = ChatInfo(
+            "c1", "Tempel", 0, 0,
+            messages = listOf(ChatMessage("u", ChatMessage.ROLE_USER, "Wann ist @Alter Bergtempel offen?", 0, refs = listOf(tempel))),
+        )
+        rule.setContent {
+            WanderlogPlusTheme {
+                ChatScreen(
+                    chat, emptyList(), null, sending = false, message = null, snapshot = Fixtures.trip(),
+                    onBack = {}, onSend = { t, r -> sent = t to r }, onRetry = {}, onClearContext = {}, onNewChat = {}, onShowList = {},
+                    onSelect = {}, onDelete = {}, onConsumeMessage = {}, onOpenPlace = {}, onOpenUrl = {},
+                    onOpenRef = { openedRef = it },
+                )
+            }
+        }
+        // The mention in the history opens its object.
+        rule.onNodeWithTag("chat-ref-u-0").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(tempel, openedRef)
+
+        rule.onNodeWithTag("chat-input").performTextInput("Passt @berg")
+        rule.onNodeWithTag("chat-mentions").assertExists()
+        rule.onNodeWithTag("chat-mention-place-s-tempel").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("chat-mentions").assertDoesNotExist()
+        rule.onNodeWithTag("chat-input").performTextInput("morgen?")
+        rule.onNodeWithTag("chat-send").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals("Passt @Alter Bergtempel morgen?" to listOf(tempel), sent)
     }
 
     private class RecordingActions : ChatActions {
@@ -242,7 +275,7 @@ class ChatTest {
             WanderlogPlusTheme {
                 ChatScreen(
                     chat, emptyList(), ChatContext(date = "2027-04-03"), false, null, Fixtures.trip(),
-                    {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions,
+                    {}, { _, _ -> }, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions,
                 )
             }
         }
@@ -316,7 +349,7 @@ class ChatTest {
         ))
         rule.setContent {
             WanderlogPlusTheme {
-                ChatScreen(chat, emptyList(), null, false, null, Fixtures.trip(), {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions)
+                ChatScreen(chat, emptyList(), null, false, null, Fixtures.trip(), {}, { _, _ -> }, {}, {}, {}, {}, {}, {}, {}, {}, {}, actions = actions)
             }
         }
         rule.onNodeWithText("Entfällt").assertExists()
@@ -349,7 +382,7 @@ class ChatTest {
         rule.setContent {
             WanderlogPlusTheme {
                 ChatScreen(
-                    current, emptyList(), null, false, null, null, {}, { sentText = it }, { retried++ }, {}, {}, {}, {}, {}, {}, {}, {},
+                    current, emptyList(), null, false, null, null, {}, { t, _ -> sentText = t }, { retried++ }, {}, {}, {}, {}, {}, {}, {}, {},
                 )
             }
         }

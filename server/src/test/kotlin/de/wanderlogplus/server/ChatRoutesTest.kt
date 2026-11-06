@@ -119,6 +119,16 @@ class ChatRoutesTest {
         assertEquals(HttpStatusCode.NotFound, client.get("/api/chats/${chat.id}") { authed() }.status)
     }
 
+    @Test fun referencesAreCleanedBeforeSaving() {
+        val ok = de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.PLACE, "s1", "Kiyomizu-dera")
+        val refs = listOf(ok, ok, de.wanderlogplus.shared.sync.ChatRef("weird", "x", "X"), de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.DAY, "d", "  "))
+        assertEquals(listOf(ok), ChatService.cleanRefs(refs))
+        val many = (1..30).map { de.wanderlogplus.shared.sync.ChatRef(de.wanderlogplus.shared.sync.ChatRef.GUIDE, "g$it", "G".repeat(200)) }
+        val cleaned = ChatService.cleanRefs(many)
+        assertEquals(12, cleaned.size)
+        assertEquals(80, cleaned.first().label.length)
+    }
+
     @Test fun badInputAndMissingKey() = testApplication {
         start(null)
         assertEquals(HttpStatusCode.ServiceUnavailable, client.post("/api/chats") { authed() }.status)
