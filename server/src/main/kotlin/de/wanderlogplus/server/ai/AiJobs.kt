@@ -141,6 +141,8 @@ class AiJobs(
             AiJobInfo(
                 UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = asks.size, steps = listOf(queuedStep()),
                 appliedOnServer = writeResults != null,
+                // Guides being rewritten are known from the start, so the app can mark them while the job runs.
+                guideIds = asks.mapNotNull { it.guideId }.distinct(),
             ),
         )
         executor.execute { runGuides(job, asks) }
@@ -163,6 +165,7 @@ class AiJobs(
                     val existing = ask.guideId?.let { id -> trip.guides.firstOrNull { it.id == id } }
                         ?: GuideMatch.duplicateOf(ask.topic, ask.title, trip.guides)
                     val g = w.write(ask, GuideWriter.tripContext(trip, ask.topic ?: existing?.topic), existing, say)
+                        .copy(writtenAt = now().toEpochMilli())
                     writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, EntityCodec.fields(g), create = true)))
                     t.update { j -> j.copy(guideIds = (j.guideIds + g.id).distinct()) }
                     t.item(key, state = "DONE", detail = g.title)

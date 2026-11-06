@@ -808,6 +808,7 @@ class ChatTools(
         say("Starte Guide-Auftrag …")
         val job = port.start(listOf(ask))
         val label = GuideTopics.byKey(ask.topic)?.name ?: ask.title
+        guideCard(dup?.title ?: label, dup?.id, job.id, dup != null)
         return if (dup != null) "Auftrag ${job.id} gestartet: der bestehende Guide „${dup.title}“ [id=${dup.id}] wird überarbeitet. Das dauert einige Minuten; der Guide erscheint danach in der App."
         else "Auftrag ${job.id} gestartet: „$label“ wird recherchiert und geschrieben. Das dauert einige Minuten; der Guide erscheint danach in der App."
     }
@@ -816,7 +817,16 @@ class ChatTools(
         val g = guideOf(args) ?: return "Unbekannter Guide."
         say("Starte Guide-Auftrag …")
         val job = port.start(listOf(de.wanderlogplus.shared.sync.GuideAsk(g.topic, g.title, g.parentId, args.s("wish").orEmpty(), g.id)))
+        guideCard(g.title, g.id, job.id, rewrite = true)
         return "Auftrag ${job.id} gestartet: „${g.title}“ wird überarbeitet. Das dauert einige Minuten."
+    }
+
+    /** A card under the answer that follows the guide job in the app. */
+    private fun guideCard(title: String, guideId: String?, jobId: String, rewrite: Boolean) {
+        cards += ChatCard(
+            ChatCard.KIND_GUIDE, title, subtitle = if (rewrite) "Wird überarbeitet" else "Wird neu geschrieben",
+            guideId = guideId, jobId = jobId,
+        )
     }
 
     private fun placeGuide(args: JsonObject, port: ChatGuides, pin: Boolean): String {

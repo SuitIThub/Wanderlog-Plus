@@ -50,6 +50,9 @@ data class ChatCard(
     val plan: ChatPlan? = null,
     /** Google's id of a located web find; the added place then gets photos and details. */
     val googlePlaceId: String? = null,
+    /** A guide job ([KIND_GUIDE]): the guide being rewritten (null for a new one) and the job to follow. */
+    val guideId: String? = null,
+    val jobId: String? = null,
 ) {
     val canAdd: Boolean get() = kind == KIND_WEB && lat != null && lng != null
 
@@ -57,6 +60,7 @@ data class ChatCard(
         const val KIND_PLACE = "place"
         const val KIND_WEB = "web"
         const val KIND_PLAN = "plan"
+        const val KIND_GUIDE = "guide"
     }
 }
 

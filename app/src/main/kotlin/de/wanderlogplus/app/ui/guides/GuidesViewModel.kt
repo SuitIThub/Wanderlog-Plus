@@ -26,6 +26,9 @@ interface GuideActions {
     fun delete(id: String)
     fun pin(guideId: String, target: GuideTarget)
     fun hide(guideId: String, target: GuideTarget)
+
+    /** Asks the server for the recent guide jobs (also the chat's) and follows running ones. */
+    fun refreshJobs() {}
 }
 
 /** The guide actions for detail screens and the today card; null hides hiding/pinning there. */
@@ -42,13 +45,18 @@ class GuidesViewModel(
     private val scope: CoroutineScope,
     /** Starts a guides job on the server; null when no server is set up. */
     private val startGuides: suspend (List<GuideAsk>) -> AiJobInfo?,
-    /** The current state of a job; null when unknown or unreachable. */
-    private val job: suspend (String) -> AiJobInfo?,
+    /** The server's recent guide jobs, newest first; null when unknown or unreachable. */
+    private val recentJobs: suspend () -> List<AiJobInfo>?,
+    /** Fetches the trip now (a finished job's guides arrive with it). */
+    private val syncNow: () -> Unit = {},
+    private val pollMs: Long = POLL_MS,
 ) : ViewModel(), GuideActions {
-    private val _running = MutableStateFlow<AiJobInfo?>(null)
+    private val _jobs = MutableStateFlow<List<AiJobInfo>>(emptyList())
 
-    /** The guides job started last, refreshed until it ends. */
-    val running: StateFlow<AiJobInfo?> = _running
+    /** The recent guide jobs, from the app or the chat, newest first; refreshed while one runs. */
+    val jobs: StateFlow<List<AiJobInfo>> = _jobs
+
+    private var polling: kotlinx.coroutines.Job? = null
 
     private val _message = MutableStateFlow<String?>(null)
 
@@ -80,17 +88,31 @@ class GuidesViewModel(
                 _message.value = "Guides lassen sich gerade nicht erstellen (Server nicht erreichbar?)."
                 return@launch
             }
-            _running.value = started
-            follow(started.id)
+            _jobs.value = listOf(started) + _jobs.value.filter { it.id != started.id }
+            refreshJobs()
         }
     }
 
-    private suspend fun follow(id: String) {
-        while (_running.value?.let { it.id == id && it.status != "DONE" && it.status != "FAILED" } == true) {
-            delay(POLL_MS)
-            val now = try { job(id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null } ?: continue
-            _running.value = now
+    override fun refreshJobs() {
+        if (polling?.isActive == true) return
+        polling = scope.launch {
+            fetch()
+            while (_jobs.value.any(GuideJobs::isActive)) {
+                delay(pollMs)
+                if (!fetch()) delay(pollMs * 3)
+            }
         }
+    }
+
+    /** Takes the server's list; a job that ended since the last look triggers a sync. False when unreachable. */
+    private suspend fun fetch(): Boolean {
+        val got = try { recentJobs() } catch (e: CancellationException) { throw e } catch (e: Exception) { null } ?: return false
+        val before = _jobs.value
+        val ended = before.any { old -> GuideJobs.isActive(old) && got.any { it.id == old.id && !GuideJobs.isActive(it) } }
+        // A job just started may not be listed yet; keep it until the server knows it.
+        _jobs.value = (got + before.filter { old -> GuideJobs.isActive(old) && got.none { it.id == old.id } }).sortedByDescending { it.createdAt }
+        if (ended) syncNow()
+        return true
     }
 
     override fun save(guide: Guide) = change(guide.id) { guide }

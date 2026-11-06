@@ -128,4 +128,15 @@ class GuideWriterTest {
         j.startGuides(listOf(GuideAsk(topic = "onsen", wish = "kürzer"))); j.drain()
         assertEquals(listOf(first.id), storedGuides().map { it.id })
     }
+    @Test
+    fun `a rewrite names its guide from the start and stamps when it was written`() {
+        val j = jobs(Scripted { answer("Onsen & Sentō") })
+        j.startGuides(listOf(GuideAsk(topic = "onsen"))); j.drain()
+        val first = storedGuides().single()
+        assertTrue(first.writtenAt > 0)
+        val again = j.startGuides(listOf(GuideAsk(topic = "onsen", wish = "kürzer", guideId = first.id)))
+        assertEquals(listOf(first.id), again.guideIds)
+        j.drain()
+        assertTrue(storedGuides().single().writtenAt >= first.writtenAt)
+    }
 }

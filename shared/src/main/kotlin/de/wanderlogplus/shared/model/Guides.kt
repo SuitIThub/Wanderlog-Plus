@@ -29,6 +29,8 @@ data class Guide(
     val pinnedTo: List<GuideTarget> = emptyList(),
     /** Never shown there. */
     val hiddenFrom: List<GuideTarget> = emptyList(),
+    /** Epoch millis when the server last researched and wrote the text; 0 for unknown (older guides). */
+    val writtenAt: Long = 0,
 )
 
 @Serializable

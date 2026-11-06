@@ -269,6 +269,7 @@ fun AppNavigation(
         }
     }
     val guidesMessage = guidesVm?.message?.collectAsState()?.value
+    val guideJobs = guidesVm?.jobs?.collectAsState()?.value.orEmpty()
     LaunchedEffect(guidesMessage) {
         if (guidesMessage != null) {
             snackbar.showSnackbar(guidesMessage)
@@ -465,6 +466,7 @@ fun AppNavigation(
             de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
             de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
             de.wanderlogplus.app.ui.guides.LocalGuideActions provides guidesVm,
+            de.wanderlogplus.app.ui.guides.LocalGuideJobs provides guideJobs,
             de.wanderlogplus.app.ui.guides.LocalOpenGuide provides { id: String -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
             de.wanderlogplus.app.ui.guides.LocalOpenGuides provides { nav.navigate(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) },
         ) {
@@ -983,11 +985,11 @@ fun AppNavigation(
                 composable(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) { entry ->
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
-                    val running = guidesVm?.running?.collectAsState()?.value
+                    LaunchedEffect(Unit) { guidesVm?.refreshJobs() }
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
                             de.wanderlogplus.app.ui.guides.GuidesScreen(
-                                s, guidesVm, running,
+                                s, guidesVm, guideJobs,
                                 onOpen = { id -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
                                 onBack = { nav.popBackStack() },
                             )
@@ -998,10 +1000,11 @@ fun AppNavigation(
                     val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
                     val snap by vm.snapshot.collectAsState()
                     val id = entry.arguments?.getString("guideId")?.let { java.net.URLDecoder.decode(it, "UTF-8") }.orEmpty()
+                    LaunchedEffect(id) { guidesVm?.refreshJobs() }
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { s ->
                             de.wanderlogplus.app.ui.guides.GuideScreen(
-                                s, id, guidesVm,
+                                s, id, guidesVm, jobs = guideJobs,
                                 onBack = { nav.popBackStack() },
                                 onOpenGuide = { other -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(other)) },
                                 onImprove = openChat,

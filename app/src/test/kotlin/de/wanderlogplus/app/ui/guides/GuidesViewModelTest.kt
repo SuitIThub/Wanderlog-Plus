@@ -24,10 +24,15 @@ class GuidesViewModelTest {
     private val editor = LocalEditor(store, InMemoryOutbox(), HlcClock("dev-a", now = { 1000L }))
     private val edit: EditFn = { block -> block(editor, snapshot()) }
     private val asked = mutableListOf<List<GuideAsk>>()
+    /** What the server answers on each poll of the recent guide jobs, in order; the last one repeats. */
+    private var serverJobs = mutableListOf<List<AiJobInfo>>(emptyList())
+    private var syncs = 0
     private val vm = GuidesViewModel(
         edit, CoroutineScope(Dispatchers.Unconfined),
         startGuides = { asks -> asked += asks; AiJobInfo("j1", "guides", 0, "QUEUED") },
-        job = { null },
+        recentJobs = { if (serverJobs.size > 1) serverJobs.removeAt(0) else serverJobs.first() },
+        syncNow = { syncs++ },
+        pollMs = 0,
     )
 
     private fun snapshot() = TripSnapshot.from(store.all())
@@ -61,9 +66,28 @@ class GuidesViewModelTest {
 
     @Test
     fun createSelectedAsksForEachTopic() {
+        serverJobs = mutableListOf(listOf(AiJobInfo("j1", "guides", 0, "QUEUED")), listOf(AiJobInfo("j1", "guides", 0, "DONE")))
         vm.createSelected(listOf("onsen", "ryokan"))
         assertEquals(listOf(listOf(GuideAsk(topic = "onsen"), GuideAsk(topic = "ryokan"))), asked)
-        assertEquals("j1", vm.running.value?.id)
+        assertEquals("j1", vm.jobs.value.single().id)
+    }
+
+    @Test
+    fun jobsStartedElsewhereAreFollowedUntilTheyEnd() {
+        val running = AiJobInfo("chat-job", "guides", 0, "RESEARCHING", guideIds = listOf("g1"))
+        serverJobs = mutableListOf(listOf(running), listOf(running), listOf(running.copy(status = "DONE")))
+        vm.refreshJobs()
+        assertEquals("DONE", vm.jobs.value.single().status)
+        // The rewritten guide comes with the next sync.
+        assertEquals(1, syncs)
+    }
+
+    @Test
+    fun finishedJobsAreNotPolled() {
+        serverJobs = mutableListOf(listOf(AiJobInfo("old", "guides", 0, "DONE")))
+        vm.refreshJobs()
+        assertEquals("old", vm.jobs.value.single().id)
+        assertEquals(0, syncs)
     }
 
     @Test
