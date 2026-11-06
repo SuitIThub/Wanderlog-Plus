@@ -23,6 +23,9 @@ const val SERVER_NODE = "server"
 /** Author of the changes the assistant writes (research results). */
 const val ASSISTANT_AUTHOR = "KI-Recherche"
 
+/** Author of status changes the server makes from votes. */
+const val VOTES_AUTHOR = "Abstimmung"
+
 /** Fields the server writes into one entity on its own (assistant results); [onlyIfEmpty] fields keep a non-blank stored value. */
 data class ServerEdit(
     val type: EntityType,
@@ -87,13 +90,33 @@ class SyncService(
 
     fun push(author: String, changes: List<FieldChange>): PushResponse {
         validate(changes)
-        return withWriteLock {
+        // Everyone votes only for themselves: other people's votes are dropped, the rest of the push stays.
+        val own = changes.filter { c ->
+            c.type != EntityType.VOTE ||
+                (c.id.endsWith("|$author") && (c.field != "voter" || (c.value as? JsonPrimitive)?.content == author))
+        }
+        val response = withWriteLock {
             store.transaction(author) {
                 val max = MaxHlc()
-                val accepted = apply(changes, max)
+                val accepted = apply(own, max)
                 PushResponse(accepted, store.maxSeq(), max.value?.encode(), store.epoch)
             }
         }
+        val voted = own.filter { it.type == EntityType.VOTE }.map { it.id.substringBeforeLast('|') }.toSet()
+        if (voted.isNotEmpty()) settleVotes(voted)
+        return response
+    }
+
+    /** Moves the voted places between „Idee“ and „Vorgemerkt“ by their score (also when two votes came at once). */
+    private fun settleVotes(savedPlaceIds: Set<String>) {
+        val votes = store.all(EntityType.VOTE).filter { !it.isDeleted }.map { de.wanderlogplus.shared.model.EntityCodec.decode<de.wanderlogplus.shared.model.Vote>(it) }
+        val edits = savedPlaceIds.mapNotNull { id ->
+            val saved = store.get(EntityType.SAVED_PLACE, id)?.takeIf { !it.isDeleted }?.let { de.wanderlogplus.shared.model.EntityCodec.decode<de.wanderlogplus.shared.model.SavedPlace>(it) }
+                ?: return@mapNotNull null
+            val next = de.wanderlogplus.shared.model.Votes.nextStatus(saved.status, de.wanderlogplus.shared.model.Votes.score(votes, id))
+            if (next == saved.status) null else ServerEdit(EntityType.SAVED_PLACE, id, mapOf("status" to JsonPrimitive(next.name)))
+        }
+        if (edits.isNotEmpty()) writeAsServer(VOTES_AUTHOR, edits)
     }
 
     private fun validate(changes: List<FieldChange>) {

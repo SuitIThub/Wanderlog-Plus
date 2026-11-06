@@ -154,6 +154,10 @@ fun PlaceDetailScreen(
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
     /** "Reserviert" for a place that needs a reservation. */
     onSetReserved: (savedPlaceId: String, reserved: Boolean) -> Unit = { _, _ -> },
+    /** The own access name (for voting); null: no vote buttons. */
+    me: String? = null,
+    /** Casts or withdraws (0) the own vote; null hides the buttons. */
+    onVote: ((savedPlaceId: String, value: Int) -> Unit)? = null,
     /** "Fristen ändern" in the reservation card; null hides it. */
     onSetReservationWindow: ((savedPlaceId: String, window: de.wanderlogplus.shared.model.ReservationWindow?) -> Unit)? = null,
     /** Own header image (null: default); null callback hides "Titelbild ändern". */
@@ -237,6 +241,10 @@ fun PlaceDetailScreen(
                         label = { Text(statusLabel(s)) },
                     )
                 }
+            }
+            val votes = snapshot.votes.filter { it.savedPlaceId == saved.id }
+            if (votes.any { it.value != 0 } || (me != null && onVote != null)) {
+                VoteBar(votes, me.takeIf { onVote != null }, onVote = { v -> onVote?.invoke(saved.id, v) })
             }
             val reason = remember(saved) { de.wanderlogplus.shared.query.Reservations.reason(saved) }
             val visit = remember(snapshot, saved, today) {

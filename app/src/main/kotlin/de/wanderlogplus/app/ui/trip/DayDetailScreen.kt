@@ -180,6 +180,14 @@ fun DayDetailScreen(
             val photoCount = day?.let { snapshot.photosFor(EntityType.DAY, it.id).size } ?: 0
             ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos", maxLines = 2) { tab = TAB_PHOTOS }
         }
+        if (tab == TAB_PROGRAM) {
+            de.wanderlogplus.app.ui.places.PlanDoubtCard(
+                remember(snapshot, date) { de.wanderlogplus.app.ui.places.planDoubts(snapshot, date, onDate = date) },
+                onOpenPlace?.let { open -> { id: String -> snapshot.savedPlaces.firstOrNull { it.id == id }?.let { open(it.placeId) } } },
+                Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                showDate = false,
+            )
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (tab) {
                 TAB_PROGRAM -> DayProgramTab(

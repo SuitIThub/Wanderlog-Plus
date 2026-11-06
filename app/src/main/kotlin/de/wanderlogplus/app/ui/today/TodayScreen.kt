@@ -165,6 +165,10 @@ private fun Before(
                 }
             }
             if (deadlines.isNotEmpty() || ideaDeadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace, ideas = ideaDeadlines)
+            de.wanderlogplus.app.ui.places.PlanDoubtCard(
+                remember(snapshot, now.toLocalDate()) { de.wanderlogplus.app.ui.places.planDoubts(snapshot, now.toLocalDate().toString()) },
+                onOpenPlace?.let { open -> { id: String -> open(de.wanderlogplus.shared.query.DeadlineTarget.PLACE, id) } },
+            )
         }
     }
 }
@@ -237,6 +241,10 @@ private fun During(
         WeatherAndStay(date, todayWeather, tomorrowWeather, stay, stayPlace, accent, onOpenLink)
         todayWeather?.let { RainHint(it, outdoor, openChat) }
         if (deadlines.isNotEmpty() || ideaDeadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace, ideas = ideaDeadlines)
+        de.wanderlogplus.app.ui.places.PlanDoubtCard(
+            remember(snapshot, now.toLocalDate()) { de.wanderlogplus.app.ui.places.planDoubts(snapshot, now.toLocalDate().toString()) },
+            onOpenPlace?.let { open -> { id: String -> open(de.wanderlogplus.shared.query.DeadlineTarget.PLACE, id) } },
+        )
         if (openNow.isNotEmpty()) OpenNowWidget(openNow, accent)
     }
 

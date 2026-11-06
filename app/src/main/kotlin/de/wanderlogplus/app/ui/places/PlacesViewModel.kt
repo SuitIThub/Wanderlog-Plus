@@ -35,8 +35,25 @@ class PlacesViewModel(
     private val config: suspend () -> AssessConfig = { AssessConfig() },
     /** Starts a sync now (results the server wrote into the trip). */
     private val syncNow: () -> Unit = {},
+    /** The own access name (cached; asked from the server once); null when unknown. */
+    private val myName: (suspend () -> String?)? = null,
 ) : ViewModel() {
     val canAssess: Boolean get() = api != null
+
+    private val _me = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** Who votes from this phone; null until known (then no vote buttons). */
+    val me: StateFlow<String?> = _me
+
+    init {
+        myName?.let { load -> viewModelScope.launch { _me.value = try { load() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null } } }
+    }
+
+    /** Casts (or with 0 withdraws) the own vote; may move the place between „Idee“ and „Vorgemerkt“. */
+    fun vote(savedPlaceId: String, value: Int) {
+        val me = _me.value ?: return
+        write { e, s -> voteEdits(s, savedPlaceId, me, value)(e) }
+    }
 
     /** Progress or outcome of "Einschätzen (KI)" (fixed German text); null when idle. */
     private val _assessing = MutableStateFlow<String?>(null)
