@@ -59,9 +59,10 @@ class ChatTrip(
     val trains: List<Train> = emptyList(),
     /** Weather by date (forecast or climate average); empty when unknown. */
     val weather: Map<String, DayWeather> = emptyMap(),
+    val guides: List<de.wanderlogplus.shared.model.Guide> = emptyList(),
 ) {
     fun withWeather(w: TripWeather): ChatTrip =
-        ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date })
+        ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date }, guides)
 
     val regionsById = regions.associateBy { it.id }
     val savedById = saved.associateBy { it.id }
@@ -134,6 +135,7 @@ class ChatTrip(
                 dayItems = live(EntityType.DAY_ITEM) { EntityCodec.decode<DayItem>(it) },
                 flights = live(EntityType.FLIGHT) { EntityCodec.decode<Flight>(it) },
                 trains = live(EntityType.TRAIN) { EntityCodec.decode<Train>(it) },
+                guides = live(EntityType.GUIDE) { EntityCodec.decode<de.wanderlogplus.shared.model.Guide>(it) },
             )
         }
     }
