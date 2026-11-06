@@ -5,8 +5,9 @@ import de.wanderlogplus.server.ai.ChatAgent
 import de.wanderlogplus.server.ai.ParallelWebSearch
 import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
-import de.wanderlogplus.server.ai.OpenRouterResearcher
-import de.wanderlogplus.server.ai.ParallelResearcher
+import de.wanderlogplus.server.ai.ModelFacts
+import de.wanderlogplus.server.ai.ParallelFacts
+import de.wanderlogplus.server.ai.PipelineResearcher
 import de.wanderlogplus.server.ai.HttpParallelTransport
 import de.wanderlogplus.server.ai.PhotonGeocoder
 import de.wanderlogplus.server.ai.ToolReelMedia
@@ -50,7 +51,9 @@ fun main() {
             store,
             openRouter?.let { model ->
                 val text = textModel ?: model
-                val researcher = config.parallelKey?.let { ParallelResearcher(HttpParallelTransport(it), config.parallelProcessor) } ?: OpenRouterResearcher(text)
+                // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
+                val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
+                val researcher = PipelineResearcher(facts, text)
                 Assistant(model, PhotonGeocoder(), researcher, textModel = text)
             },
             ToolReelMedia(cookies = config.instagramCookies),
