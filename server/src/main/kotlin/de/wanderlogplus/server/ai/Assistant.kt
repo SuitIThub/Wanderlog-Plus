@@ -29,7 +29,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.roundToInt
 
 /** A place the model found in a reel, before geocoding and research. */
-data class FoundPlace(val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String)
+data class FoundPlace(
+    val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String,
+    /** District or neighbourhood (Umeda, Hamamatsucho); helps to find the right branch. */
+    val area: String? = null,
+    /** What the reel is about; false for places only named for orientation (stations, landmarks in the background). */
+    val main: Boolean = true,
+)
 
 /** How far from the trip a reel's place may be to count as "on the route", in km (as for regions). */
 const val ON_ROUTE_KM = 50.0
@@ -83,13 +89,17 @@ class Assistant(
     fun findPlaces(caption: String?, media: Media, context: TripContext): Pair<String?, List<FoundPlace>> {
         val system = """
             Du analysierst ein kurzes Reise-Video (Instagram-Reel) für eine Japanreise.
-            Finde alle konkreten Orte, die im Video gezeigt, gesagt oder in der Beschreibung erwähnt werden:
+            Finde die konkreten Orte, die im Video gezeigt, gesagt oder in der Beschreibung erwähnt werden:
             Sehenswürdigkeiten, Restaurants, Cafés, Läden, Bars, Aussichtspunkte, Onsen. Keine ganzen Länder oder Präfekturen.
-            Nutze Schilder und Texte in den Bildern, das Gesprochene und die Beschreibung.
+            Nutze Schilder und Texte in den Bildern, das Gesprochene und die Beschreibung (oft steht der Ort nach 📍).
+            Unterscheide: role "main" = ein Ort, um den es im Reel geht (meist einer, bei Listen-Reels mehrere);
+            role "reference" = nur zur Orientierung genannt oder im Hintergrund zu sehen (Bahnhof „2 min from …“, Stadtviertel,
+            ein Wahrzeichen in der Kulisse). Stadtviertel nur als area angeben, nicht als eigenen Ort.
             Antworte nur mit JSON: {"summary": "1 Satz auf Deutsch, worum es im Reel geht",
             "locations": [{"name": "üblicher Name in lateinischer Schrift", "localName": "japanischer Name oder null",
-            "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
-            "evidence": "kurz, woran du den Ort erkennst"}]}
+            "area": "Stadtteil/Viertel oder null", "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
+            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst"}]}
+            Die Orte mit role "main" zuerst.
             Wenn kein konkreter Ort erkennbar ist: "locations": [].
         """.trimIndent()
         val parts = buildList {
@@ -102,22 +112,26 @@ class Assistant(
         val found = (o["locations"] as? JsonArray).orEmpty().mapNotNull { e ->
             val l = e as? JsonObject ?: return@mapNotNull null
             val name = l.str("name") ?: return@mapNotNull null
-            FoundPlace(name, l.str("localName"), l.str("city"), l.str("country"), l.str("kind") ?: "other", l.str("evidence").orEmpty())
+            FoundPlace(
+                name, l.str("localName"), l.str("city"), l.str("country"), l.str("kind") ?: "other", l.str("evidence").orEmpty(),
+                area = l.str("area"), main = l.str("role")?.lowercase() != "reference",
+            )
         }.distinctBy { (it.name + "|" + it.city).lowercase() }.take(MAX_PLACES)
         return o.str("summary") to found
     }
 
     /** Coordinates, distance to the trip and the full research for one place found in a reel. */
-    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}): ReelCandidate {
+    fun research(p: FoundPlace, context: TripContext, config: AssessConfig = AssessConfig(), say: (String) -> Unit = {}, deep: Boolean = p.main): ReelCandidate {
         say("Lage wird gesucht (Photon) …")
         val (hit, issue) = locate(p, say)
         val near = hit?.let { context.nearest(it.lat, it.lng) }
         if (hit != null) {
             say("Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty())
         }
-        val r = try {
+        val r = if (!deep) { say("Nur zur Orientierung genannt, ohne Recherche"); null } else try {
             val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence, trip), config, say)
+            val evidence = listOfNotNull(p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null }).joinToString("; ")
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, evidence, trip), config, say)
         } catch (e: AiFailed) {
             say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
@@ -143,6 +157,7 @@ class Assistant(
             sources = d?.sources.orEmpty(),
             dossier = d,
             positionIssue = issue,
+            main = p.main,
         )
     }
 
@@ -161,7 +176,9 @@ class Assistant(
             inJapan -> h.country == null || h.country.equals("JP", ignoreCase = true) || "japan" in h.country.lowercase() || "日本" in h.country
             else -> true
         }
-        val full = listOfNotNull(listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name).distinct()
+        val full = listOfNotNull(
+            listOfNotNull(p.name, p.area, p.city).joinToString(" "), listOfNotNull(p.name, p.city).joinToString(" "), p.localName, p.name,
+        ).distinct()
         full.firstNotNullOfOrNull { q ->
             placeFinder.find(q)?.let { h -> if (fits(h, CITY_MAX_KM)) h else { say("„$q“ liegt zu weit weg (Namensvetter?), verworfen"); null } }
         }?.let { return it to null }
@@ -190,12 +207,15 @@ class Assistant(
         progress: JobProgress = JobProgress.NONE,
         onDone: (Int) -> Unit = {},
     ): List<ReelCandidate> {
-        val keyed = found.mapIndexed { i, p -> "place-$i" to p }
+        // The places the reel is about first; references after them.
+        val keyed = found.sortedBy { !it.main }.mapIndexed { i, p -> "place-$i" to p }
         progress.items(keyed.map { (k, p) -> JobItem(k, listOfNotNull(p.name, p.city).joinToString(", ")) })
         return inParallel(keyed, onDone) { (key, p) ->
             progress.item(key, state = "RUNNING")
             val c = research(p, context, config, progress.sayFor(key, p.name))
-            if (c.dossier == null) {
+            if (!p.main) {
+                progress.item(key, state = "DONE", detail = "nur erwähnt (Bezugspunkt)")
+            } else if (c.dossier == null) {
                 progress.item(key, state = "FAILED", detail = "ohne Recherche, nur Lage")
                 progress.step("${p.name}: ohne Recherche übernommen", JobProgress.WARN)
             } else {

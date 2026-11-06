@@ -111,6 +111,22 @@ class ReelsTest {
         assertNull(picks!![1].regionId) // Sapporo: no region close by
     }
 
+    @Test fun referencesAreFoldedAndNotPreselected() {
+        val station = near.copy(name = "Bahnhof Bergstadt", main = false)
+        val job = doneJob.copy(candidates = listOf(near, station))
+        var picks: List<ReelPick>? = null
+        rule.setContent {
+            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { picks = it }, onOpenPlaces = {}, onBack = {}) }
+        }
+        rule.onNodeWithText("1 Ort übernehmen").assertExists()
+        rule.onNodeWithText("Bahnhof Bergstadt").assertDoesNotExist()
+        rule.onNodeWithTag("reel-references").performClick()
+        rule.onNodeWithText("Bahnhof Bergstadt").assertExists()
+        rule.onNodeWithTag("reel-pick-1").performClick() // take the station anyway
+        rule.onNodeWithTag("reel-import").performClick()
+        assertEquals(listOf("Moostempel", "Bahnhof Bergstadt"), picks!!.map { it.candidate.name })
+    }
+
     @Test fun progressAndFailureAreShown() {
         val job = androidx.compose.runtime.mutableStateOf(AiJobInfo("j2", "reel", 0, "ANALYZING"))
         rule.setContent { WanderlogPlusTheme { ReelJobScreen(job.value, null, false, {}, {}, {}) } }

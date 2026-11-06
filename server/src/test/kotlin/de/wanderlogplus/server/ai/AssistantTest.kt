@@ -112,6 +112,37 @@ class AssistantTest {
 
     private fun field(type: EntityType, id: String, name: String) = store.get(type, id)?.fields?.get(name)?.value
 
+    @Test fun referencesAreLocatedButNotResearched() {
+        seedTrip()
+        val model = object : ChatModel {
+            val research = mutableListOf<String>()
+            override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String = when {
+                system.contains("Instagram-Reel") -> """{"summary":"Ein Izakaya in Kyoto.","locations":[
+                    {"name":"Kyoto Station","city":"Kyoto","country":"Japan","kind":"other","role":"reference","evidence":"5 Minuten vom Bahnhof"},
+                    {"name":"Fushimi Inari Taisha","area":"Fushimi","city":"Kyoto","country":"Japan","kind":"sight","role":"main","evidence":"Titel"}]}"""
+                else -> { research += (parts.first() as AiPart.Text).text; """{"description":"Schrein.","worth":"MUST","verdict":"Ikonisch."}""" }
+            }
+        }
+        val geocoder = object : Geocoder {
+            val asked = mutableListOf<String>()
+            override fun find(query: String): GeoHit? { asked += query; return GeoHit(34.97, 135.77, query, "JP") }
+        }
+        val a = Assistant(model, geocoder)
+        val (_, found) = a.findPlaces("caption", Media(emptyList(), null), TripContext.from(store))
+        assertEquals(listOf(false, true), found.map { it.main })
+        assertEquals("Fushimi", found.last().area)
+        val candidates = a.researchAll(found, TripContext.from(store), de.wanderlogplus.shared.sync.AssessConfig())
+        // The main place first, researched; the station only located, marked as a reference.
+        assertEquals(listOf("Fushimi Inari Taisha", "Kyoto Station"), candidates.map { it.name })
+        assertEquals(listOf(true, false), candidates.map { it.main })
+        assertNull(candidates.last().dossier)
+        assertTrue(candidates.last().lat != null)
+        assertEquals(1, model.research.size)
+        // The area goes into the search for the place and into the research.
+        assertEquals("Fushimi Inari Taisha Fushimi Kyoto", geocoder.asked.first { it.startsWith("Fushimi") })
+        assertTrue("Stadtteil: Fushimi" in model.research.single(), model.research.single())
+    }
+
     @Test fun reelPipelineFindsLocatesResearchesAndChecksRoute() {
         seedTrip()
         val model = FakeModel()
