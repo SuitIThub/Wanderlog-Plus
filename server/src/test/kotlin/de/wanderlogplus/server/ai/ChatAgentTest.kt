@@ -76,6 +76,10 @@ class ChatAgentTest {
 
     private fun tools(web: WebSearch? = null) = ChatTools(trip, web) {}
 
+    /** The text of the first (system) message, whose content is a list of text blocks. */
+    private fun systemText(messages: List<JsonObject>): String =
+        (messages.first()["content"] as JsonArray).joinToString("") { it.jsonObject["text"]!!.jsonPrimitive.content }
+
     @Test
     fun `search ranks by match and worth, filters region with day trips and skips planned places`() {
         val r = tools().search(buildJsonObject { put("regionId", "r-kyoto") })
@@ -144,7 +148,7 @@ class ChatAgentTest {
         // Tool results went back to the model with their call ids.
         val last = model.seen.last()
         assertTrue(last.any { it["role"]?.jsonPrimitive?.content == "tool" && it["tool_call_id"]?.jsonPrimitive?.content == "c0" })
-        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        val system = systemText(model.seen.first())
         assertTrue("Tag: Mittwoch, 19.05.2027" in system && "Region Kyoto (r-kyoto)" in system && "12:00 Ramen Ichiran" in system && "Titel: Tempeltag" in system)
         assertTrue("Nara (r-nara), Tagesausflug von Kyoto" in system)
         assertFalse("SECRET-123" in system || "Erika" in system, "no booking data")
@@ -160,7 +164,7 @@ class ChatAgentTest {
         // The model never stops calling tools and gives no text: no usable answer after the last round.
         assertFailsWith<AiFailed> { answer.getOrThrow() }
         assertEquals(ChatAgent.MAX_ROUNDS + 1, model.seen.size)
-        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        val system = systemText(model.seen.first())
         assertTrue("Geheimtipps: Hinterer Pfad ist leer" in system && "Fazit: Ikonisch" in system)
     }
 
@@ -336,7 +340,7 @@ class ChatAgentTest {
         val model = ScriptedModel(listOf(calls("search_saved_places" to """{"near":"hier","maxKm":2}"""), text("Gleich um die Ecke.")))
         val here = de.wanderlogplus.shared.sync.ChatLocation(34.9960, 135.7840, 25)
         ChatAgent(model, null) { "2027-05-19" }.answer(listOf(user("Was ist hier?", ChatContext(ChatScreens.TODAY))), trip, here)
-        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        val system = systemText(model.seen.first())
         assertTrue("Standort des Nutzers (jetzt, \"hier\"): 34.99600,135.78400, Genauigkeit ca. 20 m" in system, system)
         assertTrue("Nächste Unterkunft: Hotel Gion, 970 m entfernt" in system, system)
         assertTrue("Hinterlegte Orte im Umkreis von 3 km:\n- id=s-kiyo | Kiyomizu-dera | Kyoto | SIGHT | 150 m entfernt" in system, system)
@@ -375,14 +379,61 @@ class ChatAgentTest {
         ChatAgent(model, null, weather = { _, today -> asked = today; weather }) { "2027-05-19" }
             .answer(listOf(user("Wie wird das Wetter?", ChatContext(ChatScreens.DAY, date = "2027-05-19"))), trip)
         assertEquals("2027-05-19", asked)
-        val system = model.seen.first().first()["content"]!!.jsonPrimitive.content
+        val system = systemText(model.seen.first())
         assertTrue("Wetter (bei Hotel Gion): Regen, 14–19 °C, Regen 85 % (12 mm) – Vorhersage JMA" in system, system)
         assertTrue("Wetter im Tagesverlauf: 09:00 Regen 15 °C Regen 90 %\n" in system, system) // every third hour
         assertTrue("Wetter: Klima-Mittel: 12–21 °C, an 40 % der Tage Regen" in system, system)
         // A failing weather service does not stop the answer.
         val again = ScriptedModel(listOf(text("ok")))
         ChatAgent(again, null, weather = { _, _ -> error("down") }) { "2027-05-19" }.answer(listOf(user("Hallo")), trip)
-        assertFalse("Wetter (" in again.seen.first().first()["content"]!!.jsonPrimitive.content)
+        assertFalse("Wetter (" in systemText(again.seen.first()))
+    }
+
+    @Test
+    fun `the cached context lists every saved place and the logistics, without date or weather`() {
+        val withMore = ChatTrip(
+            trip.trip, trip.regions, trip.places,
+            trip.saved.map { if (it.id == "s-ramen") it.copy(reserved = true) else it } +
+                SavedPlace("s-gone", "p-shib", "r-tokyo", PlaceCategory.SIGHT, status = de.wanderlogplus.shared.model.PlaceStatus.DROPPED),
+            trip.stays, trip.days, trip.dayItems,
+            flights = listOf(
+                de.wanderlogplus.shared.model.Flight("f1", airline = "ANA", number = "NH204", depart = Endpoint("Frankfurt", "FRA", date = "2027-05-17", time = "20:55"), arrive = Endpoint("Tokyo Haneda", "HND", date = "2027-05-18", time = "16:00"), journeyId = "j"),
+                de.wanderlogplus.shared.model.Flight("f2", airline = "ANA", number = "NH23", depart = Endpoint("Tokyo Haneda", "HND", date = "2027-05-18", time = "18:00"), arrive = Endpoint("Osaka Itami", "ITM", date = "2027-05-18", time = "19:10"), journeyId = "j"),
+            ),
+            trains = trip.trains.map { it.copy(number = "Nozomi 21") },
+        )
+        val agent = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }
+        val (stable, _) = agent.systemParts(withMore, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertTrue("- Kiyomizu-dera [id=s-kiyo] · Kyoto · SIGHT · Muss man sehen\n" in stable, stable)
+        assertTrue("- Ramen Ichiran [id=s-ramen] · Kyoto · FOOD · Lohnt sich · reserviert · eingeplant Mi 19.05.\n" in stable, stable)
+        assertTrue("- Shibuya Crossing [id=s-shib] · Tokyo · SIGHT\n" in stable, stable)
+        assertTrue("1 verworfene Orte nicht aufgeführt" in stable, stable)
+        assertFalse("s-gone" in stable)
+        // Sorted by region, then name: Kyoto before Nara before Tokyo.
+        assertTrue(stable.indexOf("[id=s-ramen]") < stable.indexOf("[id=s-deer]") && stable.indexOf("[id=s-deer]") < stable.indexOf("[id=s-shib]"))
+        assertTrue("- Reise:\n  - Flug ANA NH204: Frankfurt (FRA) Mo 17.05. 20:55 → Tokyo Haneda (HND) Di 18.05. 16:00\n  - Flug ANA NH23: Tokyo Haneda (HND) Di 18.05. 18:00 → Osaka Itami (ITM) Di 18.05. 19:10\n" in stable, stable)
+        assertTrue("- Zug JR Nozomi 21: Kyoto Sa 22.05. 09:10 → Tokyo Sa 22.05. 11:20\n" in stable, stable)
+        assertFalse("SECRET" in stable)
+        assertFalse("Heutiges Datum" in stable || "2027-05-19\n" in stable.substringAfter("Hinterlegte Orte").take(0))
+        // The same trip gives the same bytes on another day and screen, weather or not: the prompt cache keeps hitting.
+        val weather = de.wanderlogplus.shared.sync.TripWeather(listOf(de.wanderlogplus.shared.sync.DayWeather("2027-05-19", code = 63, tempMin = 14.0, tempMax = 19.0, rainChance = 85)))
+        val other = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-21" }
+            .systemParts(withMore.withWeather(weather), ChatContext(ChatScreens.PLACE, savedPlaceId = "s-kiyo")).first
+        assertEquals(stable, other)
+        assertFalse("Wetter:" in other.substringAfter("Reiseplan"))
+    }
+
+    @Test
+    fun `the system message marks the stable part for the prompt cache`() {
+        val model = ScriptedModel(listOf(text("ok")))
+        ChatAgent(model, null) { "2027-05-19" }.answer(listOf(user("Hallo", ChatContext(ChatScreens.DAY, date = "2027-05-19"))), trip)
+        val blocks = model.seen.first().first()["content"] as JsonArray
+        assertEquals(2, blocks.size)
+        val first = blocks[0].jsonObject
+        assertEquals("ephemeral", first["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertTrue("Hinterlegte Orte" in first["text"]!!.jsonPrimitive.content)
+        assertTrue("Heutiges Datum" in blocks[1].jsonObject["text"]!!.jsonPrimitive.content)
+        assertNull(blocks[1].jsonObject["cache_control"])
     }
 
     @Test

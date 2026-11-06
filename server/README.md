@@ -15,7 +15,8 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_IMPORT_FILE` | – | Optional; Pfad zu einer Wanderlog-JSON-Datei statt Abruf (hat Vorrang vor `WLP_TRIP_KEY`). |
 | `WLP_GOOGLE_ROUTES_KEY` | – | Optional; API-Key der Google Routes API für die Wegzeiten zwischen den Zielen eines Tages. Ohne Key zeigt die App „Wegzeiten brauchen einen Routen-Key“. |
 | `WLP_OPENROUTER_KEY` | – | Optional; OpenRouter-Key für die KI: Reels auswerten (Bilder, Ton, Beschreibung) und Orte einschätzen. Ohne Key antworten diese Funktionen mit `ai_not_configured`. |
-| `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter; muss Bilder und Ton verstehen. |
+| `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter für Reels und Videos; muss Bilder und Ton verstehen. |
+| `WLP_TEXT_MODEL` | `anthropic/claude-sonnet-5-5` | Modell bei OpenRouter für Textarbeit: Chat, Orte einschätzen, Recherche auswerten. Der feste Teil des Chat-Kontexts wird für den Prompt-Cache markiert. |
 | `WLP_PARALLEL_KEY` | – | Optional; Parallel-Key für die Web-Recherche zu Orten aus Reels (Search + Task API). Ohne Key recherchiert das OpenRouter-Modell selbst. |
 | `WLP_PARALLEL_PROCESSOR` | `base` | Parallel-Task-Prozessor (`lite`, `base`, `core`, …): gründlicher = langsamer und teurer. |
 | `WLP_ADMIN_TOKEN` | – | Optional; Admin-Token (mind. 16 Zeichen, nicht gleich einem Sync-Token) für die Zugangsverwaltung (`/api/admin/tokens`). Er gilt nur dort, nie für den Sync. Ohne ihn: `admin_not_configured`. |
