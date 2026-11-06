@@ -55,4 +55,12 @@ class FormatTest {
         assertEquals("Fr · 7. Mai", dayKicker("2027-05-07", "2027-05-08", null))
         assertEquals("kaputt", dayKicker("kaputt", "2027-05-08", "2027-05-25"))
     }
+
+    @Test fun shortlistIsVorgemerkt() {
+        org.junit.Assert.assertEquals("Vorgemerkt", statusLabel(de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST))
+        org.junit.Assert.assertEquals(
+            listOf("IDEA", "SHORTLIST", "PLANNED", "VISITED", "DROPPED"),
+            de.wanderlogplus.shared.model.PlaceStatus.entries.map { it.name },
+        )
+    }
 }

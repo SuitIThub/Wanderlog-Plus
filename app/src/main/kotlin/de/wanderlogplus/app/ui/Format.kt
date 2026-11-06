@@ -45,6 +45,7 @@ fun categoryLabel(c: de.wanderlogplus.shared.model.PlaceCategory?) = when (c) {
 
 fun statusLabel(s: de.wanderlogplus.shared.model.PlaceStatus) = when (s) {
     de.wanderlogplus.shared.model.PlaceStatus.IDEA -> "Idee"
+    de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST -> "Vorgemerkt"
     de.wanderlogplus.shared.model.PlaceStatus.PLANNED -> "Geplant"
     de.wanderlogplus.shared.model.PlaceStatus.VISITED -> "Besucht"
     de.wanderlogplus.shared.model.PlaceStatus.DROPPED -> "Verworfen"

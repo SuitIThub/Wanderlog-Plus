@@ -64,6 +64,15 @@ class DayPlanTest {
         assertEquals(listOf("Garten", "Tempel", "Onsen am Fluss", "Notiz"), f.snapshot().let { s -> s.dayItemsFor(dayId).map { i -> if (i.kind == DayItemKind.NOTE) "Notiz" else s.places[i.placeId]?.name } })
     }
 
+    @Test fun restoringPlansShortlistedPlacesToo() {
+        val f = fx()
+        val temple = f.editor.addSuggestionToDay(f.snapshot(), date, "s1")
+        val at = f.editor.applyDayPlan(f.snapshot(), date, ops = emptyList(), remove = setOf(temple), label = "Vorher", now = 1000)
+        f.editor.set(EntityType.SAVED_PLACE, "s1", mapOf("status" to kotlinx.serialization.json.JsonPrimitive(PlaceStatus.SHORTLIST.name)))
+        f.editor.restoreDayVersion(f.snapshot(), date, at = at, now = 2000)
+        assertEquals(PlaceStatus.PLANNED, f.snapshot().savedPlaces.first { it.id == "s1" }.status)
+    }
+
     @Test fun aFoundPlaceTheTripKnowsIsNotCreatedAgain() {
         val f = fx()
         f.seedEntity(EntityType.PLACE, "p4", Place("p4", name = "Magome-juku", lat = 35.5258, lng = 137.5667))

@@ -62,7 +62,8 @@ data class Place(
 
 enum class PlaceCategory { SIGHT, FOOD, SHOPPING, NIGHTLIFE, OTHER }
 
-enum class PlaceStatus { IDEA, PLANNED, VISITED, DROPPED }
+/** IDEA → SHORTLIST („Vorgemerkt“: we would like to) → PLANNED (on a day); VISITED, DROPPED. */
+enum class PlaceStatus { IDEA, SHORTLIST, PLANNED, VISITED, DROPPED }
 
 @Serializable
 data class SavedPlace(

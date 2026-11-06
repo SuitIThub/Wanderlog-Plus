@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.45.0
+
+- **Neuer Zustand „Vorgemerkt“** zwischen „Idee“ und „Geplant“: für Orte, die ihr eher machen wollt. Vorgemerkte Orte erscheinen wie Ideen in den Tagesvorschlägen und im Chat und werden beim Einplanen zu „Geplant“.
+- **Fristen von Orten nur bei „Vorgemerkt“ und „Geplant“:** Ideen stehen nicht mehr einzeln in den Fristen. Damit nichts verloren geht, zeigt eine eingeklappte Zeile „n Ideen mit Fristen“ die Ideen, deren Frist in den nächsten 14 Tagen liegt (oder die gerade reservierbar sind). Erinnerungen gibt es für Ideen nicht.
+- Ein Ort, der an einem Tag eingeplant ist, zählt dabei immer als geplant.
+
 ## 0.44.0
 
 - **Reservierungsfristen für Züge, Flüge und Unterkünfte:** Im Bearbeiten-Formular gibt es „Reservierbar ab“, „Reservieren bis“ und „Reservierung erledigt“; die Detailseite zeigt die Frist.

@@ -110,10 +110,12 @@ object Deadlines {
             val visit = ReservationDates.visitDate(sp, s.days, s.items, s.tripDays, today)
             val w = ReservationDates.windowFor(sp, visit)
             val estimated = visit?.second == true && sp.reservationWindow == null
+            // On a day it is planned, whatever the status says (imports, older data).
+            val status = if (visit != null && !visit.second) PlaceStatus.PLANNED else sp.status
             if (w != null) {
-                window(w, visit?.first, name, DeadlineTarget.PLACE, sp.id, estimated, sp.status)
+                window(w, visit?.first, name, DeadlineTarget.PLACE, sp.id, estimated, status)
             } else if (visit != null && !visit.second && visit.first >= today && Reservations.reason(sp) != null) {
-                out += Deadline(DeadlineKind.PLACE, visit.first, name, DeadlineTarget.PLACE, sp.id, DeadlineState.UPCOMING, false, sp.status)
+                out += Deadline(DeadlineKind.PLACE, visit.first, name, DeadlineTarget.PLACE, sp.id, DeadlineState.UPCOMING, false, status)
             }
         }
         return out.sortedWith(compareBy({ if (it.state == DeadlineState.OVERDUE) 0 else 1 }, { it.date }, { it.title }))

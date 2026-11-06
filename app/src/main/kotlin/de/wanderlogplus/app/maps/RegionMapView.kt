@@ -54,6 +54,7 @@ private const val LABEL_LAYER = "places-labels"
 
 fun markerColor(status: PlaceStatus): String = when (status) {
     PlaceStatus.IDEA -> "#1E88E5"
+    PlaceStatus.SHORTLIST -> "#8E24AA"
     PlaceStatus.PLANNED -> "#2E7D32"
     PlaceStatus.VISITED -> "#7B1FA2"
     PlaceStatus.DROPPED -> "#D81B60"

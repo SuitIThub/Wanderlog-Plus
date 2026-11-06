@@ -79,7 +79,7 @@ class TripQueries(
         val regionIds = regions.filter { it.dayTripFromRegionId == r }.map { it.id }.toSet() + r
         val planned = dayItems.filter { it.kind == DayItemKind.PLACE }.mapNotNull { it.placeId }.toSet()
         return savedPlaces.filter {
-            it.regionId in regionIds && it.status == PlaceStatus.IDEA && it.placeId !in planned
+            it.regionId in regionIds && (it.status == PlaceStatus.IDEA || it.status == PlaceStatus.SHORTLIST) && it.placeId !in planned
         }
     }
 }

@@ -137,4 +137,10 @@ class TripQueriesTest {
         val q = TripQueries(Trip("t"), stays, emptyList(), regions, emptyList(), emptyList())
         assertTrue(q.days().isEmpty())
     }
+
+    @Test
+    fun `shortlisted places are suggested too`() {
+        val places = listOf(SavedPlace("a", placeId = "pa", regionId = "o", status = PlaceStatus.SHORTLIST))
+        assertEquals(listOf("a"), queries(places = places).suggestionsFor("2027-05-19").map { it.id })
+    }
 }
