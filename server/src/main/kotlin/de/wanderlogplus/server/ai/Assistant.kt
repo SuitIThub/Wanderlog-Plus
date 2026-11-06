@@ -136,7 +136,7 @@ class Assistant(
             say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
         }
-        val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder)) }
+        val d = r?.dossier?.let { it.copy(pois = locatePois(it.pois, hit?.lat, hit?.lng, p.name, p.city, geocoder, placeFinder)) }
         if (r != null) say(poiLine(r.dossier.pois.size, d?.pois?.size ?: 0))
         return ReelCandidate(
             name = p.name,
@@ -260,7 +260,7 @@ class Assistant(
                 null
             }
             val result = r?.let {
-                val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder)
+                val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder, placeFinder)
                 say(poiLine(it.dossier.pois.size, pois.size))
                 DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
             }
@@ -386,8 +386,9 @@ internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was d
 "criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
 "insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
 "goodToKnow": ["Gut zu wissen, höchstens 4"], "tips": ["praktische Tipps, höchstens 4"], "hints": ["Warnungen/Hinweise, höchstens 4"],
-"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
-nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0."""
+"nearbyPoints": [{"name": "konkreter Name, z. B. Nordeingang, Aussichtsplattform, nächster Bahnhof", "kind": "entrance|viewpoint|hidden|station|food|parking|branch|other", "note": "kurz, Deutsch", "lat": 0, "lng": 0}]}
+nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0.
+Hat der Ort mehrere Filialen: Schreibe über die Filiale, die Stadtteil und Hinweise meinen, und nenne höchstens 3 andere Filialen derselben Stadt als nearbyPoints mit kind "branch" (Name mit Stadtteil, z. B. „Stand Fuji Ebisu“)."""
 
 internal fun researchPrompt(q: ResearchQuery) = buildString {
     append("Ort: ").append(q.name)
@@ -438,16 +439,23 @@ internal const val MAX_POI_KM = 3.0
  * else the geocoder's hit for the spot's name (with place and [city]) when within range; the rest is dropped.
  * Without an anchor nothing is kept.
  */
-internal fun locatePois(pois: List<PlacePoi>, lat: Double?, lng: Double?, placeName: String, city: String?, geocoder: Geocoder): List<PlacePoi> {
+internal fun locatePois(
+    pois: List<PlacePoi>, lat: Double?, lng: Double?, placeName: String, city: String?, geocoder: Geocoder,
+    /** Finds other branches (small shops OpenStreetMap often lacks); the [geocoder] by default. */
+    branchFinder: Geocoder = geocoder,
+): List<PlacePoi> {
     if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) return emptyList()
-    fun near(a: Double, b: Double) = !(a == 0.0 && b == 0.0) && distanceKm(lat, lng, a, b) <= MAX_POI_KM
     return pois.mapNotNull { p ->
+        // Other branches may lie anywhere in the city, all other spots right at the place.
+        val maxKm = if (p.kind == PoiKinds.BRANCH) Assistant.CITY_MAX_KM else MAX_POI_KM
+        fun near(a: Double, b: Double) = !(a == 0.0 && b == 0.0) && distanceKm(lat, lng, a, b) <= maxKm
+        val finder = if (p.kind == PoiKinds.BRANCH) branchFinder else geocoder
         if (near(p.lat, p.lng)) return@mapNotNull p
         val hit = listOf(
             listOfNotNull(p.name, placeName.ifBlank { null }, city).joinToString(" "),
             listOfNotNull(p.name, city).joinToString(" "),
         ).distinct().firstNotNullOfOrNull { q ->
-            val h = try { geocoder.find(q) } catch (e: Exception) { null }
+            val h = try { finder.find(q) } catch (e: Exception) { null }
             h?.takeIf { near(it.lat, it.lng) }
         }
         hit?.let { p.copy(lat = it.lat, lng = it.lng) }

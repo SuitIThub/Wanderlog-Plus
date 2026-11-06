@@ -48,13 +48,16 @@ class PipelineResearcher(private val facts: FactSource, private val model: ChatM
         val label = listOfNotNull(query.name, query.localName?.let { "($it)" }, query.city).joinToString(" ")
         val found = facts.facts(
             FactQuery(
-                objective = "Bewertungen, Tipps und praktische Hinweise zu $label für Reisende",
+                // What the reel says (district, nearest station) picks the right branch.
+                objective = "Bewertungen, Tipps und praktische Hinweise zu $label für Reisende" +
+                    (query.evidence.takeIf { it.isNotBlank() }?.let { ". Bekannt: $it" } ?: ""),
                 queries = listOfNotNull(listOfNotNull(query.name, query.city).joinToString(" "), query.localName, "${query.name} tips reviews"),
                 hints = listOf(
                     "Öffnungszeiten, Reservierung, Andrang, Preise",
                     "Geheimtipps von Einheimischen und Kennern, versteckte Ecken in der Nähe",
                     "zugehörige Punkte mit Lage (weitere Eingänge, Aussichtspunkte, nächster Bahnhof)",
                     "was man vorher wissen sollte (Etikette, Zahlung, Regeln)",
+                    "ob es mehrere Filialen gibt; welche zu den bekannten Hinweisen (Stadtteil, Bahnhof) passt und wo die anderen in der Stadt liegen",
                 ),
             ),
             say,

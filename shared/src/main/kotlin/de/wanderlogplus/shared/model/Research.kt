@@ -69,6 +69,9 @@ object PoiKinds {
     const val STATION = "station"
     const val FOOD = "food"
     const val PARKING = "parking"
+
+    /** Another branch of the same chain in the city (the reel or plan meant a different one). */
+    const val BRANCH = "branch"
     const val OTHER = "other"
 
     val LABELS: Map<String, String> = linkedMapOf(
@@ -78,6 +81,7 @@ object PoiKinds {
         STATION to "Bahnhof/Haltestelle",
         FOOD to "Essen & Trinken",
         PARKING to "Parkplatz",
+        BRANCH to "Weitere Filiale",
         OTHER to "Sonstiges",
     )
 
