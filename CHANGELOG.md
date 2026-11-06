@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.43.1
+
+- **Keine Lücke mehr über der Tastatur:** Textfelder (Chat, Bearbeiten-Seiten, Suche) sitzen jetzt direkt über der Tastatur. Bisher schob Android das Fenster zusätzlich zur App noch einmal um die Tastaturhöhe nach oben.
+
 ## 0.43.0
 
 - **@-Kürzel im Chat:** Tippst du `@`, erscheint über der Tastatur eine Vorauswahl, die mit jedem Buchstaben filtert (Groß-/Kleinschreibung und Akzente egal): Orte, Tage („Tag 3“, „19.5.“), Unterkünfte, Züge, Flüge, Guides und Regionen. Das Gewählte steht farbig im Text und geht als genaue Referenz mit – der Chat weiß so eindeutig, was gemeint ist, und bekommt die Details gleich mit.
