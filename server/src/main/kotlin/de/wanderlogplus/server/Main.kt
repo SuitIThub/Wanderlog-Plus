@@ -5,8 +5,10 @@ import de.wanderlogplus.server.ai.ChatAgent
 import de.wanderlogplus.server.ai.ParallelWebSearch
 import de.wanderlogplus.server.ai.Assistant
 import de.wanderlogplus.server.ai.OpenRouterModel
-import de.wanderlogplus.server.ai.OpenRouterResearcher
-import de.wanderlogplus.server.ai.ParallelResearcher
+import de.wanderlogplus.server.ai.ModelFacts
+import de.wanderlogplus.server.ai.GuideWriter
+import de.wanderlogplus.server.ai.ParallelFacts
+import de.wanderlogplus.server.ai.PipelineResearcher
 import de.wanderlogplus.server.ai.HttpParallelTransport
 import de.wanderlogplus.server.ai.PhotonGeocoder
 import de.wanderlogplus.server.ai.ToolReelMedia
@@ -42,21 +44,35 @@ fun main() {
         override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) = routes.compute(req)
     }.takeIf { transit.configured || routes.configured }
     val weather = WeatherService(store, OpenMeteoHttp())
+    val aiJobs = AiJobs(
+        store,
+        openRouter?.let { model ->
+            val text = textModel ?: model
+            // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
+            val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
+            val researcher = PipelineResearcher(facts, text)
+            Assistant(model, PhotonGeocoder(), researcher, textModel = text)
+        },
+        ToolReelMedia(cookies = config.instagramCookies),
+        config.dataDir.resolve("ai-work"),
+        writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+        guideWriter = textModel?.let { text ->
+            GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
+        },
+    )
+    // The chat saves guide pins and rules right away and writes guides through the guides job.
+    val chatGuides = object : de.wanderlogplus.server.ai.ChatGuides {
+        override fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide) {
+            val changed = de.wanderlogplus.server.ai.guideChanges(before, after)
+            if (changed.isNotEmpty()) sync.writeAsServer(ASSISTANT_AUTHOR, listOf(ServerEdit(de.wanderlogplus.shared.sync.EntityType.GUIDE, after.id, changed)))
+        }
+        override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) = aiJobs.startGuides(asks)
+    }.takeIf { aiJobs.guidesConfigured }
     val services = Services(
         config, store, sync, FileStore.forConfig(config),
         ImportService(store, sync, tripSourceFrom(config)),
         routes,
-        AiJobs(
-            store,
-            openRouter?.let { model ->
-                val text = textModel ?: model
-                val researcher = config.parallelKey?.let { ParallelResearcher(HttpParallelTransport(it), config.parallelProcessor) } ?: OpenRouterResearcher(text)
-                Assistant(model, PhotonGeocoder(), researcher, textModel = text)
-            },
-            ToolReelMedia(cookies = config.instagramCookies),
-            config.dataDir.resolve("ai-work"),
-            writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
-        ),
+        aiJobs,
         transit = transit,
         weather = weather,
         rates = RatesService(store, OpenMeteoHttp()),
@@ -70,6 +86,7 @@ fun main() {
                 ChatAgent(
                     model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways,
                     weather = { trip, today -> weather.forTrip(trip, today) },
+                    guides = chatGuides,
                 ) {
                     java.time.LocalDate.now(java.time.ZoneId.of("Asia/Tokyo")).toString()
                 }

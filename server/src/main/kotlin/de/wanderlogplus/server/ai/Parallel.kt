@@ -33,7 +33,11 @@ interface PlaceResearcher {
 }
 
 /** What is known about a place before research. */
-data class ResearchQuery(val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String)
+data class ResearchQuery(
+    val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String,
+    /** Where the place sits in the trip (region, nearest stay, other places there); never booking data. */
+    val tripContext: String = "",
+)
 
 /** Sends one HTTP request to Parallel; returns status and body. Replaced in tests. */
 fun interface ParallelTransport {
@@ -96,22 +100,7 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
     /** Task API: create a run, then wait for its result (the result call blocks; a timeout just asks again). */
     private fun runTask(q: ResearchQuery, sources: List<WebSource>, config: AssessConfig, say: (String) -> Unit = {}): Pair<JsonObject, List<String>>? {
         say("Recherche-Auftrag wird gestartet (Parallel Task, $processor) …")
-        val (status, created) = transport.send("POST", "/v1/tasks/runs", taskBody(q, sources, processor, config), Duration.ofSeconds(30))
-        if (status == 401 || status == 403) throw AiFailed("research_key_rejected")
-        if (status == 402) throw AiFailed("research_no_credit")
-        if (status !in 200..299) throw AiFailed("research_failed")
-        val runId = (json.parseToJsonElement(created).jsonObject["run_id"] as? JsonPrimitive)?.content ?: throw AiFailed("research_failed")
-        say("Recherche läuft, warte auf Ergebnis …")
-        repeat(RESULT_ATTEMPTS) { attempt ->
-            if (attempt > 0) say("Recherche läuft noch, warte weiter (${attempt + 1}/$RESULT_ATTEMPTS) …")
-            val (s, body) = transport.send("GET", "/v1/tasks/runs/$runId/result?timeout=$RESULT_WAIT_SECONDS", null, Duration.ofSeconds(RESULT_WAIT_SECONDS + 30))
-            when (s) {
-                in 200..299 -> return parseResult(body)
-                408 -> Unit // still running: ask again
-                else -> throw AiFailed("research_failed")
-            }
-        }
-        throw AiFailed("research_timeout")
+        return runParallelTask(transport, taskBody(q, sources, processor, config), say)
     }
 
     companion object {
@@ -251,6 +240,31 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
             return content to citations.distinct()
         }
     }
+}
+
+/** Creates a Parallel task run and waits for its result (a 408 just asks again); null without output. */
+internal fun runParallelTask(transport: ParallelTransport, body: String, say: (String) -> Unit): Pair<JsonObject, List<String>>? {
+    val (status, created) = transport.send("POST", "/v1/tasks/runs", body, Duration.ofSeconds(30))
+    if (status == 401 || status == 403) throw AiFailed("research_key_rejected")
+    if (status == 402) throw AiFailed("research_no_credit")
+    if (status !in 200..299) throw AiFailed("research_failed")
+    val runId = try {
+        (Json.parseToJsonElement(created).jsonObject["run_id"] as? JsonPrimitive)?.content
+    } catch (e: Exception) {
+        null
+    } ?: throw AiFailed("research_failed")
+    say("Recherche läuft, warte auf Ergebnis …")
+    val wait = ParallelResearcher.RESULT_WAIT_SECONDS
+    repeat(ParallelResearcher.RESULT_ATTEMPTS) { attempt ->
+        if (attempt > 0) say("Recherche läuft noch, warte weiter (${attempt + 1}/${ParallelResearcher.RESULT_ATTEMPTS}) …")
+        val (s, result) = transport.send("GET", "/v1/tasks/runs/$runId/result?timeout=$wait", null, Duration.ofSeconds(wait + 30))
+        when (s) {
+            in 200..299 -> return ParallelResearcher.parseResult(result)
+            408 -> Unit // still running: ask again
+            else -> throw AiFailed("research_failed")
+        }
+    }
+    throw AiFailed("research_timeout")
 }
 
 /** A free web search (chat): pages with excerpts for [objective]. Blocking; throws [AiFailed] when it fails. */

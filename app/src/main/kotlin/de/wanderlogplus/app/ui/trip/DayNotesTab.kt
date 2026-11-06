@@ -46,6 +46,12 @@ internal fun DayNotesTab(
     attachments: AttachmentActions?,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+        de.wanderlogplus.app.ui.guides.LocalOpenGuide.current?.let { open ->
+            de.wanderlogplus.app.ui.guides.GuidesSection(
+                snapshot, de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.DAY, date), open,
+                Modifier.padding(top = 12.dp),
+            )
+        }
         SectionLabel("Tagesnotiz", color = accent)
         Surface(
             Modifier.fillMaxWidth().padding(top = 6.dp),

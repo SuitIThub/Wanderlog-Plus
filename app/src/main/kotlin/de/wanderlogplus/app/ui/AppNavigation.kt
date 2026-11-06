@@ -149,7 +149,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
-            MEHR -> setOf(NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
+            MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
 }
@@ -232,6 +232,8 @@ fun AppNavigation(
     chatViewModelFactory: ViewModelProvider.Factory? = null,
     /** The budget (costs, splits); null hides the Kosten sections and leaves the Budget tab read-only. */
     budgetViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Travel guides (suggestions, jobs, pins); null: guides are read-only and cannot be created. */
+    guidesViewModelFactory: ViewModelProvider.Factory? = null,
 ) {
     if (hasServer == null) return
     val nav = rememberNavController()
@@ -254,6 +256,14 @@ fun AppNavigation(
     val snackbar = remember { SnackbarHostState() }
     val chatVm: de.wanderlogplus.app.ui.chat.ChatViewModel? = chatViewModelFactory?.let { viewModel(factory = it) }
     val budgetVm: de.wanderlogplus.app.ui.budget.BudgetViewModel? = budgetViewModelFactory?.let { viewModel(factory = it) }
+    val guidesVm: de.wanderlogplus.app.ui.guides.GuidesViewModel? = guidesViewModelFactory?.let { viewModel(factory = it) }
+    val guidesMessage = guidesVm?.message?.collectAsState()?.value
+    LaunchedEffect(guidesMessage) {
+        if (guidesMessage != null) {
+            snackbar.showSnackbar(guidesMessage)
+            guidesVm.messageShown()
+        }
+    }
     val budgetMessage = budgetVm?.message?.collectAsState()?.value
     LaunchedEffect(budgetMessage) {
         if (budgetMessage != null) {
@@ -439,6 +449,9 @@ fun AppNavigation(
             de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat,
             de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
             de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
+            de.wanderlogplus.app.ui.guides.LocalGuideActions provides guidesVm,
+            de.wanderlogplus.app.ui.guides.LocalOpenGuide provides { id: String -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
+            de.wanderlogplus.app.ui.guides.LocalOpenGuides provides { nav.navigate(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) },
         ) {
         NavHost(
             nav,
@@ -948,6 +961,35 @@ fun AppNavigation(
                                     settingsInfo.token?.let { token -> "${url.trimEnd('/')}/vault?token=$token" }
                                 },
                                 onStart = vm::start,
+                            )
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val running = guidesVm?.running?.collectAsState()?.value
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            de.wanderlogplus.app.ui.guides.GuidesScreen(
+                                s, guidesVm, running,
+                                onOpen = { id -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
+                                onBack = { nav.popBackStack() },
+                            )
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.guides.GUIDE_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val id = entry.arguments?.getString("guideId")?.let { java.net.URLDecoder.decode(it, "UTF-8") }.orEmpty()
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            de.wanderlogplus.app.ui.guides.GuideScreen(
+                                s, id, guidesVm,
+                                onBack = { nav.popBackStack() },
+                                onOpenGuide = { other -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(other)) },
+                                onImprove = openChat,
                             )
                         }
                     }

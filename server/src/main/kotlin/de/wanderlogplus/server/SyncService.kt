@@ -29,6 +29,8 @@ data class ServerEdit(
     val id: String,
     val fields: Map<String, JsonElement>,
     val onlyIfEmpty: Set<String> = emptySet(),
+    /** Create the record when it does not exist yet (new guides); otherwise missing records are skipped. */
+    val create: Boolean = false,
 )
 
 /** A push batch was refused as a whole; [message] is fixed text and never contains request data. */
@@ -66,9 +68,11 @@ class SyncService(
         store.transaction(author) {
             var written = 0
             for (e in edits) {
-                val record = store.get(e.type, e.id) ?: continue
+                val existing = store.get(e.type, e.id)
+                val record = existing ?: if (e.create) EntityRecord(e.type, e.id) else continue
                 if (record.isDeleted) continue
-                val changes = e.fields.mapNotNull { (field, value) ->
+                val fields = if (existing == null) e.fields + ("deleted" to JsonPrimitive(false)) else e.fields
+                val changes = fields.mapNotNull { (field, value) ->
                     val stored = record.fields[field]?.value
                     val storedText = (stored as? JsonPrimitive)?.takeIf { it.isString }?.content
                     if (field in e.onlyIfEmpty && stored != null && stored !is kotlinx.serialization.json.JsonNull && !storedText.isNullOrBlank()) return@mapNotNull null

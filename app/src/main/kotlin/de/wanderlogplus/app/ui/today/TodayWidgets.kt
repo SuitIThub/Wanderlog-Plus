@@ -1,5 +1,8 @@
 package de.wanderlogplus.app.ui.today
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -516,6 +519,53 @@ internal fun OpenNowWidget(open: List<Suggestion>, accent: Color, modifier: Modi
                     )
                 }
             }
+        }
+    }
+}
+
+
+/**
+ * "Für heute": the guides the day needs, in the order things happen (passed ones faded at the end); a tap shows a
+ * short preview. [suggested] topics of the day without a guide link to the guide overview.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun TodayGuidesWidget(
+    dayGuides: List<de.wanderlogplus.shared.guide.DayGuide>,
+    suggested: Int,
+    accent: Color,
+    onOpenGuide: (String) -> Unit,
+    onSuggestions: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    var preview by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<de.wanderlogplus.shared.model.Guide?>(null) }
+    Widget("Für heute", "today-guides", modifier, accent) {
+        androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            dayGuides.forEach { d ->
+                androidx.compose.material3.AssistChip(
+                    onClick = { preview = d.guide },
+                    label = {
+                        Text(
+                            listOfNotNull(d.atMinutes?.takeIf { !d.done }?.let { "%02d:%02d".format(it / 60, it % 60) }, d.guide.title).joinToString(" · "),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    modifier = Modifier.padding(vertical = 2.dp).then(if (d.done) Modifier.alpha(0.5f) else Modifier).testTag("today-guide"),
+                )
+            }
+        }
+        if (suggested > 0 && onSuggestions != null) {
+            androidx.compose.material3.TextButton(onClick = onSuggestions, modifier = Modifier.testTag("today-guides-suggested")) {
+                Text(if (suggested == 1) "1 Guide vorgeschlagen" else "$suggested Guides vorgeschlagen")
+            }
+        }
+    }
+    preview?.let { g ->
+        de.wanderlogplus.app.ui.design.EditSheet(g.title, onDismiss = { preview = null }) {
+            if (g.summary.isNotBlank()) Text(g.summary, style = MaterialTheme.typography.bodyLarge)
+            g.sections.flatMap { it.dos }.take(3).forEach { Text("✓ $it", style = MaterialTheme.typography.bodyMedium) }
+            g.sections.flatMap { it.donts }.take(3).forEach { Text("✗ $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            androidx.compose.material3.Button(onClick = { onOpenGuide(g.id); preview = null }, modifier = Modifier.testTag("today-guide-open")) { Text("Ganzen Guide öffnen") }
         }
     }
 }

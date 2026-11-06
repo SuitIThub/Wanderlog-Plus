@@ -5,6 +5,7 @@ import de.wanderlogplus.shared.model.CriterionScore
 import de.wanderlogplus.shared.model.EntityCodec
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.model.PlacePoi
 import de.wanderlogplus.shared.model.PoiKinds
 import de.wanderlogplus.shared.model.Region
@@ -113,7 +114,8 @@ class Assistant(
             say("Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty())
         }
         val r = try {
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence), config, say)
+            val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, p.evidence, trip), config, say)
         } catch (e: AiFailed) {
             say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
@@ -214,7 +216,11 @@ class Assistant(
             val say = progress.sayFor(s.id, name)
             progress.item(s.id, state = "RUNNING")
             val region = s.regionId?.let { data.regions[it]?.name }
-            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty())
+            val others = data.saved.filter { it.regionId == s.regionId && it.id != s.id && it.status != PlaceStatus.DROPPED }
+                .mapNotNull { o -> data.places[o.placeId]?.name?.takeIf { n -> n.isNotBlank() }?.let { n -> if (o.status == PlaceStatus.PLANNED) "$n (eingeplant)" else n } }
+                .take(15)
+            val trip = listOfNotNull(region?.let { "Region $it" }, others.takeIf { it.isNotEmpty() }?.joinToString(", ", "dort auch hinterlegt: ")).joinToString("; ")
+            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty(), trip)
             val r = try {
                 researcher.research(query, config, say)
             } catch (e: AiFailed) {

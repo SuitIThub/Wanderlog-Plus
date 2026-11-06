@@ -181,6 +181,19 @@ fun LogisticsDetailScreen(
                 if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
 
+            val guideTarget = when (type) {
+                EntityType.STAY -> de.wanderlogplus.shared.model.GuideTargetType.STAY
+                EntityType.TRAIN -> de.wanderlogplus.shared.model.GuideTargetType.TRAIN
+                EntityType.FLIGHT -> de.wanderlogplus.shared.model.GuideTargetType.FLIGHT
+                else -> null
+            }
+            val openGuide = de.wanderlogplus.app.ui.guides.LocalOpenGuide.current
+            if (guideTarget != null && openGuide != null) {
+                de.wanderlogplus.app.ui.guides.GuidesSection(
+                    snapshot, de.wanderlogplus.shared.model.GuideTarget(guideTarget, id), openGuide, Modifier.padding(top = 12.dp),
+                )
+            }
+
             SectionLabel("Notiz", color = view.accent)
             if (view.note.isNotBlank()) {
                 InfoCard { MarkdownText(view.note, Modifier.testTag("logistics-note")) }

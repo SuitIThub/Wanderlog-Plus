@@ -436,6 +436,89 @@ class ChatAgentTest {
         assertNull(blocks[1].jsonObject["cache_control"])
     }
 
+    private class FakeGuides : ChatGuides {
+        val saved = mutableListOf<de.wanderlogplus.shared.model.Guide>()
+        val fields = mutableListOf<Set<String>>()
+        val started = mutableListOf<List<de.wanderlogplus.shared.sync.GuideAsk>>()
+        override fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide) {
+            saved += after
+            fields += guideChanges(before, after).keys
+        }
+        override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) =
+            de.wanderlogplus.shared.sync.AiJobInfo("job-1", "guides", 0, "QUEUED").also { started += asks }
+    }
+
+    private val onsen = de.wanderlogplus.shared.model.Guide("g1", topic = "onsen", title = "Onsen & Sentō")
+
+    private fun withGuides() = ChatTrip(
+        trip.trip, trip.regions, trip.places, trip.saved, trip.stays, trip.days, trip.dayItems, trip.flights, trip.trains, guides = listOf(onsen),
+    )
+
+    @Test
+    fun `assign and unassign a guide`() {
+        val g = FakeGuides()
+        val tools = ChatTools(withGuides(), null, guides = g) {}
+        val r = tools.run("assign_guide", """{"guideId":"g1","targetType":"PLACE","targetId":"s-kiyo"}""")
+        assertFalse(r.startsWith("Unbekannt"), r)
+        val pin = de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.PLACE, "s-kiyo")
+        assertEquals(listOf(pin), g.saved.last().pinnedTo)
+        // Only the changed fields are written, so a pin never reverts someone's edit of the text.
+        assertEquals(setOf("pinnedTo"), g.fields.last())
+        tools.run("unassign_guide", """{"guideId":"g1","targetType":"PLACE","targetId":"s-kiyo"}""")
+        assertEquals(setOf("pinnedTo", "hiddenFrom"), g.fields.last())
+        assertEquals(emptyList(), g.saved.last().pinnedTo)
+        assertEquals(listOf(pin), g.saved.last().hiddenFrom)
+    }
+
+    @Test
+    fun `unknown targets are refused`() {
+        val g = FakeGuides()
+        val r = ChatTools(withGuides(), null, guides = g) {}.run("assign_guide", """{"guideId":"g1","targetType":"PLACE","targetId":"s-nope"}""")
+        assertTrue(r.startsWith("Unbekanntes Ziel"), r)
+        assertTrue(g.saved.isEmpty())
+    }
+
+    @Test
+    fun `set triggers replaces the extra triggers`() {
+        val g = FakeGuides()
+        ChatTools(withGuides(), null, guides = g) {}.run("set_guide_triggers", """{"guideId":"g1","triggers":[{"kind":"text","words":["ryokan"],"on":"STAY"},{"kind":"nonsense"}]}""")
+        assertEquals(
+            listOf<de.wanderlogplus.shared.model.GuideTrigger>(de.wanderlogplus.shared.model.GuideTrigger.Text(listOf("ryokan"), de.wanderlogplus.shared.model.TriggerOn.STAY)),
+            g.saved.single().extraTriggers,
+        )
+        assertEquals(setOf("extraTriggers"), g.fields.single())
+    }
+
+    @Test
+    fun `unreadable triggers do not wipe the rules`() {
+        val g = FakeGuides()
+        val r = ChatTools(withGuides(), null, guides = g) {}.run("set_guide_triggers", """{"guideId":"g1","triggers":[{"kind":"nonsense"},"x"]}""")
+        assertTrue(r.startsWith("Keine der Regeln"), r)
+        assertTrue(g.saved.isEmpty())
+    }
+
+    @Test
+    fun `create guide extends an existing topic`() {
+        val g = FakeGuides()
+        val r = ChatTools(withGuides(), null, guides = g) {}.run("create_guide", """{"topic":"onsen","wish":"mehr zu Tattoos"}""")
+        assertEquals("g1", g.started.single().single().guideId)
+        assertEquals("mehr zu Tattoos", g.started.single().single().wish)
+        assertTrue("überarbeitet" in r, r)
+        ChatTools(withGuides(), null, guides = g) {}.run("create_guide", """{"title":"Kiso-Wanderwege"}""")
+        assertEquals(null, g.started.last().single().guideId)
+    }
+
+    @Test
+    fun `guide tools only exist with guides, and the cached context lists the guides`() {
+        val names = { tools: ChatTools -> tools.definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content } }
+        assertFalse("assign_guide" in names(ChatTools(withGuides(), null) {}))
+        assertTrue("assign_guide" in names(ChatTools(withGuides(), null, guides = FakeGuides()) {}))
+        val stable = ChatAgent(ScriptedModel(listOf(text("ok"))), null, guides = FakeGuides()) { "2027-05-19" }
+            .systemParts(withGuides(), ChatContext(ChatScreens.DAY, date = "2027-05-19")).first
+        assertTrue("- Onsen & Sentō [id=g1] · onsen" in stable, stable)
+        assertTrue("außer an Guides" in stable, stable)
+    }
+
     @Test
     fun `openrouter tool turn parsing keeps calls and a clean history message`() {
         val body = """{"choices":[{"message":{"role":"assistant","content":null,"reasoning":"x",

@@ -4,6 +4,10 @@ import de.wanderlogplus.server.SqliteStore
 import de.wanderlogplus.shared.sync.AiJobInfo
 import de.wanderlogplus.server.ServerEdit
 import de.wanderlogplus.shared.model.PlaceDossier
+import de.wanderlogplus.shared.model.EntityCodec
+import de.wanderlogplus.shared.guide.GuideMatch
+import de.wanderlogplus.shared.guide.GuideTopics
+import de.wanderlogplus.shared.sync.GuideAsk
 import de.wanderlogplus.shared.sync.AssessConfig
 import de.wanderlogplus.shared.sync.Assessment
 import de.wanderlogplus.shared.sync.DossierResult
@@ -44,11 +48,65 @@ class AiJobs(
     private val executor: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "ai-jobs").apply { isDaemon = true } },
     /** Writes research results into the trip as the server (see SyncService.writeAsServer); null: the app applies them. */
     private val writeResults: ((List<ServerEdit>) -> Int)? = null,
+    /** Writes travel guides; null: guide jobs fail with `ai_not_configured`. */
+    private val guideWriter: GuideWriter? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
 
     val configured: Boolean get() = assistant != null
+
+    val guidesConfigured: Boolean get() = guideWriter != null
+
+    /** Writes or rewrites travel guides one after the other; a failed one does not stop the rest. */
+    fun startGuides(asks: List<GuideAsk>): AiJobInfo {
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = asks.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null,
+            ),
+        )
+        executor.execute { runGuides(job, asks) }
+        return job
+    }
+
+    private fun runGuides(start: AiJobInfo, asks: List<GuideAsk>) {
+        val t = Tracker(start)
+        val w = guideWriter ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            val keyed = asks.mapIndexed { i, a -> "guide-$i" to a }
+            fun label(a: GuideAsk) = GuideTopics.byKey(a.topic)?.name ?: a.title.ifBlank { "Guide" }
+            t.items(keyed.map { (k, a) -> JobItem(k, label(a)) })
+            keyed.forEachIndexed { i, (key, ask) ->
+                val say = t.sayFor(key, label(ask))
+                t.item(key, state = "RUNNING")
+                try {
+                    val trip = ChatTrip.from(store)
+                    val existing = ask.guideId?.let { id -> trip.guides.firstOrNull { it.id == id } }
+                        ?: GuideMatch.duplicateOf(ask.topic, ask.title, trip.guides)
+                    val g = w.write(ask, GuideWriter.tripContext(trip, ask.topic ?: existing?.topic), existing, say)
+                    writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, EntityCodec.fields(g), create = true)))
+                    t.update { j -> j.copy(guideIds = (j.guideIds + g.id).distinct()) }
+                    t.item(key, state = "DONE", detail = g.title)
+                    t.step("${label(ask)}: fertig", JobProgress.OK)
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${label(ask)}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    // One guide that cannot be saved must not stop the rest.
+                    log.error("Guide failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                    t.step("${label(ask)}: " + failText("internal"), JobProgress.WARN)
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
 
     fun get(id: String): AiJobInfo? = store.aiJob(id)?.let { json.decodeFromString(AiJobInfo.serializer(), it) }
 
@@ -348,6 +406,8 @@ class AiJobs(
             "ai_no_credit", "research_no_credit" -> "Guthaben aufgebraucht"
             "ai_unreachable" -> "KI nicht erreichbar"
             "research_timeout" -> "Recherche dauerte zu lange"
+            "research_empty" -> "Recherche ohne Ergebnis"
+            "ai_bad_answer" -> "KI-Antwort unbrauchbar"
             "interrupted" -> "Server wurde neu gestartet"
             else -> "Fehler ($code)"
         }

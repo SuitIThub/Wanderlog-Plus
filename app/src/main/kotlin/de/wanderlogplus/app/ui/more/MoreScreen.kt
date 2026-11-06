@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ImageSearch
@@ -45,6 +46,8 @@ fun MoreScreen(
 ) {
     Column(modifier.fillMaxWidth().padding(16.dp).testTag("more-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SurfaceCard {
+            MoreRow("Guides", Icons.AutoMirrored.Filled.MenuBook) { onOpen(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) }
+            HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Notizen", Icons.AutoMirrored.Filled.Notes) { onOpen(NOTES_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Import", Icons.Filled.CloudDownload) { onOpen(IMPORT_ROUTE) }

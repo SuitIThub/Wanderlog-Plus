@@ -15,6 +15,9 @@ import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.model.Trip
 import de.wanderlogplus.shared.query.PlaceMatch
+import de.wanderlogplus.shared.guide.GuideMatch
+import de.wanderlogplus.shared.guide.GuideTopics
+import de.wanderlogplus.shared.model.GuideTargetType
 import de.wanderlogplus.shared.query.TripQueries
 import de.wanderlogplus.shared.query.isOpenOn
 import de.wanderlogplus.shared.sync.ChatCard
@@ -59,9 +62,10 @@ class ChatTrip(
     val trains: List<Train> = emptyList(),
     /** Weather by date (forecast or climate average); empty when unknown. */
     val weather: Map<String, DayWeather> = emptyMap(),
+    val guides: List<de.wanderlogplus.shared.model.Guide> = emptyList(),
 ) {
     fun withWeather(w: TripWeather): ChatTrip =
-        ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date })
+        ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date }, guides)
 
     val regionsById = regions.associateBy { it.id }
     val savedById = saved.associateBy { it.id }
@@ -134,6 +138,7 @@ class ChatTrip(
                 dayItems = live(EntityType.DAY_ITEM) { EntityCodec.decode<DayItem>(it) },
                 flights = live(EntityType.FLIGHT) { EntityCodec.decode<Flight>(it) },
                 trains = live(EntityType.TRAIN) { EntityCodec.decode<Train>(it) },
+                guides = live(EntityType.GUIDE) { EntityCodec.decode<de.wanderlogplus.shared.model.Guide>(it) },
             )
         }
     }
@@ -266,6 +271,23 @@ object ChatContextText {
                     append("- ").append(legs.single().line).append('\n')
                 }
             }
+    }
+
+    /** The trip's guides, one line each: title, id, topic, rules and where pinned or hidden. */
+    fun guides(list: List<de.wanderlogplus.shared.model.Guide>): String = buildString {
+        append("Guides (id in Klammern):\n")
+        if (list.isEmpty()) append("- noch keine\n")
+        list.sortedWith(compareBy({ GuideTopics.orderOf(it.topic) }, { it.title.lowercase() }, { it.id })).forEach { g ->
+            append("- ").append(g.title.ifBlank { "Guide" }).append(" [id=").append(g.id).append("]")
+            listOfNotNull(
+                g.topic ?: "frei",
+                g.parentId?.let { "Unterthema von $it" },
+                g.extraTriggers.takeIf { it.isNotEmpty() }?.let { "Regeln: " + it.size },
+                g.pinnedTo.takeIf { it.isNotEmpty() }?.joinToString(", ", "angeheftet: ") { "${it.type} ${it.id}" },
+                g.hiddenFrom.takeIf { it.isNotEmpty() }?.joinToString(", ", "ausgeblendet: ") { "${it.type} ${it.id}" },
+            ).forEach { append(" · ").append(it) }
+            append('\n')
+        }
     }
 
     /** The weather of the trip days (changes daily, so it stays out of the cached part). */
@@ -540,8 +562,12 @@ class ChatTools(
     private val ways: ChatWays? = null,
     /** Where the user is right now (shared from the app), as "hier" for the tools. */
     private val here: Anchor? = null,
+    /** Writes and starts guides; null: the chat has no guide tools. */
+    private val guides: ChatGuides? = null,
     private val say: (String) -> Unit,
 ) {
+    /** The trip's guides as changed by this answer's tool calls so far. */
+    private val guideList = t.guides.toMutableList()
     private var transitCalls = 0
     private val json = Json { ignoreUnknownKeys = true }
     val cards = mutableListOf<ChatCard>()
@@ -666,6 +692,45 @@ class ChatTools(
                 }
             })
         }
+        if (guides != null) {
+            add(tool("list_guides", "Listet die Guides der Reise (Knigge, Sprache, Abläufe) mit id, Thema, Regeln, Anheftungen und Ausblendungen.") {})
+            add(
+                tool(
+                    "create_guide",
+                    "Lässt einen Guide recherchieren und schreiben (dauert einige Minuten, läuft im Hintergrund). Entweder topic aus dem Katalog oder ein freier title. " +
+                        "Gibt es schon einen Guide zum Thema oder mit ähnlichem Titel, wird dieser überarbeitet statt doppelt angelegt.",
+                ) {
+                    putJsonObject("topic") { put("type", "string"); putJsonArray("enum") { GuideTopics.all.forEach { add(JsonPrimitive(it.key)) } } }
+                    putJsonObject("title") { put("type", "string"); put("description", "Titel eines freien Guides (ohne topic)") }
+                    putJsonObject("parent") { put("type", "string"); put("description", "id des Guides, unter dem er als Unterthema hängt, optional") }
+                    putJsonObject("wish") { put("type", "string"); put("description", "was hinein soll, optional") }
+                },
+            )
+            add(
+                tool("update_guide", "Lässt einen bestehenden Guide überarbeiten oder ergänzen (Hintergrundauftrag mit Recherche).") {
+                    putJsonObject("guideId") { put("type", "string") }
+                    putJsonObject("wish") { put("type", "string"); put("description", "was ergänzt oder geändert werden soll") }
+                },
+            )
+            fun target(name: String, description: String) = tool(name, description) {
+                putJsonObject("guideId") { put("type", "string") }
+                putJsonObject("targetType") { put("type", "string"); putJsonArray("enum") { GuideTargetType.entries.forEach { add(JsonPrimitive(it.name)) } } }
+                putJsonObject("targetId") { put("type", "string"); put("description", "id des Orts (s-…), der Unterkunft, des Zugs, des Flugs oder das Datum yyyy-MM-dd") }
+            }
+            add(target("assign_guide", "Heftet einen Guide an genau diesen Ort, diese Unterkunft, Fahrt oder diesen Tag (sofort gespeichert)."))
+            add(target("unassign_guide", "Blendet einen Guide an genau diesem Ort, dieser Unterkunft, Fahrt oder diesem Tag aus (sofort gespeichert)."))
+            add(
+                tool(
+                    "set_guide_triggers",
+                    "Ersetzt die zusätzlichen Regeln eines Guides, wann er erscheint (für „bei allen …“). Arten: " +
+                        "{kind: text, words: [...], on: PLACE|STAY|ANY} (Wörter in Name/Kategorien), {kind: category, category: FOOD|SIGHT|SHOPPING|NIGHTLIFE|OTHER}, " +
+                        "{kind: stay}, {kind: train, words: [...]}, {kind: flight}, {kind: always}.",
+                ) {
+                    putJsonObject("guideId") { put("type", "string") }
+                    putJsonObject("triggers") { put("type", "array"); putJsonObject("items") { put("type", "object") } }
+                },
+            )
+        }
     }
 
     private fun tool(name: String, description: String, props: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) = buildJsonObject {
@@ -695,8 +760,74 @@ class ChatTools(
             "show_day_plan" -> showDayPlan(args)
             "show_place_cards" -> showPlaces(args)
             "show_web_cards" -> showWeb(args)
+            "list_guides" -> guides?.let { ChatContextText.guides(guideList) } ?: "Unbekanntes Werkzeug."
+            "create_guide" -> guides?.let { createGuide(args, it) } ?: "Unbekanntes Werkzeug."
+            "update_guide" -> guides?.let { updateGuide(args, it) } ?: "Unbekanntes Werkzeug."
+            "assign_guide" -> guides?.let { placeGuide(args, it, pin = true) } ?: "Unbekanntes Werkzeug."
+            "unassign_guide" -> guides?.let { placeGuide(args, it, pin = false) } ?: "Unbekanntes Werkzeug."
+            "set_guide_triggers" -> guides?.let { setTriggers(args, it) } ?: "Unbekanntes Werkzeug."
             else -> "Unbekanntes Werkzeug."
         }
+    }
+
+    private fun guideOf(args: JsonObject): de.wanderlogplus.shared.model.Guide? = args.s("guideId")?.let { id -> guideList.firstOrNull { it.id == id } }
+
+    private fun keep(g: de.wanderlogplus.shared.model.Guide, port: ChatGuides) {
+        val before = guideList.firstOrNull { it.id == g.id } ?: return
+        port.saveGuide(before, g)
+        guideList.replaceAll { if (it.id == g.id) g else it }
+    }
+
+    private fun createGuide(args: JsonObject, port: ChatGuides): String {
+        val topic = args.s("topic")?.takeIf { GuideTopics.byKey(it) != null }
+        val title = args.s("title").orEmpty()
+        if (topic == null && title.isBlank()) return "Bitte topic aus dem Katalog oder einen title angeben."
+        val dup = GuideMatch.duplicateOf(topic, title, guideList)
+        val ask = de.wanderlogplus.shared.sync.GuideAsk(topic ?: dup?.topic, title.ifBlank { dup?.title.orEmpty() }, args.s("parent"), args.s("wish").orEmpty(), dup?.id)
+        say("Starte Guide-Auftrag …")
+        val job = port.start(listOf(ask))
+        val label = GuideTopics.byKey(ask.topic)?.name ?: ask.title
+        return if (dup != null) "Auftrag ${job.id} gestartet: der bestehende Guide „${dup.title}“ [id=${dup.id}] wird überarbeitet. Das dauert einige Minuten; der Guide erscheint danach in der App."
+        else "Auftrag ${job.id} gestartet: „$label“ wird recherchiert und geschrieben. Das dauert einige Minuten; der Guide erscheint danach in der App."
+    }
+
+    private fun updateGuide(args: JsonObject, port: ChatGuides): String {
+        val g = guideOf(args) ?: return "Unbekannter Guide."
+        say("Starte Guide-Auftrag …")
+        val job = port.start(listOf(de.wanderlogplus.shared.sync.GuideAsk(g.topic, g.title, g.parentId, args.s("wish").orEmpty(), g.id)))
+        return "Auftrag ${job.id} gestartet: „${g.title}“ wird überarbeitet. Das dauert einige Minuten."
+    }
+
+    private fun placeGuide(args: JsonObject, port: ChatGuides, pin: Boolean): String {
+        val g = guideOf(args) ?: return "Unbekannter Guide."
+        val type = args.s("targetType")?.let { v -> GuideTargetType.entries.firstOrNull { it.name == v.uppercase() } } ?: return "Unbekanntes Ziel: targetType fehlt."
+        val id = args.s("targetId") ?: return "Unbekanntes Ziel: targetId fehlt."
+        val known = when (type) {
+            GuideTargetType.PLACE -> t.savedById.containsKey(id)
+            GuideTargetType.STAY -> t.stays.any { it.id == id }
+            GuideTargetType.TRAIN -> t.trains.any { it.id == id }
+            GuideTargetType.FLIGHT -> t.flights.any { it.id == id }
+            GuideTargetType.DAY -> t.queries?.days()?.any { it.date == id } == true
+        }
+        if (!known) return "Unbekanntes Ziel: $type $id."
+        val target = de.wanderlogplus.shared.model.GuideTarget(type, id)
+        val changed = if (pin) g.copy(pinnedTo = (g.pinnedTo + target).distinct(), hiddenFrom = g.hiddenFrom - target)
+        else g.copy(pinnedTo = g.pinnedTo - target, hiddenFrom = (g.hiddenFrom + target).distinct())
+        keep(changed, port)
+        return if (pin) "„${g.title}“ ist jetzt dort angeheftet." else "„${g.title}“ wird dort nicht mehr angezeigt."
+    }
+
+    private fun setTriggers(args: JsonObject, port: ChatGuides): String {
+        val g = guideOf(args) ?: return "Unbekannter Guide."
+        val given = (args["triggers"] as? JsonArray).orEmpty()
+        val triggers = given.mapNotNull { e ->
+            try { json.decodeFromJsonElement(de.wanderlogplus.shared.model.GuideTrigger.serializer(), e) } catch (x: Exception) { null }
+        }
+        if (given.isNotEmpty() && triggers.isEmpty()) return "Keine der Regeln war lesbar; die bisherigen Regeln bleiben. Erlaubt sind die Arten aus der Werkzeugbeschreibung."
+        keep(g.copy(extraTriggers = triggers), port)
+        val skipped = given.size - triggers.size
+        return "Regeln von „${g.title}“ gespeichert: " + (if (triggers.isEmpty()) "keine zusätzlichen." else "${triggers.size}.") +
+            (if (skipped > 0) " $skipped unlesbare ausgelassen." else "")
     }
 
     private fun JsonObject.s(k: String): String? = (this[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
@@ -1137,6 +1268,19 @@ class ChatTools(
     }
 }
 
+/** What the chat may do with guides: save one right away (pins, hides, rules), or start a job that writes guides. */
+interface ChatGuides {
+    /** Saves the change from [before] to [after]; only the fields that differ are written ([guideChanges]). */
+    fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide)
+    fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>): de.wanderlogplus.shared.sync.AiJobInfo
+}
+
+/** The fields that differ between two versions of a guide, so a pin never rewrites (and reverts) the text. */
+fun guideChanges(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide): Map<String, kotlinx.serialization.json.JsonElement> {
+    val old = EntityCodec.fields(before)
+    return EntityCodec.fields(after).filter { (k, v) -> old[k] != v }
+}
+
 /** An assistant answer: text (Markdown) and the cards below it. */
 data class ChatAnswer(val text: String, val cards: List<ChatCard>)
 
@@ -1148,6 +1292,8 @@ class ChatAgent(
     private val ways: ChatWays? = null,
     /** Weather for the trip days (trip, today); null: the chat knows no weather. */
     private val weather: ((ChatTrip, String) -> TripWeather)? = null,
+    /** Writes and starts guides; null: no guide tools. */
+    private val guides: ChatGuides? = null,
     private val today: () -> String = { LocalDate.now().toString() },
 ) {
 
@@ -1157,7 +1303,7 @@ class ChatAgent(
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
         val here = location?.let { Anchor("Dein Standort", it.lat, it.lng) }
-        val tools = ChatTools(trip, web, here ?: ChatContextText.anchor(context, trip, today()), geocoder, ways, here, say)
+        val tools = ChatTools(trip, web, here ?: ChatContextText.anchor(context, trip, today()), geocoder, ways, here, guides, say)
         val (stable, volatile) = systemParts(trip, context, location)
         val messages = mutableListOf(cachedSystem(stable, volatile))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
@@ -1259,10 +1405,23 @@ class ChatAgent(
         } else {
             append("- Eine Websuche ist nicht eingerichtet; sag das, wenn der Nutzer danach fragt.\n")
         }
-        append("- Du kannst nichts an der Reise ändern; der Nutzer plant selbst. Bei Unsicherheit frag kurz nach.\n\n")
+        if (guides != null) {
+            append(
+                """
+                - Guides sind allgemeine Reise-Knigge und Sprachhilfen (Onsen, Restaurant, Shinkansen …), die die App an passenden Orten,
+                  Unterkünften, Fahrten und Tagen zeigt. Vor dem Anlegen schaust du in die Guide-Liste unten; zum selben Thema legst du keinen
+                  zweiten an. „Dieser Ort / diese Unterkunft / dieser Tag“ → assign_guide bzw. unassign_guide; „bei allen …“ → set_guide_triggers.
+                  Neue oder überarbeitete Guides laufen als Hintergrundauftrag; sag, dass sie nach einigen Minuten in der App erscheinen.
+                """.trimIndent(),
+            ).append('\n')
+            append("- Du kannst nichts an der Reise ändern – außer an Guides: Guides darfst du erstellen, überarbeiten und zuordnen. Sonst plant der Nutzer selbst. Bei Unsicherheit frag kurz nach.\n\n")
+        } else {
+            append("- Du kannst nichts an der Reise ändern; der Nutzer plant selbst. Bei Unsicherheit frag kurz nach.\n\n")
+        }
         append(ChatContextText.overview(trip)).append('\n')
         append(ChatContextText.savedPlaces(trip)).append('\n')
         ChatContextText.logistics(trip).takeIf { it.isNotEmpty() }?.let { append(it).append('\n') }
+        if (guides != null) append(ChatContextText.guides(trip.guides)).append('\n')
     }
 
     /** One system message: the stable block marked for the prompt cache, then the changing block. */

@@ -24,6 +24,17 @@ data class AssessRequest(val savedPlaceIds: List<String> = emptyList(), val conf
 @Serializable
 data class ResearchRequest(val savedPlaceIds: List<String>, val config: AssessConfig = AssessConfig())
 
+/**
+ * One guide to write: a catalog [topic], or a free guide named [title]; [guideId] rewrites that guide (also when the
+ * topic already has one). [wish] is what the user wants in or changed.
+ */
+@Serializable
+data class GuideAsk(val topic: String? = null, val title: String = "", val parentId: String? = null, val wish: String = "", val guideId: String? = null)
+
+/** `POST /api/ai/guides`: 1 to 30 guides, written one after the other. */
+@Serializable
+data class GuideRequest(val asks: List<GuideAsk>)
+
 /** The research result for one saved place. */
 @Serializable
 data class DossierResult(val savedPlaceId: String, val worth: Worth? = null, val description: String = "", val dossier: PlaceDossier = PlaceDossier())
@@ -94,6 +105,8 @@ data class AiJobInfo(
     /** Research: the places asked for and the criteria, so an interrupted job can continue. */
     val savedPlaceIds: List<String> = emptyList(),
     val config: AssessConfig? = null,
+    /** Guides: the guides written so far. */
+    val guideIds: List<String> = emptyList(),
 )
 
 /** One line of a job's log; [level] is INFO, OK, WARN or ERROR. */

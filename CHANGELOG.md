@@ -3,6 +3,15 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.40.0
+
+- **Guides:** Allgemeine Reise-Guides wie Onsen-Knigge, Im Restaurant bestellen (mit Omakase, Izakaya, Ramen), Shinkansen, Tempel & Schreine oder Japanisch für unterwegs. Jeder Guide hat das Wichtigste vorn, Tun/Lassen-Listen und Sätze zum Zeigen auf Japanisch mit Lautschrift, zum Vorlesen und groß zum Hinhalten. Alles liegt offline auf dem Gerät.
+- **Vorschläge aus der Reise:** Unter Mehr → Guides schlägt die App die Themen vor, die eure Orte, Unterkünfte und Fahrten berühren. Abhaken, „Ausgewählte erstellen“, fertig. Kommt später etwas Neues dazu, erscheint der passende Vorschlag. Abgelehnte Themen kommen nicht wieder.
+- **Am richtigen Ort:** Orte, Unterkünfte, Fahrten und Tage zeigen ihre Guides als Chips (lange drücken: hier ausblenden, Plus: anheften). Auf der Heute-Seite steht „Für heute“ mit den Guides in der Reihenfolge des Tages und einer kurzen Vorschau.
+- **Guides im Chat:** Der Chat kann Guides recherchieren, überarbeiten und zuordnen („häng den Omakase-Guide an das Sushi-Restaurant“, „zeig den Onsen-Guide bei allen Ryokans“).
+- **Bessere Ortsrecherche:** Parallel sammelt jetzt nur Fakten mit Quellen, Claude Sonnet bewertet sie mit dem Reisekontext.
+- Benötigt das Server-Update.
+
 ## 0.39.0
 
 - **Stärkeres Modell für Chat und Einschätzungen:** Chat und „Orte einschätzen“ laufen jetzt auf Claude Sonnet 5.5 (`WLP_TEXT_MODEL`), Reels und Videos weiter auf Gemini Flash (`WLP_AI_MODEL`).
