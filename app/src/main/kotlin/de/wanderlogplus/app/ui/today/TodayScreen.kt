@@ -1,5 +1,6 @@
 package de.wanderlogplus.app.ui.today
 
+import de.wanderlogplus.app.ui.guides.guideWorld
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -199,6 +200,16 @@ private fun During(
     val tomorrowWeather = weather?.forDate(now.toLocalDate().plusDays(1).toString())
     val outdoor = remember(snapshot, date) { outdoorPlacesOn(snapshot, date) }
     val openChat = LocalOpenChat.current
+    val openGuide = de.wanderlogplus.app.ui.guides.LocalOpenGuide.current
+    val openGuides = de.wanderlogplus.app.ui.guides.LocalOpenGuides.current
+    val dayGuides = remember(snapshot, view.day, state.movements, date, nowMin) {
+        val items = view.day?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+        val flow = de.wanderlogplus.shared.query.DayFlow.build(date, items, state.movements, snapshot.stays, snapshot.savedPlaces, snapshot.places, snapshot.regions)
+        de.wanderlogplus.shared.guide.GuideMatch.forDay(date, flow, snapshot.guideWorld(), nowMin)
+    }
+    val suggestedGuides = remember(snapshot, date) {
+        de.wanderlogplus.shared.guide.GuideSuggestions.openOn(date, snapshot.guideWorld(), snapshot.guidePrefs).size
+    }
 
     val program: @Composable () -> Unit = {
         NowNextWidget(snapshot, date, dayNow, now, stayPlace, accent, onOpenDay, onOpenLink, onOpenAttachment = onOpenAttachment, available = available)
@@ -207,6 +218,9 @@ private fun During(
     val focusMove = ((dayNow.current ?: dayNow.next) as? de.wanderlogplus.shared.query.DayStep.Move)?.movement
     val side: @Composable () -> Unit = {
         move?.takeIf { it.movement != focusMove }?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available) }
+        if (openGuide != null && (dayGuides.isNotEmpty() || (suggestedGuides > 0 && openGuides != null))) {
+            TodayGuidesWidget(dayGuides, suggestedGuides, accent, openGuide, openGuides)
+        }
         WeatherAndStay(date, todayWeather, tomorrowWeather, stay, stayPlace, accent, onOpenLink)
         todayWeather?.let { RainHint(it, outdoor, openChat) }
         if (deadlines.isNotEmpty()) DeadlinesWidget(deadlines, accent, onOpenPlace)

@@ -451,6 +451,7 @@ fun AppNavigation(
             de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
             de.wanderlogplus.app.ui.guides.LocalGuideActions provides guidesVm,
             de.wanderlogplus.app.ui.guides.LocalOpenGuide provides { id: String -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
+            de.wanderlogplus.app.ui.guides.LocalOpenGuides provides { nav.navigate(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) },
         ) {
         NavHost(
             nav,

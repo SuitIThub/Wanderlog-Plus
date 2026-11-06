@@ -245,6 +245,13 @@ fun PlaceDetailScreen(
             PlaceMapCard(points, accent, onOpenMap, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
         }
 
+        de.wanderlogplus.app.ui.guides.LocalOpenGuide.current?.let { open ->
+            de.wanderlogplus.app.ui.guides.GuidesSection(
+                snapshot, de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.PLACE, saved.id), open,
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+
         de.wanderlogplus.app.ui.budget.CostsSection(
             snapshot, saved.id, today ?: java.time.LocalDate.now().toString(), accent,
             Modifier.padding(horizontal = 16.dp),

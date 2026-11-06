@@ -34,6 +34,9 @@ val LocalGuideActions = compositionLocalOf<GuideActions?> { null }
 /** Opens a guide's page; null where no navigation is available (previews, tests). */
 val LocalOpenGuide = compositionLocalOf<((String) -> Unit)?> { null }
 
+/** Opens the guide overview (suggestions); null where no navigation is available. */
+val LocalOpenGuides = compositionLocalOf<(() -> Unit)?> { null }
+
 class GuidesViewModel(
     private val edit: EditFn,
     private val scope: CoroutineScope,
