@@ -22,6 +22,7 @@ class GooglePlacesGeocoderTest {
         assertEquals(135.4983, h.lng)
         assertEquals("JP", h.country)
         assertTrue("Shibata" in h.address!!)
+        assertEquals("ChIJ1", h.googlePlaceId)
         val body = t.bodies.single()
         assertTrue("\"textQuery\":\"Munimuni Umeda Osaka\"" in body && "\"regionCode\":\"JP\"" in body && "\"pageSize\":1" in body, body)
     }

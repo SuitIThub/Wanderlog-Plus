@@ -203,7 +203,7 @@ class ChatAgentTest {
         assertEquals(listOf("2027-05-19" to "s-ramen", null to null), t.cards.map { it.planDate to it.planAfter })
 
         val hits = mapOf(
-            "Gion Onsen, Kyoto" to GeoHit(35.0040, 135.7760, "Gion, Kyoto"),
+            "Gion Onsen, Kyoto" to GeoHit(35.0040, 135.7760, "Gion, Kyoto", googlePlaceId = "ChIJgion"),
             "Fuji Onsen" to GeoHit(35.36, 138.73, "Fujiyoshida"), // 200 km away: not the trip's
             "Kiyomizu" to GeoHit(34.9950, 135.7851, null), // the saved temple
         )
@@ -220,6 +220,7 @@ class ChatAgentTest {
         assertTrue("Lage nicht gefunden (nur als Link): Fuji Onsen" in r, r)
         val (gion, fuji, temple) = w.cards
         assertTrue(gion.canAdd && gion.regionId == "r-kyoto" && gion.category == "SIGHT" && gion.planDate == "2027-05-20" && gion.address == "Gion, Kyoto")
+        assertEquals("ChIJgion", gion.googlePlaceId) // added places get Google photos and details
         assertFalse(fuji.canAdd)
         assertEquals("s-kiyo", temple.savedPlaceId, "already saved: linked, not added twice")
     }

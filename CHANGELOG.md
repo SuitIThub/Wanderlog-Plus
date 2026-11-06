@@ -13,6 +13,9 @@ App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel 
 - **Reels finden den richtigen Ort:** Die KI unterscheidet den Ort, um den es geht, von Bahnhöfen, Vierteln und Kulisse, die nur zur Orientierung vorkommen. Diese stehen eingeklappt unter „Nur erwähnt“ und sind nicht vorausgewählt.
 - **Richtige Position:** Reel-Orte werden über Google Places gefunden (auch kleine Lokale), mit Stadtteil. Ein Namensvetter weit weg (z. B. in Tansania) wird nie mehr genommen, lieber gibt es keine Position.
 - **Filialen:** Hat ein Lokal mehrere Filialen, geht es um die aus dem Reel, die anderen stehen als „Weitere Filiale“ bei den Punkten vor Ort.
+- **Chat-Funde übernehmen:** Orte, die der Chat im Web findet, sucht er jetzt über Google Places. So bekommen auch kleine Lokale eine Lage und den Knopf „Zu Orten“.
+- **Google-Daten für übernommene Orte:** Orte aus Reels und dem Chat behalten ihre Google-ID. Der Server ergänzt danach Öffnungszeiten, Bewertung, Preisniveau, Website und Telefon (nur leere Felder, einmal pro Ort), und Google-Fotos funktionieren wie bei Wanderlog-Orten.
+- **Recherche mit Google-Fakten:** Für jeden Ort mit Google-ID gehen Öffnungszeiten, Bewertung und Preis von Google als gesicherte Angaben in die Recherche.
 - **Deutsch statt Japanisch:** Kommt eine Recherche oder ein Guide überwiegend auf Japanisch zurück, fragt der Server noch einmal auf Deutsch nach.
 - Benötigt das Server-Update.
 

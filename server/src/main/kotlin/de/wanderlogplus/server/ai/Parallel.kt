@@ -37,6 +37,8 @@ data class ResearchQuery(
     val name: String, val localName: String?, val city: String?, val country: String?, val kind: String, val evidence: String,
     /** Where the place sits in the trip (region, nearest stay, other places there); never booking data. */
     val tripContext: String = "",
+    /** Google's id of the place, when known: Google's hours, rating and price become facts of the research. */
+    val googlePlaceId: String? = null,
 )
 
 /** Sends one HTTP request to Parallel; returns status and body. Replaced in tests. */

@@ -14,6 +14,7 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_TRIP_KEY` | – | Optional; Reise-Schlüssel für `POST /api/import/wanderlog`. |
 | `WLP_IMPORT_FILE` | – | Optional; Pfad zu einer Wanderlog-JSON-Datei statt Abruf (hat Vorrang vor `WLP_TRIP_KEY`). |
 | `WLP_GOOGLE_ROUTES_KEY` | – | Optional; API-Key der Google Routes API für die Wegzeiten zwischen den Zielen eines Tages. Ohne Key zeigt die App „Wegzeiten brauchen einen Routen-Key“. |
+| `WLP_GOOGLE_PLACES_KEY` | `WLP_GOOGLE_ROUTES_KEY` | Optional; Key der Places API (New): Google-Fotos der Orte, Suche nach Reel-Orten und Chat-Funden (Textsuche) und Details (Öffnungszeiten, Bewertung, Preis, Kontakt) für Recherche und übernommene Orte, zwischengespeichert. Ohne Key: Photon für die Lage, keine Google-Details. |
 | `WLP_OPENROUTER_KEY` | – | Optional; OpenRouter-Key für die KI: Reels auswerten (Bilder, Ton, Beschreibung) und Orte einschätzen. Ohne Key antworten diese Funktionen mit `ai_not_configured`. |
 | `WLP_AI_MODEL` | `google/gemini-2.5-flash` | Modell bei OpenRouter für Reels und Videos; muss Bilder und Ton verstehen. |
 | `WLP_TEXT_MODEL` | `anthropic/claude-sonnet-5-5` | Modell bei OpenRouter für Textarbeit: Chat, Orte einschätzen, Recherche auswerten. Der feste Teil des Chat-Kontexts wird für den Prompt-Cache markiert. |

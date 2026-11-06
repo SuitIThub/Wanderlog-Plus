@@ -83,7 +83,7 @@ class ReelsTest {
     @Test fun importCreatesIdeasWithNoteTagAndWorth() {
         val store = InMemoryEntityStore()
         val editor = LocalEditor(store, InMemoryOutbox(), HlcClock("dev-a", now = { 1000L }))
-        val ids = importPicks(editor, listOf(ReelPick(near, "r-berg"), ReelPick(nowhere, null)), doneJob.source)
+        val ids = importPicks(editor, listOf(ReelPick(near.copy(googlePlaceId = "ChIJmoos"), "r-berg"), ReelPick(nowhere, null)), doneJob.source)
         assertEquals(1, ids.size) // the place without coordinates is skipped
         val s = TripSnapshot.from(store.all())
         val saved = s.savedPlaces.single()
@@ -93,6 +93,8 @@ class ReelsTest {
         assertEquals(Worth.MUST, saved.worth)
         assertEquals("Einzigartig.", saved.worthReason)
         assertEquals("Ein stiller Tempel.", s.places[saved.placeId]!!.description)
+        // Google's id comes along: photos and details (hours, rating) work like for Wanderlog places.
+        assertEquals("ChIJmoos", s.places[saved.placeId]!!.googlePlaceId)
         assertTrue(saved.note.contains("Früh kommen"))
     }
 

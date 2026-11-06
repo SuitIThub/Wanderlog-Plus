@@ -70,6 +70,8 @@ data class ReelCandidate(
     val positionSetByHand: Boolean = false,
     /** What the reel is about; false for places only named for orientation (located, not researched). */
     val main: Boolean = true,
+    /** Google's id when Google Places found the position; the imported place then gets photos and details. */
+    val googlePlaceId: String? = null,
 )
 
 /** The judgement for one saved place. */

@@ -123,6 +123,7 @@ fun importPicks(editor: LocalEditor, picks: List<ReelPick>, source: String?): Li
             description = c.description.ifBlank { null },
             note = reelNote(c, source),
             tags = listOf(REEL_TAG),
+            googlePlaceId = c.googlePlaceId,
             savedExtra = buildMap {
                 c.worth?.let { put("worth", JsonPrimitive(it.name)) }
                 if (c.worthReason.isNotBlank()) put("worthReason", JsonPrimitive(c.worthReason))

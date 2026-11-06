@@ -131,7 +131,7 @@ class Assistant(
         val r = if (!deep) { say("Nur zur Orientierung genannt, ohne Recherche"); null } else try {
             val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
             val evidence = listOfNotNull(p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null }).joinToString("; ")
-            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, evidence, trip), config, say)
+            researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, evidence, trip, hit?.googlePlaceId), config, say)
         } catch (e: AiFailed) {
             say("Recherche fehlgeschlagen (${e.code})")
             null // a place without research is still worth showing
@@ -158,6 +158,7 @@ class Assistant(
             dossier = d,
             positionIssue = issue,
             main = p.main,
+            googlePlaceId = hit?.googlePlaceId,
         )
     }
 
@@ -252,7 +253,7 @@ class Assistant(
                 .mapNotNull { o -> data.places[o.placeId]?.name?.takeIf { n -> n.isNotBlank() }?.let { n -> if (o.status == PlaceStatus.PLANNED) "$n (eingeplant)" else n } }
                 .take(15)
             val trip = listOfNotNull(region?.let { "Region $it" }, others.takeIf { it.isNotEmpty() }?.joinToString(", ", "dort auch hinterlegt: ")).joinToString("; ")
-            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty(), trip)
+            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty(), trip, p?.googlePlaceId?.takeIf { it.isNotBlank() })
             val r = try {
                 researcher.research(query, config, say)
             } catch (e: AiFailed) {

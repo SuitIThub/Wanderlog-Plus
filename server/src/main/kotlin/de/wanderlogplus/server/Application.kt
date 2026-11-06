@@ -94,6 +94,8 @@ class Services(
     val flightLive: FlightLiveService = FlightLiveService(store, null, null),
     /** Live status of Shinkansen. */
     val trainLive: TrainLiveService = TrainLiveService(store, null),
+    /** Fills hours, rating and contact of places with a Google id after each push; null without a Places key. */
+    val placeEnricher: PlaceEnricher? = null,
 )
 
 @Serializable
@@ -225,6 +227,7 @@ fun Application.module(services: Services) {
                 val req = call.receive<PushRequest>()
                 val author = call.author()
                 call.respond(withContext(Dispatchers.IO) { services.sync.push(author, req.changes) })
+                services.placeEnricher?.schedule()
             }
             post("/api/files") {
                 var stored: StoredFile? = null

@@ -48,6 +48,8 @@ data class ChatCard(
     val planAfter: String? = null,
     /** A whole day plan ([KIND_PLAN]). */
     val plan: ChatPlan? = null,
+    /** Google's id of a located web find; the added place then gets photos and details. */
+    val googlePlaceId: String? = null,
 ) {
     val canAdd: Boolean get() = kind == KIND_WEB && lat != null && lng != null
 

@@ -47,17 +47,19 @@ fun main() {
         override fun route(req: de.wanderlogplus.shared.sync.RouteRequest) = routes.compute(req)
     }.takeIf { transit.configured || routes.configured }
     val weather = WeatherService(store, OpenMeteoHttp())
+    val photon = PhotonGeocoder()
+    // Google details (hours, rating, price, contact) of places, cached: for research facts and to fill taken-over places.
+    val googleDetails = config.googlePlacesKey?.let { GooglePlaceDetails(store, HttpPlaceDetailsTransport(it)) }
+    // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
+    val placeFinder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
     val aiJobs = AiJobs(
         store,
         openRouter?.let { model ->
             val text = textModel ?: model
             // Parallel (or the model's web search) gathers facts, the text model judges them for the trip.
             val facts = config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text)
-            val researcher = PipelineResearcher(facts, text)
-            val photon = PhotonGeocoder()
-            // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
-            val finder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
-            Assistant(model, photon, researcher, textModel = text, placeFinder = finder)
+            val researcher = PipelineResearcher(facts, text, google = { id -> googleDetails?.get(id)?.facts().orEmpty() })
+            Assistant(model, photon, researcher, textModel = text, placeFinder = placeFinder)
         },
         ToolReelMedia(cookies = config.instagramCookies),
         config.dataDir.resolve("ai-work"),
@@ -85,12 +87,13 @@ fun main() {
         flightLive = FlightLiveService(store, OpenMeteoHttp(), config.airlabsKey),
         trainLive = TrainLiveService(store, OpenMeteoHttp()),
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
+        placeEnricher = googleDetails?.let { PlaceEnricher(store, sync, it) },
         chats = ChatService(
             store,
             textModel?.let { model ->
                 // "Today" in Japan, where the trip happens.
                 ChatAgent(
-                    model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, PhotonGeocoder(), ways,
+                    model, config.parallelKey?.let { ParallelWebSearch(HttpParallelTransport(it)) }, placeFinder, ways,
                     weather = { trip, today -> weather.forTrip(trip, today) },
                     guides = chatGuides,
                 ) {
@@ -100,6 +103,7 @@ fun main() {
         ),
     )
     services.ai.resumeInterrupted()
+    services.placeEnricher?.schedule()
     services.chats.resumeInterrupted()
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }
