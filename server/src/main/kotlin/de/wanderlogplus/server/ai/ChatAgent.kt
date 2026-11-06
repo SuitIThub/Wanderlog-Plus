@@ -308,7 +308,26 @@ object ChatContextText {
         if (s.checkIn.isNotBlank()) append(", ").append(s.checkIn).append(" bis ").append(s.checkOut)
         p?.address?.takeIf { it.isNotBlank() }?.let { append(", ").append(it) }
         t.point(s.placeId)?.let { append(", Koordinaten ").append(coords(it)) }
+        s.info?.let { info ->
+            val r = info.room
+            if (r.type.isNotBlank()) {
+                append(" · Zimmer: ").append(r.type)
+                listOfNotNull(r.beds.ifBlank { null }, r.bath.ifBlank { null }, r.view.ifBlank { null }).takeIf { it.isNotEmpty() }
+                    ?.let { append(" (").append(it.joinToString(", ")).append(")") }
+            }
+            if (info.property.meals.isNotBlank()) append(" · Verpflegung: ").append(info.property.meals)
+            val groups = r.amenities + info.property.amenities
+            if (groups.isNotEmpty()) {
+                append(" · Ausstattung: ").append(
+                    groups.filter { it.items.isNotEmpty() }.joinToString("; ") { g ->
+                        g.name + ": " + g.items.joinToString(", ") { a -> a.name + (a.note.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") }
+                    }.take(MAX_AMENITY_CHARS),
+                )
+            }
+        }
     }
+
+    private const val MAX_AMENITY_CHARS = 400
 
     private fun coords(a: Anchor) = String.format(Locale.ROOT, "%.5f,%.5f", a.lat, a.lng)
 

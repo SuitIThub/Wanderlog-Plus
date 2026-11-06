@@ -425,6 +425,27 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `the stay line names the room and the amenities`() {
+        val info = de.wanderlogplus.shared.model.StayInfo(
+            room = de.wanderlogplus.shared.model.RoomInfo(type = "Japanese-style room", beds = "2 Futons", bath = "eigenes Rotenburo"),
+            property = de.wanderlogplus.shared.model.PropertyInfo(
+                meals = "Kaiseki 18:00",
+                amenities = listOf(
+                    de.wanderlogplus.shared.model.AmenityGroup("Onsen & Spa", listOf(de.wanderlogplus.shared.model.Amenity("Rotenburo"))),
+                    de.wanderlogplus.shared.model.AmenityGroup("Service", listOf(de.wanderlogplus.shared.model.Amenity("Wäscherei", "300 Yen"))),
+                ),
+            ),
+        )
+        val withInfo = ChatTrip(trip.trip, trip.regions, trip.places, trip.saved, trip.stays.map { it.copy(info = info) }, trip.days, trip.dayItems, trip.flights, trip.trains)
+        val overview = ChatContextText.overview(withInfo)
+        assertTrue("Zimmer: Japanese-style room (2 Futons, eigenes Rotenburo)" in overview, overview)
+        assertTrue("Verpflegung: Kaiseki 18:00" in overview, overview)
+        assertTrue("Ausstattung: Onsen & Spa: Rotenburo; Service: Wäscherei (300 Yen)" in overview, overview)
+        assertFalse("SECRET" in overview)
+        assertFalse("Zimmer:" in ChatContextText.overview(trip))
+    }
+
+    @Test
     fun `the system message marks the stable part for the prompt cache`() {
         val model = ScriptedModel(listOf(text("ok")))
         ChatAgent(model, null) { "2027-05-19" }.answer(listOf(user("Hallo", ChatContext(ChatScreens.DAY, date = "2027-05-19"))), trip)

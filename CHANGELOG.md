@@ -3,6 +3,16 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.41.0
+
+- **Sitzplätze und Klasse:** Züge und Flüge bekommen Klasse und Sitzplätze (Wagen, Platz, Person). Sie stehen in den Details, auf der Karte „Nächste Fahrt“ und im Chat („2. Klasse · Wagen 12, 111 + 114“).
+- **Sitzplan:** Für ICE 4 sowie die A350-900 und A321neo von China Airlines und die A321neo und 787-9 von ANA zeichnet die App den Sitzplan selbst und hebt eure Plätze hervor – mit Fenster, Mitte oder Gang und ob ihr nebeneinander sitzt. Zugeordnet wird über die Flug- bzw. Zugnummer, im Bearbeiten lässt sich der Plan auch von Hand wählen.
+- **Zimmer und Ausstattung:** Unterkünfte haben jetzt „Zimmer“ (Typ, Betten, Bad, Aussicht, Größe, Ausstattung) und „Unterkunft“ (Beschreibung, Verpflegung, Hausregeln, Ausstattung in Gruppen).
+- **Recherchieren:** „Zimmer & Ausstattung recherchieren“ liest die Buchungsbestätigungen unter den Anhängen, die angegebenen Links und eine Websuche. Namen und Buchungsnummern werden nie übernommen. Fotos des Zimmertyps von den Seiten kommen, wo möglich, als „Zimmer“-Fotos in die Galerie.
+- **Von Hand korrigieren:** Unter „Unterkunft bearbeiten“ lassen sich alle Angaben ändern; was du änderst, bleibt bei einer neuen Recherche erhalten („Alles neu recherchieren“ ersetzt auch das). Fotos der Unterkunft lassen sich per Tippen als Zimmerfoto markieren.
+- **Chat:** kennt Zimmer, Verpflegung und Ausstattung eurer Unterkünfte.
+- Benötigt das Server-Update.
+
 ## 0.40.0
 
 - **Guides:** Allgemeine Reise-Guides wie Onsen-Knigge, Im Restaurant bestellen (mit Omakase, Izakaya, Ramen), Shinkansen, Tempel & Schreine oder Japanisch für unterwegs. Jeder Guide hat das Wichtigste vorn, Tun/Lassen-Listen und Sätze zum Zeigen auf Japanisch mit Lautschrift, zum Vorlesen und groß zum Hinhalten. Alles liegt offline auf dem Gerät.
