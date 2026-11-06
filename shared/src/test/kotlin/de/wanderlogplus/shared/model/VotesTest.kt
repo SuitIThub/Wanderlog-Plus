@@ -33,4 +33,10 @@ class VotesTest {
         // Withdrawn votes (0) do not count as voting.
         assertFalse(Votes.planDoubt(PlaceStatus.PLANNED, listOf(v("daniel", 0)), "s1"))
     }
+
+    @Test
+    fun `only records under their own id count`() {
+        val forged = listOf(Vote("a|daniel", "s1", "daniel", Votes.DOUBLE), Vote("s1|x", "s1", "", Votes.DOUBLE), v("daniel", Votes.LIKE))
+        assertEquals(1, Votes.score(forged, "s1"))
+    }
 }

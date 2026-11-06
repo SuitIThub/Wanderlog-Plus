@@ -94,4 +94,12 @@ class ParallelTest {
         assertEquals(3, c.sources.size)
         assertTrue(c.onRoute)
     }
+
+    @Test
+    fun `the research schema uses plain types only`() {
+        val q = ResearchQuery("Ghibli Museum", null, "Mitaka", "Japan", "Museum", "")
+        val body = ParallelResearcher.taskBody(q, emptyList(), "base")
+        kotlin.test.assertFalse("\"type\":[" in body.replace(" ", ""), "union types may be rejected by the processor")
+        kotlin.test.assertTrue("\"reservation\"" in body)
+    }
 }

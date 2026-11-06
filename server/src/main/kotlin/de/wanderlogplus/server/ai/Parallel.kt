@@ -208,9 +208,10 @@ class ParallelResearcher(private val transport: ParallelTransport, private val p
                                 put("description", "ob man reservieren/Tickets vorab kaufen muss und ab/bis wann (Tage vor dem Besuch oder festes Datum); null wo unbekannt")
                                 putJsonObject("properties") {
                                     putJsonObject("need") { put("type", "string"); putJsonArray("enum") { listOf("REQUIRED", "RECOMMENDED", "NOT_NEEDED", "UNKNOWN").forEach { add(JsonPrimitive(it)) } } }
-                                    putJsonObject("opensDaysBefore") { putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) } }
-                                    putJsonObject("opensOn") { putJsonArray("type") { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }; put("description", "yyyy-MM-dd") }
-                                    putJsonObject("byDaysBefore") { putJsonArray("type") { add(JsonPrimitive("integer")); add(JsonPrimitive("null")) } }
+                                    // Plain strings ("" = unknown): union types like ["integer","null"] are not accepted everywhere.
+                                    putJsonObject("opensDaysBefore") { put("type", "string"); put("description", "Zahl der Tage vor dem Besuch, leer wenn unbekannt") }
+                                    putJsonObject("opensOn") { put("type", "string"); put("description", "yyyy-MM-dd, leer wenn unbekannt") }
+                                    putJsonObject("byDaysBefore") { put("type", "string"); put("description", "Zahl der Tage vor dem Besuch, leer wenn unbekannt") }
                                     putJsonObject("note") { put("type", "string"); put("description", "ein Satz, Deutsch") }
                                 }
                                 putJsonArray("required") { listOf("need", "opensDaysBefore", "opensOn", "byDaysBefore", "note").forEach { add(JsonPrimitive(it)) } }

@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.46.2
+
+- **Abstimmen abgesichert:** Der Server zählt pro Zugang und Ort genau eine Stimme (Stimmen unter fremden oder zusätzlichen Kennungen werden verworfen); Zugangsnamen mit „|“ funktionieren.
+- **Chat kennt „Vorgemerkt“:** In der Ortsliste des Chats sind vorgemerkte Orte markiert.
+- **Ortsrecherche robuster:** Das Antwortschema an Parallel nutzt nur einfache Typen, damit die neuen Reservierungsangaben die Recherche nicht scheitern lassen.
+
 ## 0.46.1
 
 - **Ausstattung der Unterkunft übersichtlich:** „Auf einen Blick“ zeigt Zimmertyp, Größe, Betten, Bad, Aussicht, Personen und Verpflegung als Kacheln mit Symbol. Die Ausstattung steht getrennt nach „Im Zimmer“ und „In der Unterkunft“ in festen Gruppen (Bad & Onsen, Schlafen & Zimmer, Technik & Internet, Essen & Trinken, Service, Sonstiges), jeder Punkt mit passendem Symbol im Raster (2 Spalten, auf breiten Bildschirmen 3); Hinweise wie „privat“ stehen klein darunter. Lange Gruppen zeigen erst 6 Punkte („+ n weitere“). Nichts steht mehr doppelt.

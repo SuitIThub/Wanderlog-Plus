@@ -65,4 +65,26 @@ class SyncServiceVotesTest {
         sync.push("selina", vote("selina", Votes.DISLIKE))
         assertEquals(PlaceStatus.IDEA, status())
     }
+
+    @Test
+    fun `one vote per voter and place, however many records are pushed`() {
+        // Records under other ids, each claiming the place: they must not add up.
+        val stuffed = listOf("a", "b").flatMap { prefix ->
+            wall += 10
+            val id = "$prefix|daniel"
+            listOf(
+                FieldChange(EntityType.VOTE, id, "savedPlaceId", JsonPrimitive("s1"), hlc(wall, "dev-daniel", 0)),
+                FieldChange(EntityType.VOTE, id, "value", JsonPrimitive(Votes.DOUBLE), hlc(wall, "dev-daniel", 1)),
+            )
+        }
+        sync.push("daniel", stuffed)
+        assertEquals(PlaceStatus.IDEA, status())
+        assertNull(store.get(EntityType.VOTE, "a|daniel")?.fields?.get("savedPlaceId"))
+    }
+
+    @Test
+    fun `names with a bar still settle the place`() {
+        sync.push("a|b", vote("a|b", Votes.DOUBLE))
+        assertEquals(PlaceStatus.SHORTLIST, status())
+    }
 }

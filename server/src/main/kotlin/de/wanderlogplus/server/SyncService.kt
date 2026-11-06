@@ -91,9 +91,15 @@ class SyncService(
     fun push(author: String, changes: List<FieldChange>): PushResponse {
         validate(changes)
         // Everyone votes only for themselves: other people's votes are dropped, the rest of the push stays.
+        // The id is "<place>|<author>"; the place and voter fields must say the same, so there is one vote per voter and place.
         val own = changes.filter { c ->
-            c.type != EntityType.VOTE ||
-                (c.id.endsWith("|$author") && (c.field != "voter" || (c.value as? JsonPrimitive)?.content == author))
+            if (c.type != EntityType.VOTE) return@filter true
+            val place = c.id.removeSuffix("|$author").takeIf { c.id.endsWith("|$author") && it.isNotEmpty() } ?: return@filter false
+            when (c.field) {
+                "voter" -> (c.value as? JsonPrimitive)?.content == author
+                "savedPlaceId" -> (c.value as? JsonPrimitive)?.content == place
+                else -> true
+            }
         }
         val response = withWriteLock {
             store.transaction(author) {
@@ -102,7 +108,7 @@ class SyncService(
                 PushResponse(accepted, store.maxSeq(), max.value?.encode(), store.epoch)
             }
         }
-        val voted = own.filter { it.type == EntityType.VOTE }.map { it.id.substringBeforeLast('|') }.toSet()
+        val voted = own.filter { it.type == EntityType.VOTE }.map { it.id.removeSuffix("|$author") }.toSet()
         if (voted.isNotEmpty()) settleVotes(voted)
         return response
     }
