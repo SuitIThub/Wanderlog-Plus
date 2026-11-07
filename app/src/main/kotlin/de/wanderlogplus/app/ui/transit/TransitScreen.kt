@@ -104,19 +104,7 @@ fun TransitScreen(
             )
 
             SectionLabel("Zeit", color = accent)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    f.date, { v -> onEdit { it.copy(date = v) } },
-                    label = { Text("Datum") }, singleLine = true,
-                    modifier = Modifier.weight(1.4f).testTag("transit-date"),
-                )
-                OutlinedTextField(
-                    f.time, { v -> onEdit { it.copy(time = v) } },
-                    label = { Text("Uhrzeit") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.weight(1f).testTag("transit-time"),
-                )
-            }
+            DateTimeFields(f.date, f.time, onDate = { v -> onEdit { it.copy(date = v) } }, onTime = { v -> onEdit { it.copy(time = v) } })
             Segments(
                 listOf("depart" to "Abfahrt um", "arrive" to "Ankunft bis"),
                 f.searchType, "transit-type",
