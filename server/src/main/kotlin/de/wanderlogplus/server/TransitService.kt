@@ -91,7 +91,9 @@ class PhotonStationFinder(private val photon: PhotonGeocoder) : StationFinder {
         val key = String.format(java.util.Locale.ROOT, "%.4f,%.4f", lat, lng)
         nearby[key]?.let { return it.take(limit) }
         for (radius in listOf(3, 10, 30)) {
-            val q = "reverse?lat=$lat&lon=$lng&limit=12&radius=$radius&osm_tag=railway"
+            // Only stations and halts: "railway" alone also returns platforms, entrances and switches, which fill the
+            // nearest results and leave no station after filtering.
+            val q = "reverse?lat=$lat&lon=$lng&limit=12&radius=$radius&osm_tag=railway:station&osm_tag=railway:halt"
             val ja = stations(photon.features(q))
             if (ja.isEmpty()) continue
             val en = stations(photon.features("$q&lang=en")).associateBy { it.first }
@@ -110,7 +112,7 @@ class PhotonStationFinder(private val photon: PhotonGeocoder) : StationFinder {
         located[key]?.let { return it }
         val bias = if (lat != null && lng != null) "&lat=$lat&lon=$lng" else "&lat=36.2&lon=138.25"
         val q = URLEncoder.encode(TransitService.base(nameJa) + "駅", Charsets.UTF_8)
-        val hits = stations(photon.features("api/?q=$q&limit=3&osm_tag=railway&lang=en$bias"))
+        val hits = stations(photon.features("api/?q=$q&limit=3&osm_tag=railway:station&osm_tag=railway:halt&lang=en$bias"))
         val hit = hits.map { it.second }.firstOrNull { s ->
             lat == null || lng == null || distanceKm(lat, lng, s.lat!!, s.lng!!) <= MAX_LOCATE_KM
         } ?: return null
