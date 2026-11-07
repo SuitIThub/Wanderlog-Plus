@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.54.1
+
+- **Bahnhöfe in der Nähe zuverlässig (Server):** Die ÖPNV-Suche findet die Bahnhöfe um einen Ort jetzt über Google Places (Bahn, U-Bahn, Stadtbahn; japanischer Name für die Fahrplanauskunft, lateinischer für die Anzeige), im Umkreis von 3, dann 10, dann 30 km; ein von Hand eingetragener Bahnhof wird ebenso gefunden. Ergebnisse speichert der Server dauerhaft, jeder Ort kostet also höchstens einmal. Ohne Google-Key oder ohne Treffer hilft weiter OpenStreetMap – dort lieferte die Suche bisher oft nur Bahnsteige und Eingänge statt Bahnhöfen; das ist behoben.
+
 ## 0.54.0
 
 - **Zug verpasst? Andere Fahrt suchen.** An jedem Zug (Detailseite und Reise-Ansicht) gibt es „Andere Fahrt suchen“, auf der Heute-Seite bei der nächsten bzw. laufenden Zugfahrt „Verpasst? Spätere Fahrt“. Die ÖPNV-Suche startet vorbelegt mit derselben Strecke ab der geplanten Abfahrt + 1 Minute (oder jetzt, wenn das später ist); alles bleibt änderbar. Die gewählte Fahrt ersetzt Linie, Zeiten, Gleise und Haltestellen; Buchungsnummer, Notiz und Sitzplätze bleiben. Hat die neue Verbindung mehrere Fahrten, werden daraus Teilstrecken direkt danach. Der Rest der Reise bleibt; knappe Umstiege zeigt die Reise-Ansicht wie gewohnt.

@@ -41,7 +41,11 @@ fun main() {
     val transit = TransitService(
         store,
         config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
-        config.apifyToken?.let { PhotonStationFinder(PhotonGeocoder()) },
+        // Stations from Google Places (reliable, Japanese names); OpenStreetMap only when Google has no answer.
+        config.apifyToken?.let {
+            val osm = PhotonStationFinder(PhotonGeocoder())
+            config.googlePlacesKey?.let { key -> GoogleStationFinder(HttpPlacesApi(key), store, osm) } ?: osm
+        },
         elsewhere = TransitousSource(store, OpenMeteoHttp()),
     )
     // The chat asks the same services as the app's day screens (and shares their cache).
