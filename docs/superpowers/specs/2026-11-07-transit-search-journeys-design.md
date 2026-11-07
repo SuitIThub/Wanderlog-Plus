@@ -1,6 +1,6 @@
 # ÖPNV-Suche: Orte als Start/Ziel, Datum/Uhrzeit-Auswahl, Verbindungen als Reise – Design
 
-Stand: 2026-11-07. Zwei Teile, nacheinander gebaut, jeder mit eigener App-Version und CHANGELOG-Abschnitt.
+Stand: 2026-11-07. Drei Teile, nacheinander gebaut, jeder mit eigener App-Version und CHANGELOG-Abschnitt.
 Datenquelle bleibt: Japan Yahoo! 乗換案内 (Apify), außerhalb Japans Transitous. Die Google Routes API liefert für
 Japan keinen ÖPNV (Test vom 2026-11-01: leere Antwort) und kommt deshalb nicht in Frage.
 
@@ -70,6 +70,23 @@ Reine Funktion `TransitRides.ridesOf(result: TransitResult): List<Train>` (eine 
 - Logistik „Hinzufügen“ bekommt den Eintrag „ÖPNV-Verbindung suchen“ (`logistics-add-transit`): öffnet das neue
   Zug-Formular mit gleich geöffneter Verbindungssuche.
 
+## Teil 3 – Teilstrecke auf eine andere Fahrt umstellen
+
+- „Andere Fahrt suchen“ (`train-replace`) auf der Detailseite eines Zugs und in der Reise-Ansicht an jeder
+  Zug-Teilstrecke (`journey-replace-<id>`); auf Heute in der Karte „Nächste Fahrt“ „Verpasst? Spätere Fahrt“
+  (`today-replace`), wenn die nächste Fahrt ein Zug ist.
+- Öffnet die ÖPNV-Suche vorbelegt: Von/Nach = Bahnhöfe der Teilstrecke (Name; Koordinaten als Punkt, falls
+  bekannt), Datum = Datum der Teilstrecke, Uhrzeit = die spätere von (geplante Abfahrt + 1 Min.) und „jetzt“ (nur
+  wenn das Datum heute ist), „Abfahrt um“. Alles bleibt änderbar.
+- Übernehmen (`LocalEditor.replaceRide`): die erste Fahrt der gewählten Verbindung ersetzt Linie, Betreiber,
+  Von/Nach, Datum/Zeiten und `transit` der Teilstrecke; Buchungsnummer, Notiz, Reisende, Klasse, Links, Sitzplätze
+  und Reservierungsfrist bleiben. Hat sie Sitzplätze, zeigt die Detailseite „Sitzplätze galten für die alte Fahrt“
+  (`train-seats-stale`), bis sie geändert oder bestätigt werden (`seatsForDeparture` = die Abfahrt, für die sie
+  eingetragen wurden). Weitere Fahrten der Verbindung werden neue Teilstrecken direkt danach (gleiche Reise; war
+  der Zug in keiner Reise, entsteht eine).
+- Der Rest der Reise bleibt; die Reise-Ansicht warnt wie bisher bei knappen oder überschneidenden Umstiegen.
+- Keine Live-Daten: die Suche kennt nur den Fahrplan.
+
 ## Tests (Auswahl)
 
 - Vorschläge: Reise-Orte vor Suchtreffern, ohne Doppelte; Auswahl setzt den Punkt, leert den Bahnhof, Anfrage
@@ -78,3 +95,5 @@ Reine Funktion `TransitRides.ridesOf(result: TransitResult): List<Train>` (eine 
 - `ridesOf`: Fußwege fallen weg, Folgetag nach Mitternacht, Preis nur an der ersten, Betreiber erkannt.
 - Speichern: neuer Zug mit 3 Fahrten → 3 Züge in einer Reise in Fahrtreihenfolge; bearbeiteter Zug behält
   Buchungsnummer; neue Teilstrecke in bestehender Reise landet zwischen den Nachbarn; eine Fahrt → keine Reise.
+- Umstellen: Startzeit = max(geplant + 1 Min., jetzt); ersetzt Zeiten/Linie, behält Buchung und Sitzplätze mit
+  Hinweis; zwei Fahrten → zweite direkt danach in derselben Reise; übrige Teilstrecken unverändert.
