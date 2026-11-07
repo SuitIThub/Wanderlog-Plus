@@ -128,6 +128,28 @@ class ResearchQueueTest {
     }
 
     @Test
+    fun jobsReachTheServerInQueueOrder() {
+        // The first start is slow (e.g. reading the config): the next ones must still reach the server after it,
+        // or the server's lane order differs from the app's and the app follows a job that only waits.
+        val order = Collections.synchronizedList(mutableListOf<String>())
+        val slowApi = SyncApi(
+            HttpClient(MockEngine { req ->
+                val body = String(req.body.toByteArray())
+                val id = Regex(""""(r\d)"""").find(body)?.groupValues?.get(1) ?: "?"
+                if (id == "r1") Thread.sleep(300)
+                order += id
+                respond(job(id, "DONE", 1, 1, 1), HttpStatusCode.OK, jsonHeaders)
+            }),
+            "https://s", "tok",
+        )
+        val v = PlacesViewModel({ MutableStateFlow(snap) }, edit, CoroutineScope(SupervisorJob() + Dispatchers.Default), api = { slowApi }, pollMillis = 1)
+        v.researchRegions(listOf("A" to listOf("r1"), "B" to listOf("r2"), "C" to listOf("r3"), "D" to listOf("r4")))
+        val deadline = System.currentTimeMillis() + 5_000
+        while (order.size < 4 && System.currentTimeMillis() < deadline) Thread.sleep(5)
+        assertEquals(listOf("r1", "r2", "r3", "r4"), order.toList())
+    }
+
+    @Test
     fun queueStatusTexts() {
         val running = QueuedResearch(1, "Kyoto", kyoto, "r1", 3, 12, QueuedResearch.State.RUNNING)
         val waiting = QueuedResearch(2, "Osaka", osaka, null, 0, 3, QueuedResearch.State.WAITING)

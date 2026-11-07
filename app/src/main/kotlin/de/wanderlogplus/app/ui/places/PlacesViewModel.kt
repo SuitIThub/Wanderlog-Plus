@@ -178,8 +178,22 @@ class PlacesViewModel(
             entry = QueuedResearch(nextKey++, label, todo, total = todo.size, state = QueuedResearch.State.WAITING)
             started[entry.key] = gate
             updateQueue { keep + entry }
+            if (starter?.isActive != true) starter = writeScope.launch { startInOrder() }
         }
-        writeScope.launch {
+        // One starter sends the jobs in queue order: parallel starts would reach the server (which runs them in
+        // arrival order) shuffled, and the app would follow a job that is only waiting there.
+        starts.trySend(Triple(entry, gate, provider))
+        synchronized(queueLock) {
+            if (worker?.isActive != true) worker = writeScope.launch { work() }
+        }
+    }
+
+    private val starts = kotlinx.coroutines.channels.Channel<Triple<QueuedResearch, kotlinx.coroutines.CompletableDeferred<de.wanderlogplus.shared.sync.AiJobInfo?>, suspend () -> de.wanderlogplus.client.SyncApi?>>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+    private var starter: Job? = null
+
+    /** Sends queued jobs to the server one after another, in the order they were queued. */
+    private suspend fun startInOrder() {
+        for ((entry, gate, provider) in starts) {
             val job = try {
                 val a = provider() ?: throw IllegalStateException("no server")
                 a.startResearch(entry.ids, config())
@@ -196,9 +210,6 @@ class PlacesViewModel(
             }
             if (job != null) setEntry(entry.key) { it.copy(jobId = job.id) }
             gate.complete(job)
-        }
-        synchronized(queueLock) {
-            if (worker?.isActive != true) worker = writeScope.launch { work() }
         }
     }
 
