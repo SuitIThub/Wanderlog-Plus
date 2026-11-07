@@ -93,6 +93,8 @@ class TransitViewModel(
     chosen: TransitResult?,
     /** "depart" or "arrive" for a fresh search (a chosen connection keeps its own). */
     searchType: String = "depart",
+    /** Pauses before asking again after a dropped connection (the server finishes and keeps the answer meanwhile). */
+    private val retryDelaysMillis: List<Long> = listOf(5_000, 10_000),
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         TransitScreenState(
@@ -179,8 +181,19 @@ class TransitViewModel(
         searching = viewModelScope.launch {
             val a = api() ?: run { _state.update { it.copy(searching = false, message = "Kein Server eingerichtet.") }; return@launch }
             try {
-                val r = a.transitOrThrow(requestFor(form))
-                _state.update { it.copy(searching = false, result = r) }
+                var attempt = 0
+                var r: TransitResult? = null
+                while (r == null) {
+                    try {
+                        r = a.transitOrThrow(requestFor(form))
+                    } catch (e: ApiException) {
+                        // Only a dropped connection is asked again: the server finished meanwhile and answers from its store.
+                        if (e.kind != ApiErrorKind.NETWORK || attempt >= retryDelaysMillis.size) throw e
+                        _state.update { it.copy(message = "Verbindung unterbrochen, frage erneut …") }
+                        kotlinx.coroutines.delay(retryDelaysMillis[attempt++])
+                    }
+                }
+                _state.update { it.copy(searching = false, result = r, message = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiException) {

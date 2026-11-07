@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.54.2
+
+- **Erste ÖPNV-Suche bricht nicht mehr ab:** Reißt die Verbindung bei einer langen Suche ab (z. B. neue Ziele, Fahrplanauskunft startet kalt), fragt die App nach 5 bzw. 10 Sekunden selbst noch einmal („Verbindung unterbrochen, frage erneut …“) statt sofort „Server nicht erreichbar“ zu melden.
+- **Keine doppelten Kosten (Server):** Dieselbe Suche läuft nur einmal gleichzeitig; eine Wiederholung wartet auf das laufende Ergebnis. „Aktuelle Daten“ nimmt eine Antwort der letzten 10 Minuten aus dem Speicher statt erneut zu bezahlen.
+
 ## 0.54.1
 
 - **Bahnhöfe in der Nähe zuverlässig (Server):** Die ÖPNV-Suche findet die Bahnhöfe um einen Ort jetzt über Google Places (Bahn, U-Bahn, Stadtbahn; japanischer Name für die Fahrplanauskunft, lateinischer für die Anzeige), im Umkreis von 3, dann 10, dann 30 km; ein von Hand eingetragener Bahnhof wird ebenso gefunden. Ergebnisse speichert der Server dauerhaft, jeder Ort kostet also höchstens einmal. Ohne Google-Key oder ohne Treffer hilft weiter OpenStreetMap – dort lieferte die Suche bisher oft nur Bahnsteige und Eingänge statt Bahnhöfen; das ist behoben.
