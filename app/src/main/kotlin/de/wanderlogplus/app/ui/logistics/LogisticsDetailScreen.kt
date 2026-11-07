@@ -115,6 +115,10 @@ fun LogisticsDetailScreen(
     googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
     /** Stays: links the stay's place to a Google entry (null: unlinks). */
     onLinkGoogle: ((placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) -> Unit)? = null,
+    /** Trains: "Andere Fahrt suchen" (a missed train); null hides it. */
+    onReplaceRide: ((trainId: String) -> Unit)? = null,
+    /** Trains: "Passen noch" for seats entered for an earlier ride; null hides it. */
+    onSeatsConfirmed: ((trainId: String) -> Unit)? = null,
 ) {
     val primary = MaterialTheme.colorScheme.primary
     val view = remember(snapshot, type, id, today, primary) { bookingView(snapshot, type, id, today, primary) }
@@ -193,6 +197,11 @@ fun LogisticsDetailScreen(
                 }
             }
             LegActions(snapshot, type, id, journey?.id, onEdit, onJoin, onSplit, onDelete)
+            if (type == EntityType.TRAIN && onReplaceRide != null) {
+                OutlinedButton(onClick = { onReplaceRide(id) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("train-replace")) {
+                    Text("Andere Fahrt suchen")
+                }
+            }
         } else if (type == EntityType.STAY) {
             MoveActions(snapshot, type, id, onEdit, null, onDelete)
             androidx.compose.material3.PrimaryTabRow(selectedTabIndex = stayTab) {
@@ -244,6 +253,15 @@ fun LogisticsDetailScreen(
             val travelClass = train?.travelClass ?: flight?.travelClass
             if (seats.isNotEmpty() || !travelClass.isNullOrBlank()) {
                 SectionLabel("Sitzplätze", color = view.accent)
+                if (train != null && seatsStale(train)) {
+                    Row(Modifier.fillMaxWidth().testTag("train-seats-stale"), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Sitzplätze galten für die alte Fahrt (" + train.seatsForDeparture.orEmpty().substringAfter('T') + ")",
+                            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+                        )
+                        onSeatsConfirmed?.let { ok -> androidx.compose.material3.TextButton(onClick = { ok(train.id) }, modifier = Modifier.testTag("train-seats-ok")) { Text("Passen noch") } }
+                    }
+                }
                 InfoCard { SeatCard(seatModel, travelClass, seats) }
             }
 
@@ -576,3 +594,7 @@ private fun LegActions(
         )
     }
 }
+
+/** Seats entered for an earlier departure of this train (it was replaced by another ride). */
+fun seatsStale(t: de.wanderlogplus.shared.model.Train): Boolean =
+    t.seats.isNotEmpty() && t.seatsForDeparture != null && t.seatsForDeparture != listOfNotNull(t.depart.date, t.depart.time).joinToString("T")

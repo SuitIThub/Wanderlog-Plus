@@ -184,6 +184,8 @@ data class Train(
     val seatMap: String? = null,
     /** When seats can and must be reserved; null: no deadline. */
     val reservation: ReservationWindow? = null,
+    /** The departure ("yyyy-MM-ddTHH:mm") the [seats] were entered for, set when the ride was replaced; null: they fit. */
+    val seatsForDeparture: String? = null,
 )
 
 @Serializable

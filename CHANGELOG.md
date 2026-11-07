@@ -3,6 +3,21 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.54.0
+
+- **Zug verpasst? Andere Fahrt suchen.** An jedem Zug (Detailseite und Reise-Ansicht) gibt es „Andere Fahrt suchen“, auf der Heute-Seite bei der nächsten bzw. laufenden Zugfahrt „Verpasst? Spätere Fahrt“. Die ÖPNV-Suche startet vorbelegt mit derselben Strecke ab der geplanten Abfahrt + 1 Minute (oder jetzt, wenn das später ist); alles bleibt änderbar. Die gewählte Fahrt ersetzt Linie, Zeiten, Gleise und Haltestellen; Buchungsnummer, Notiz und Sitzplätze bleiben. Hat die neue Verbindung mehrere Fahrten, werden daraus Teilstrecken direkt danach. Der Rest der Reise bleibt; knappe Umstiege zeigt die Reise-Ansicht wie gewohnt.
+- **Sitzplätze der alten Fahrt:** Nach dem Umstellen zeigt die Fahrt „Sitzplätze galten für die alte Fahrt (09:55)“ mit „Passen noch“; neu eingetragene Sitzplätze gelten wieder.
+
+## 0.53.0
+
+- **Verbindungen aus der Logistik werden Reisen:** Eine gefundene ÖPNV-Verbindung mit Umstiegen wird beim Speichern eine Reise – jede Fahrt (z. B. Shinkansen, dann Limited Express) eine eigene Teilstrecke mit Linie, Zeiten, Gleisen und Haltestellen; Fußwege und Umstiege zeigt die Reise-Ansicht dazwischen. Das Formular sagt vorher „Wird als Reise mit n Teilstrecken gespeichert“. Beim Bearbeiten eines Zugs bleibt er die erste Teilstrecke (Buchungsnummer, Notiz, Sitzplätze bleiben dort); bei „＋ Teilstrecke“ einer Reise kommen alle Fahrten an diese Stelle. Gesucht im Tagesprogramm, bleibt die Verbindung wie bisher am Weg.
+- **„ÖPNV-Verbindung suchen“** im „Hinzufügen“-Menü der Logistik öffnet direkt die Verbindungssuche.
+
+## 0.52.0
+
+- **ÖPNV-Suche: Orte und Hotels als Start und Ziel.** In „Von“ und „Nach“ erscheinen beim Tippen Vorschläge: zuerst Orte, Unterkünfte und Programmpunkte der Reise, dann Treffer der Ortssuche (Google). Ein gewählter Ort steht als Chip über dem Feld (✕ entfernt ihn); darunter die Bahnhöfe in der Nähe. Ohne weitere Wahl sucht der Server den nächsten Bahnhof und rechnet den Fußweg ein; ein Bahnhof lässt sich antippen oder weiter von Hand eintragen.
+- **Datum und Uhrzeit per Auswahl:** Ein Tipp öffnet einen Kalender bzw. eine 24-Stunden-Uhrzeitauswahl. Behebt, dass sich bei der Uhrzeit kein Doppelpunkt eingeben ließ.
+
 ## 0.51.1
 
 - **Mehrere Regionen recherchieren: richtige Anzeige.** Die Aufträge gingen gleichzeitig an den Server und kamen dort in zufälliger Reihenfolge an; die App folgte dann einem Auftrag, der noch wartete („Ablauf“ zeigte nur „Wartet auf die laufende Recherche …“). Jetzt schickt die App die Aufträge nacheinander in der gewählten Reihenfolge, Statuszeile und „Ablauf“ zeigen die tatsächlich laufende Region.

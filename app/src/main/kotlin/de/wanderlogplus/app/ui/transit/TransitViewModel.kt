@@ -28,6 +28,9 @@ data class TransitForm(
     val useLimitedExpress: Boolean = true,
     val useHighwayBus: Boolean = true,
     val useLocalBus: Boolean = true,
+    /** Where the way starts: a place, hotel or the way's point; the server finds the station nearby (with the walk). */
+    val fromPoint: TransitPoint? = null,
+    val toPoint: TransitPoint? = null,
 )
 
 data class TransitScreenState(
@@ -48,9 +51,9 @@ fun formProblem(f: TransitForm): String? = when {
 }
 
 /** The request for a form: stations by name when filled in, else found near the two places; always fresh data. */
-fun requestFor(f: TransitForm, from: TransitPoint?, to: TransitPoint?): TransitRequest = TransitRequest(
-    from = from,
-    to = to,
+fun requestFor(f: TransitForm): TransitRequest = TransitRequest(
+    from = f.fromPoint,
+    to = f.toPoint,
     fromStation = f.fromStation.trim().ifBlank { null },
     toStation = f.toStation.trim().ifBlank { null },
     datetime = "${f.date.trim()}T${normalizeTime(f.time)}",
@@ -82,9 +85,9 @@ fun transitError(e: ApiException): String = when {
  */
 class TransitViewModel(
     private val api: suspend () -> SyncApi?,
-    /** Where the way starts and ends; null when unknown (the stations are typed in then). */
-    private val from: TransitPoint?,
-    private val to: TransitPoint?,
+    /** Where the way starts and ends at first; null when unknown (a place or station is entered then). */
+    from: TransitPoint?,
+    to: TransitPoint?,
     date: String,
     time: String?,
     chosen: TransitResult?,
@@ -99,6 +102,8 @@ class TransitViewModel(
                 date = chosen?.datetime?.take(10) ?: date,
                 time = chosen?.datetime?.drop(11)?.takeIf { normalizeTime(it) != null } ?: normalizeTime(time) ?: "09:00",
                 searchType = chosen?.searchType ?: searchType,
+                fromPoint = from,
+                toPoint = to,
             ),
         ),
     )
@@ -112,8 +117,9 @@ class TransitViewModel(
     private suspend fun loadStations() {
         val a = api() ?: return
         try {
-            val nf = from?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
-            val nt = to?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
+            val form = _state.value.form
+            val nf = form.fromPoint?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
+            val nt = form.toPoint?.let { a.transitStations(it.lat, it.lng) }.orEmpty()
             _state.update { s ->
                 s.copy(
                     nearFrom = nf,
@@ -133,11 +139,39 @@ class TransitViewModel(
 
     fun edit(change: (TransitForm) -> TransitForm) = _state.update { it.copy(form = change(it.form), message = null) }
 
+    /** A place or hotel as start: its point, no station yet; the stations near it are offered as chips. */
+    fun pickFrom(hit: EndpointHit) {
+        val p = TransitPoint(hit.lat, hit.lng, hit.name)
+        _state.update { it.copy(form = it.form.copy(fromPoint = p, fromStation = ""), nearFrom = emptyList(), message = null) }
+        nearFor(p) { near -> _state.update { s -> if (s.form.fromPoint == p) s.copy(nearFrom = near) else s } }
+    }
+
+    fun pickTo(hit: EndpointHit) {
+        val p = TransitPoint(hit.lat, hit.lng, hit.name)
+        _state.update { it.copy(form = it.form.copy(toPoint = p, toStation = ""), nearTo = emptyList(), message = null) }
+        nearFor(p) { near -> _state.update { s -> if (s.form.toPoint == p) s.copy(nearTo = near) else s } }
+    }
+
+    fun clearFrom() = _state.update { it.copy(form = it.form.copy(fromPoint = null), nearFrom = emptyList()) }
+    fun clearTo() = _state.update { it.copy(form = it.form.copy(toPoint = null), nearTo = emptyList()) }
+
+    private fun nearFor(p: TransitPoint, apply: (List<TransitStationNear>) -> Unit) {
+        viewModelScope.launch {
+            try {
+                apply(api()?.transitStations(p.lat, p.lng).orEmpty())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // No chips: the server still finds the nearest station.
+            }
+        }
+    }
+
     fun search() {
         val form = _state.value.form
         (formProblem(form) ?: when {
-            form.fromStation.isBlank() && from == null -> "Abfahrtsbahnhof eintragen (auf Japanisch, z. B. 京都)."
-            form.toStation.isBlank() && to == null -> "Zielbahnhof eintragen (auf Japanisch, z. B. 奈良)."
+            form.fromStation.isBlank() && form.fromPoint == null -> "Start eintragen (Ort, Hotel oder Bahnhof)."
+            form.toStation.isBlank() && form.toPoint == null -> "Ziel eintragen (Ort, Hotel oder Bahnhof)."
             else -> null
         })?.let { msg -> _state.update { it.copy(message = msg) }; return }
         searching?.cancel()
@@ -145,7 +179,7 @@ class TransitViewModel(
         searching = viewModelScope.launch {
             val a = api() ?: run { _state.update { it.copy(searching = false, message = "Kein Server eingerichtet.") }; return@launch }
             try {
-                val r = a.transitOrThrow(requestFor(form, from, to))
+                val r = a.transitOrThrow(requestFor(form))
                 _state.update { it.copy(searching = false, result = r) }
             } catch (e: CancellationException) {
                 throw e

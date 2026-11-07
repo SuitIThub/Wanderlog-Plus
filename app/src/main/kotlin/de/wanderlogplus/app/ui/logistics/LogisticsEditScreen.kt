@@ -60,6 +60,9 @@ fun logisticsEditRoute(type: EntityType, id: String) = "logistik-edit/${type.nam
 /** Id in an edit route for an entry that does not exist yet ("Hinzufügen"). */
 const val NEW_ID = "new"
 
+/** Id for a new train that starts with the connection search open ("ÖPNV-Verbindung suchen"). */
+const val NEW_WITH_SEARCH = "new|search"
+
 /** Whether an edit-route id stands for a new entry (plain [NEW_ID] or a new leg of a journey, [newLegId]). */
 fun isNewId(id: String) = id == NEW_ID || id.startsWith("$NEW_ID|")
 
@@ -131,32 +134,54 @@ data class MoveDraft(
     /** Seat map chosen by hand; null: found by the number. */
     val seatMap: String? = null,
     val reservation: ReservationDraft = ReservationDraft(),
+    /** Further rides of a picked connection: saved as the next legs of a journey. */
+    val extraRides: List<Train> = emptyList(),
 )
 
+/** "JR Shinkansen Nozomi 15" → ("JR Shinkansen", "Nozomi 15"); lines without a numbered train keep their name. */
+internal fun splitLine(line: String): Pair<String, String?> {
+    val numbered = Regex("""^(.*?)\s*([A-Z][a-z]+ \d+)$""")
+    return numbered.find(line.trim())?.let { m -> m.groupValues[1].trim().ifBlank { line.trim() } to m.groupValues[2] } ?: (line.trim() to null)
+}
+
+/** The rides of a connection named like the form does it (operator part and numbered train). */
+fun namedRides(r: TransitResult): List<Train> = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+
+/** A ride of [de.wanderlogplus.shared.query.TransitRides] named like the form does it: operator part and numbered train. */
+private fun named(t: Train): Train {
+    val (op, nr) = splitLine(t.number.orEmpty())
+    return t.copy(carrier = op.ifBlank { t.carrier }, number = nr)
+}
+
 /**
- * The draft filled from a timetable connection (first route): stations and times of the first and last ride, the
- * changes as stopovers (with the departure there), the lines as operator and the numbered trains ("Nozomi 21") as
- * number. Walks between stations are left out.
+ * The draft filled from a timetable connection (first route): its first ride (stations, times, line as operator and
+ * the numbered train as number). Further rides go to [MoveDraft.extraRides]: saving makes them the next legs of a
+ * journey. Walks between stations are left out. A connection with one ride keeps the whole connection as transit.
  */
 fun draftFromTransit(d: MoveDraft, r: TransitResult): MoveDraft {
-    val route = r.routes.firstOrNull() ?: return d
-    val rides = route.legs.filter { !it.walk }
-    if (rides.isEmpty()) return d
-    val date = route.date.ifBlank { r.datetime.take(10) }.takeIf { it.isNotBlank() }
-    fun Endpoint.at(st: de.wanderlogplus.shared.sync.TransitStation, time: String) =
-        copy(name = st.name.ifBlank { st.nameJa }, code = null, placeId = null, lat = st.lat, lng = st.lng, date = date, time = time.takeIf { it.isNotBlank() })
-    // "JR Shinkansen Nozomi 15" → ("JR Shinkansen", "Nozomi 15"); lines without a numbered train keep their name.
-    val numbered = Regex("""^(.*?)\s*([A-Z][a-z]+ \d+)$""")
-    fun split(line: String): Pair<String, String?> =
-        numbered.find(line.trim())?.let { m -> m.groupValues[1].trim().ifBlank { line.trim() } to m.groupValues[2] } ?: (line.trim() to null)
-    val parts = rides.map { split(it.line.ifBlank { it.lineJa }) }
+    val rides = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+    val first = rides.firstOrNull() ?: return d
+    fun Endpoint.from(e: Endpoint) = copy(name = e.name, code = null, placeId = null, lat = e.lat, lng = e.lng, date = e.date, time = e.time)
     return d.copy(
-        operator = parts.map { it.first }.filter { it.isNotBlank() }.distinct().joinToString(" → ").ifBlank { d.operator },
-        number = parts.mapNotNull { it.second }.distinct().joinToString(" / ").ifBlank { d.number },
-        depart = d.depart.at(rides.first().from, rides.first().departure),
-        via = rides.drop(1).map { Endpoint().at(it.from, it.departure) },
-        arrive = d.arrive.at(rides.last().to, rides.last().arrival),
-        transit = r,
+        operator = first.carrier?.takeIf { it.isNotBlank() } ?: d.operator,
+        number = first.number ?: "",
+        depart = d.depart.from(first.depart),
+        via = emptyList(),
+        arrive = d.arrive.from(first.arrive),
+        transit = if (rides.size == 1) r else first.transit,
+        extraRides = rides.drop(1),
+    )
+}
+
+/** "Wird als Reise mit 3 Teilstrecken gespeichert" when the picked connection has more than one ride. */
+@Composable
+fun TransitJourneyHint(d: MoveDraft, modifier: Modifier = Modifier) {
+    if (d.extraRides.isEmpty()) return
+    Text(
+        "Wird als Reise mit ${d.extraRides.size + 1} Teilstrecken gespeichert",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.testTag("transit-as-journey"),
     )
 }
 
@@ -211,6 +236,8 @@ fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDr
                     seats = d.seats.filter { it.seat.isNotBlank() }.map { it.copy(car = it.car?.trim()?.ifBlank { null }, seat = it.seat.trim(), traveler = it.traveler?.trim()?.ifBlank { null }) },
                     seatMap = d.seatMap,
                     reservation = d.reservation.toWindow(t.reservation),
+                    // Seats entered again are seats for this ride.
+                    seatsForDeparture = if (d.seats != t.seats) null else t.seatsForDeparture,
                 ),
             )
         }
@@ -255,7 +282,8 @@ fun LogisticsEditScreen(
     type: EntityType?,
     id: String,
     onBack: () -> Unit,
-    onSave: (type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>) -> Unit,
+    /** Saves; [extraRides] become the next legs of a journey (a connection with several rides). */
+    onSave: (type: EntityType, id: String, before: Map<String, JsonElement>, after: Map<String, JsonElement>, extraRides: List<Train>) -> Unit,
     search: PlaceSearch?,
     modifier: Modifier = Modifier,
     /** The timetable search for trains ("Verbindung suchen"); null hides it. */
@@ -272,10 +300,10 @@ fun LogisticsEditScreen(
     var draft by remember(type, id) { mutableStateOf(initial) }
     var searching by remember(type, id) { mutableStateOf<SearchTarget?>(null) }
     var error by remember(type, id) { mutableStateOf<String?>(null) }
-    var transitOpen by remember(type, id) { mutableStateOf(false) }
+    var transitOpen by remember(type, id) { mutableStateOf(id == NEW_WITH_SEARCH) }
 
     if (transitOpen && transitApi != null) {
-        TransitPanel(snapshot, draft, transitApi, onPick = { r -> draft = draftFromTransit(draft, r); transitOpen = false }, onCancel = { transitOpen = false }, modifier = modifier)
+        TransitPanel(snapshot, draft, transitApi, search, onPick = { r -> draft = draftFromTransit(draft, r); transitOpen = false }, onCancel = { transitOpen = false }, modifier = modifier)
         return
     }
 
@@ -321,7 +349,7 @@ fun LogisticsEditScreen(
                         error = problem
                     } else {
                         val (before, after) = draftChanges(snapshot, type, id, draft)
-                        onSave(type, id, before, after)
+                        onSave(type, id, before, after, draft.extraRides)
                         onBack()
                     }
                 },
@@ -331,6 +359,7 @@ fun LogisticsEditScreen(
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("edit-error")) }
             if (type == EntityType.TRAIN && transitApi != null) {
+                TransitJourneyHint(draft, Modifier.padding(top = 8.dp))
                 OutlinedButton(onClick = { transitOpen = true }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("edit-transit")) {
                     Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
                     Text(if (draft.transit != null) "Andere Verbindung suchen" else "Verbindung suchen (ÖPNV)")
@@ -501,6 +530,8 @@ private fun TransitPanel(
     snapshot: TripSnapshot,
     draft: MoveDraft,
     api: suspend () -> de.wanderlogplus.client.SyncApi?,
+    /** Place search for start/goal suggestions; null: trip places only. */
+    search: PlaceSearch?,
     onPick: (TransitResult) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier,
@@ -536,5 +567,19 @@ private fun TransitPanel(
         onClear = {},
         onBack = onCancel,
         modifier = modifier,
+        suggest = { q ->
+            val near = (state.form.fromPoint ?: state.form.toPoint)?.let { it.lat to it.lng }
+            val online = if (search != null && q.trim().length >= 3) {
+                try {
+                    search(q, near).map { de.wanderlogplus.app.ui.transit.EndpointHit(it.name, it.detail, it.lat, it.lng, false) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else emptyList()
+            de.wanderlogplus.app.ui.transit.mergeHits(de.wanderlogplus.app.ui.transit.tripEndpointHits(snapshot, q), online)
+        },
+        onPickFrom = vm::pickFrom, onPickTo = vm::pickTo, onClearFrom = vm::clearFrom, onClearTo = vm::clearTo,
     )
 }
