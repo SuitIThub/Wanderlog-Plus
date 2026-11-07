@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.55.0
+
+- **Start und Ziel vor und nach den Bahnhöfen:** Ein Zug kennt jetzt den Ort vor dem ersten Bahnhof (z. B. das Hotel in Tokio) und nach dem letzten (z. B. das Ryokan in Kiso). Wählst du in der ÖPNV-Suche einen Ort statt eines Bahnhofs, wird er beim Übernehmen eingetragen – bei einer Reise an der ersten bzw. letzten Teilstrecke. Im Zug-Formular lassen sich „Start (vor dem Bahnhof)“ und „Ziel (nach dem Bahnhof)“ suchen und entfernen.
+- **Anzeige mit Fußweg:** Detailseite und Reise-Ansicht zeigen „Hotel · ca. 12 Min. zu Fuß zu Shinjuku“ vor dem ersten und „Nakatsugawa · ca. 25 Min. zu Fuß zu Ryokan“ nach dem letzten Bahnhof (Fußweg von Google, sonst geschätzt; weiter weg nur die Entfernung). „Andere Fahrt suchen“ startet dann vom Hotel bzw. sucht bis zum Ryokan.
+
 ## 0.54.2
 
 - **Erste ÖPNV-Suche bricht nicht mehr ab:** Reißt die Verbindung bei einer langen Suche ab (z. B. neue Ziele, Fahrplanauskunft startet kalt), fragt die App nach 5 bzw. 10 Sekunden selbst noch einmal („Verbindung unterbrochen, frage erneut …“) statt sofort „Server nicht erreichbar“ zu melden.

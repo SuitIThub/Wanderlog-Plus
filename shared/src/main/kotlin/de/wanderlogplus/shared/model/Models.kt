@@ -186,6 +186,10 @@ data class Train(
     val reservation: ReservationWindow? = null,
     /** The departure ("yyyy-MM-ddTHH:mm") the [seats] were entered for, set when the ride was replaced; null: they fit. */
     val seatsForDeparture: String? = null,
+    /** The place before the first station (e.g. the hotel), with coordinates; null: starts at the station. */
+    val walkFrom: Endpoint? = null,
+    /** The place after the last station (e.g. the ryokan); null: ends at the station. */
+    val walkTo: Endpoint? = null,
 )
 
 @Serializable

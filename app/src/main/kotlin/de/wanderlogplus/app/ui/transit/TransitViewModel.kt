@@ -31,6 +31,15 @@ data class TransitForm(
     /** Where the way starts: a place, hotel or the way's point; the server finds the station nearby (with the walk). */
     val fromPoint: TransitPoint? = null,
     val toPoint: TransitPoint? = null,
+    /** Whether [fromPoint] is a place (hotel, sight) rather than just the station's position: it becomes the walk start. */
+    val fromIsPlace: Boolean = false,
+    val toIsPlace: Boolean = false,
+)
+
+/** [r] with the places of [f] that are real places (not just stations), for the walk before and after the stations. */
+fun resultWithPlaces(r: TransitResult, f: TransitForm): TransitResult = r.copy(
+    fromPlace = f.fromPoint?.takeIf { f.fromIsPlace && it.name.isNotBlank() },
+    toPlace = f.toPoint?.takeIf { f.toIsPlace && it.name.isNotBlank() },
 )
 
 data class TransitScreenState(
@@ -95,6 +104,9 @@ class TransitViewModel(
     searchType: String = "depart",
     /** Pauses before asking again after a dropped connection (the server finishes and keeps the answer meanwhile). */
     private val retryDelaysMillis: List<Long> = listOf(5_000, 10_000),
+    /** Whether [from]/[to] are places (program item, hotel) rather than station positions. */
+    fromIsPlace: Boolean = true,
+    toIsPlace: Boolean = true,
 ) : ViewModel() {
     private val _state = MutableStateFlow(
         TransitScreenState(
@@ -106,6 +118,8 @@ class TransitViewModel(
                 searchType = chosen?.searchType ?: searchType,
                 fromPoint = from,
                 toPoint = to,
+                fromIsPlace = from != null && fromIsPlace,
+                toIsPlace = to != null && toIsPlace,
             ),
         ),
     )
@@ -144,18 +158,18 @@ class TransitViewModel(
     /** A place or hotel as start: its point, no station yet; the stations near it are offered as chips. */
     fun pickFrom(hit: EndpointHit) {
         val p = TransitPoint(hit.lat, hit.lng, hit.name)
-        _state.update { it.copy(form = it.form.copy(fromPoint = p, fromStation = ""), nearFrom = emptyList(), message = null) }
+        _state.update { it.copy(form = it.form.copy(fromPoint = p, fromStation = "", fromIsPlace = true), nearFrom = emptyList(), message = null) }
         nearFor(p) { near -> _state.update { s -> if (s.form.fromPoint == p) s.copy(nearFrom = near) else s } }
     }
 
     fun pickTo(hit: EndpointHit) {
         val p = TransitPoint(hit.lat, hit.lng, hit.name)
-        _state.update { it.copy(form = it.form.copy(toPoint = p, toStation = ""), nearTo = emptyList(), message = null) }
+        _state.update { it.copy(form = it.form.copy(toPoint = p, toStation = "", toIsPlace = true), nearTo = emptyList(), message = null) }
         nearFor(p) { near -> _state.update { s -> if (s.form.toPoint == p) s.copy(nearTo = near) else s } }
     }
 
-    fun clearFrom() = _state.update { it.copy(form = it.form.copy(fromPoint = null), nearFrom = emptyList()) }
-    fun clearTo() = _state.update { it.copy(form = it.form.copy(toPoint = null), nearTo = emptyList()) }
+    fun clearFrom() = _state.update { it.copy(form = it.form.copy(fromPoint = null, fromIsPlace = false), nearFrom = emptyList()) }
+    fun clearTo() = _state.update { it.copy(form = it.form.copy(toPoint = null, toIsPlace = false), nearTo = emptyList()) }
 
     private fun nearFor(p: TransitPoint, apply: (List<TransitStationNear>) -> Unit) {
         viewModelScope.launch {
@@ -193,7 +207,7 @@ class TransitViewModel(
                         kotlinx.coroutines.delay(retryDelaysMillis[attempt++])
                     }
                 }
-                _state.update { it.copy(searching = false, result = r, message = null) }
+                _state.update { it.copy(searching = false, result = r?.let { res -> resultWithPlaces(res, form) }, message = null) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiException) {

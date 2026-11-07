@@ -136,6 +136,9 @@ fun JourneyScreen(
         )
         de.wanderlogplus.app.maps.RouteMap(remember(snapshot, journey) { de.wanderlogplus.app.maps.routeFor(journey, snapshot) }, accent, height = 160.dp)
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ((journey.legs.first().movement as? Movement.TrainMove)?.train)?.let { t ->
+                t.walkFrom?.let { WalkEndRow(snapshot, it, t.depart, before = true, tag = "walk-from") }
+            }
             InsertSlot(0) { adding = 0 }
             journey.legs.forEachIndexed { i, leg ->
                 LegCard(
@@ -147,6 +150,9 @@ fun JourneyScreen(
                     TransferBlock(snapshot, leg, journey.legs[i + 1], i)
                     InsertSlot(i + 1) { adding = i + 1 }
                 }
+            }
+            ((journey.legs.last().movement as? Movement.TrainMove)?.train)?.let { t ->
+                t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to") }
             }
             InsertSlot(journey.legs.size) { adding = journey.legs.size }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {

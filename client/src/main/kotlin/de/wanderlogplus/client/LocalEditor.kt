@@ -466,9 +466,15 @@ class LocalEditor(
         val after = t.copy(
             carrier = first.carrier, number = first.number, depart = first.depart, via = emptyList(), arrive = first.arrive, transit = first.transit,
             seatsForDeparture = if (t.seats.isNotEmpty() && t.seatsForDeparture == null) oldDeparture else t.seatsForDeparture,
+            // The place before the first station stays; the one after the last moves to the new last ride.
+            walkFrom = first.walkFrom ?: t.walkFrom,
+            walkTo = if (rides.size == 1) first.walkTo ?: t.walkTo else null,
         )
         setChanged(EntityType.TRAIN, trainId, de.wanderlogplus.shared.model.EntityCodec.fields(t), de.wanderlogplus.shared.model.EntityCodec.fields(after))
-        if (rides.size > 1) addRidesAfter(snapshot, trainId, t.journeyId, rides.drop(1))
+        if (rides.size > 1) {
+            val rest = rides.drop(1)
+            addRidesAfter(snapshot, trainId, t.journeyId, rest.dropLast(1) + rest.last().let { it.copy(walkTo = it.walkTo ?: t.walkTo) })
+        }
     }
 
     private fun movementOf(snapshot: TripSnapshot, r: Pair<EntityType, String>): de.wanderlogplus.shared.query.Movement = when (r.first) {

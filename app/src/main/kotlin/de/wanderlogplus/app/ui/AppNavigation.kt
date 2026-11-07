@@ -900,7 +900,7 @@ fun AppNavigation(
                                         override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
                                             val seed = de.wanderlogplus.app.ui.transit.replaceSeed(train)
                                             val (date, time) = de.wanderlogplus.app.ui.transit.replaceStart(train, now)
-                                            return de.wanderlogplus.app.ui.transit.TransitViewModel(api, seed.from, seed.to, date, time, null, "depart").also { v ->
+                                            return de.wanderlogplus.app.ui.transit.TransitViewModel(api, seed.from, seed.to, date, time, null, "depart", fromIsPlace = seed.fromIsPlace, toIsPlace = seed.toIsPlace).also { v ->
                                                 v.edit { f -> f.copy(fromStation = seed.fromStation, toStation = seed.toStation) }
                                             } as T
                                         }

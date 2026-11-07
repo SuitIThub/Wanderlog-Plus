@@ -24,15 +24,27 @@ fun replaceStart(t: Train, now: LocalDateTime): Pair<String, String> {
 }
 
 /** Start and goal of the search for another ride: the stations' points (when known) and their Japanese names. */
-data class ReplaceSeed(val from: TransitPoint?, val to: TransitPoint?, val fromStation: String, val toStation: String)
+data class ReplaceSeed(
+    val from: TransitPoint?,
+    val to: TransitPoint?,
+    val fromStation: String,
+    val toStation: String,
+    /** Whether [from]/[to] are the places before/after the stations (hotel, ryokan) rather than the stations. */
+    val fromIsPlace: Boolean = false,
+    val toIsPlace: Boolean = false,
+)
 
 fun replaceSeed(t: Train): ReplaceSeed {
     val legs = t.transit?.routes?.firstOrNull()?.legs?.filter { !it.walk }.orEmpty()
     fun point(lat: Double?, lng: Double?, name: String) = if (lat != null && lng != null) TransitPoint(lat, lng, name) else null
+    val walkFrom = t.walkFrom?.let { point(it.lat, it.lng, it.name) }
+    val walkTo = t.walkTo?.let { point(it.lat, it.lng, it.name) }
     return ReplaceSeed(
-        point(t.depart.lat, t.depart.lng, t.depart.name),
-        point(t.arrive.lat, t.arrive.lng, t.arrive.name),
+        walkFrom ?: point(t.depart.lat, t.depart.lng, t.depart.name),
+        walkTo ?: point(t.arrive.lat, t.arrive.lng, t.arrive.name),
         legs.firstOrNull()?.from?.nameJa.orEmpty(),
         legs.lastOrNull()?.to?.nameJa.orEmpty(),
+        fromIsPlace = walkFrom != null,
+        toIsPlace = walkTo != null,
     )
 }
