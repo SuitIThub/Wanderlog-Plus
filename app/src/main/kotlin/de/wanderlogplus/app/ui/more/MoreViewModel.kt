@@ -85,6 +85,14 @@ class MoreViewModel(
         }
     }
 
+    /** "Andere Fahrt suchen": the picked connection replaces the ride of train [trainId] (further rides follow it). */
+    fun replaceRide(trainId: String, result: de.wanderlogplus.shared.sync.TransitResult) =
+        write { e, s -> e.replaceRide(s, trainId, de.wanderlogplus.app.ui.logistics.namedRides(result)) }
+
+    /** The seats of [trainId] fit the current ride ("Passen noch"). */
+    fun confirmSeats(trainId: String) =
+        write { e, _ -> e.set(EntityType.TRAIN, trainId, mapOf("seatsForDeparture" to kotlinx.serialization.json.JsonNull)) }
+
     fun moveJourneyLeg(journeyId: String, index: Int, up: Boolean) = write { e, s -> e.moveJourneyLeg(s, journeyId, index, up) }
 
     fun joinJourney(legs: List<Pair<EntityType, String>>) = write { e, s -> if (legs.distinct().size >= 2) e.joinJourney(s, legs) }

@@ -94,6 +94,8 @@ fun TodayScreen(
     onOpenPlace: ((savedPlaceId: String) -> Unit)? = null,
     /** Opens a stay, train or flight (from "Fristen"); null: those rows are not tappable. */
     onOpenLogistics: ((EntityType, String) -> Unit)? = null,
+    /** "Verpasst? Spätere Fahrt" on the next train; null hides it. */
+    onReplaceTrain: ((String) -> Unit)? = null,
 ) {
     val openDeadline: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)? =
         if (onOpenPlace == null && onOpenLogistics == null) null else { t, id ->
@@ -110,6 +112,7 @@ fun TodayScreen(
         if (trip == null || queries == null) TodayState.Unknown
         else TodayQueries(queries, trip, snapshot.stays, snapshot.flights, snapshot.trains).state(now.toLocalDate())
     }
+    androidx.compose.runtime.CompositionLocalProvider(LocalReplaceTrain provides onReplaceTrain) {
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
         is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, openDeadline, modifier)
@@ -119,7 +122,11 @@ fun TodayScreen(
         }
         is TodayState.During -> During(snapshot, state, now, onOpenDay, onOpenAttachment, onOpenLink, available, openDeadline, modifier)
     }
+    }
 }
+
+/** "Verpasst? Spätere Fahrt" for the next train card; null hides it. */
+internal val LocalReplaceTrain = androidx.compose.runtime.staticCompositionLocalOf<((String) -> Unit)?> { null }
 
 /** Before the trip: countdown, then the first departure (once close), the weather of the first day and the deadlines. */
 @Composable
@@ -157,7 +164,7 @@ private fun Before(
             }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            move?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available) }
+            move?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available, onReplaceTrain = LocalReplaceTrain.current) }
             // Within the forecast range: the weather of the first trip day.
             snapshot.trip?.startDate?.let { start -> LocalTripWeather.current?.forDate(start) }?.takeIf { it.isForecast }?.let { w ->
                 Widget("Wetter zum Start", "start-weather", accent = accent) {
@@ -234,7 +241,7 @@ private fun During(
     // The day card already shows a trip that is now or next (with its tickets): no second widget for it.
     val focusMove = ((dayNow.current ?: dayNow.next) as? de.wanderlogplus.shared.query.DayStep.Move)?.movement
     val side: @Composable () -> Unit = {
-        move?.takeIf { it.movement != focusMove }?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available) }
+        move?.takeIf { it.movement != focusMove }?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available, onReplaceTrain = LocalReplaceTrain.current) }
         if (openGuide != null && (dayGuides.isNotEmpty() || (suggestedGuides > 0 && openGuides != null))) {
             TodayGuidesWidget(dayGuides, suggestedGuides, accent, openGuide, openGuides)
         }

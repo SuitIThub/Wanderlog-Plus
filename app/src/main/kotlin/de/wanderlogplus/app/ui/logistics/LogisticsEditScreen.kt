@@ -144,6 +144,9 @@ internal fun splitLine(line: String): Pair<String, String?> {
     return numbered.find(line.trim())?.let { m -> m.groupValues[1].trim().ifBlank { line.trim() } to m.groupValues[2] } ?: (line.trim() to null)
 }
 
+/** The rides of a connection named like the form does it (operator part and numbered train). */
+fun namedRides(r: TransitResult): List<Train> = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+
 /** A ride of [de.wanderlogplus.shared.query.TransitRides] named like the form does it: operator part and numbered train. */
 private fun named(t: Train): Train {
     val (op, nr) = splitLine(t.number.orEmpty())
@@ -233,6 +236,8 @@ fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDr
                     seats = d.seats.filter { it.seat.isNotBlank() }.map { it.copy(car = it.car?.trim()?.ifBlank { null }, seat = it.seat.trim(), traveler = it.traveler?.trim()?.ifBlank { null }) },
                     seatMap = d.seatMap,
                     reservation = d.reservation.toWindow(t.reservation),
+                    // Seats entered again are seats for this ride.
+                    seatsForDeparture = if (d.seats != t.seats) null else t.seatsForDeparture,
                 ),
             )
         }

@@ -454,6 +454,23 @@ class LocalEditor(
         return jid
     }
 
+    /**
+     * "Andere Fahrt suchen": the first of [rides] replaces line, operator, stations, times and connection of train
+     * [trainId] (booking, notes, travellers, class, links and seats stay; seats are marked as entered for the old
+     * departure); further rides follow it in its journey (a new one when it had none). No rides: no change.
+     */
+    fun replaceRide(snapshot: TripSnapshot, trainId: String, rides: List<de.wanderlogplus.shared.model.Train>) {
+        val t = snapshot.trains.firstOrNull { it.id == trainId } ?: return
+        val first = rides.firstOrNull() ?: return
+        val oldDeparture = listOfNotNull(t.depart.date, t.depart.time).joinToString("T")
+        val after = t.copy(
+            carrier = first.carrier, number = first.number, depart = first.depart, via = emptyList(), arrive = first.arrive, transit = first.transit,
+            seatsForDeparture = if (t.seats.isNotEmpty() && t.seatsForDeparture == null) oldDeparture else t.seatsForDeparture,
+        )
+        setChanged(EntityType.TRAIN, trainId, de.wanderlogplus.shared.model.EntityCodec.fields(t), de.wanderlogplus.shared.model.EntityCodec.fields(after))
+        if (rides.size > 1) addRidesAfter(snapshot, trainId, t.journeyId, rides.drop(1))
+    }
+
     private fun movementOf(snapshot: TripSnapshot, r: Pair<EntityType, String>): de.wanderlogplus.shared.query.Movement = when (r.first) {
         EntityType.FLIGHT -> movementOf(snapshot.flights.first { it.id == r.second })
         else -> movementOf(snapshot.trains.first { it.id == r.second })

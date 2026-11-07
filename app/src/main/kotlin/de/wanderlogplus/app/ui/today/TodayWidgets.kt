@@ -307,6 +307,10 @@ private fun FocusStep(
             }
             Text(s.movement.timesLine() + (s.movement.platform()?.let { " · $it" } ?: ""), style = MaterialTheme.typography.bodyMedium)
             TicketChips(snapshot.attachmentsFor(s.movement.targetType(), s.movement.id()), onOpenAttachment, available)
+            val replace = LocalReplaceTrain.current
+            (s.movement as? Movement.TrainMove)?.train?.let { t ->
+                if (replace != null) androidx.compose.material3.TextButton(onClick = { replace(t.id) }, modifier = Modifier.testTag("today-replace")) { Text("Verpasst? Spätere Fahrt") }
+            }
         }
         is DayStep.Note -> Text(stepName(s), style = MaterialTheme.typography.titleMedium)
     }
@@ -388,6 +392,8 @@ internal fun NextTripWidget(
     onOpenAttachment: (Attachment) -> Unit,
     available: (String) -> Boolean,
     modifier: Modifier = Modifier,
+    /** "Verpasst? Spätere Fahrt" for a train; null hides it. */
+    onReplaceTrain: ((String) -> Unit)? = null,
 ) {
     val underway = move.departs <= now
     val minutes = ChronoUnit.MINUTES.between(now, move.departs)
@@ -431,6 +437,10 @@ internal fun NextTripWidget(
             }
         }
         TicketChips(snapshot.attachmentsFor(move.movement.targetType(), move.movement.id()), onOpenAttachment, available)
+        val train = (move.movement as? Movement.TrainMove)?.train
+        if (train != null && onReplaceTrain != null) {
+            androidx.compose.material3.TextButton(onClick = { onReplaceTrain(train.id) }, modifier = Modifier.testTag("today-replace")) { Text("Verpasst? Spätere Fahrt") }
+        }
         // Part of a journey: what comes next and the change.
         val journey = androidx.compose.runtime.remember(snapshot, move) { de.wanderlogplus.client.journeyOf(snapshot, move.movement.targetType(), move.movement.id()) }
         journey?.let { j ->

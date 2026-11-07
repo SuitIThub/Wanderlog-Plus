@@ -150,7 +150,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
-            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE)
             MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
@@ -428,6 +428,8 @@ fun AppNavigation(
             LogisticsDetailScreen(
                 snap, type, id,
                 onBack = onBack,
+                onReplaceRide = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
+                onSeatsConfirmed = vm::confirmSeats,
                 attachments = attachmentActions,
                 onOpenLink = onOpenLink,
                 today = rememberMinuteNow(clock).toLocalDate().toString(),
@@ -460,6 +462,7 @@ fun AppNavigation(
                 onDissolve = { j -> vm.dissolveJourney(j); onBack?.invoke() },
                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
                 onMoveLeg = { i, up -> vm.moveJourneyLeg(journeyId, i, up) },
+                onReplaceRide = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
             )
         }
 
@@ -557,6 +560,7 @@ fun AppNavigation(
                                 available = attachmentActions?.available ?: { true },
                                 onOpenPlace = { id -> nav.navigateToTab(Tab.ORTE); nav.navigate(placeRoute(id)) },
                                 onOpenLogistics = { t, id -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(t, id)) },
+                                onReplaceTrain = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
                             )
                             }
                         }
@@ -873,6 +877,50 @@ fun AppNavigation(
                             } else {
                                 LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch, transitApi = transitApi)
                             }
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val id = entry.arguments?.getString("id").orEmpty()
+                    val api = transitApi
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        val train = s?.trains?.firstOrNull { it.id == id }
+                        if (s == null || train == null || api == null) {
+                            EmptyHint("Diese Fahrt gibt es nicht mehr.", Modifier.padding(24.dp))
+                        } else {
+                            val now = rememberMinuteNow(clock)
+                            val tvm: de.wanderlogplus.app.ui.transit.TransitViewModel = viewModel(
+                                key = "replace-$id",
+                                factory = remember(id) {
+                                    object : androidx.lifecycle.ViewModelProvider.Factory {
+                                        @Suppress("UNCHECKED_CAST")
+                                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                            val seed = de.wanderlogplus.app.ui.transit.replaceSeed(train)
+                                            val (date, time) = de.wanderlogplus.app.ui.transit.replaceStart(train, now)
+                                            return de.wanderlogplus.app.ui.transit.TransitViewModel(api, seed.from, seed.to, date, time, null, "depart").also { v ->
+                                                v.edit { f -> f.copy(fromStation = seed.fromStation, toStation = seed.toStation) }
+                                            } as T
+                                        }
+                                    }
+                                },
+                            )
+                            val state by tvm.state.collectAsState()
+                            de.wanderlogplus.app.ui.transit.TransitScreen(
+                                title = "Andere Fahrt: ${train.depart.name} → ${train.arrive.name}",
+                                state = state,
+                                accent = MaterialTheme.colorScheme.primary,
+                                chosen = null,
+                                onEdit = tvm::edit,
+                                onSearch = tvm::search,
+                                onChoose = { r -> vm.replaceRide(id, r); nav.popBackStack() },
+                                onClear = {},
+                                onBack = { nav.popBackStack() },
+                                suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
+                                onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                            )
                         }
                     }
                 }

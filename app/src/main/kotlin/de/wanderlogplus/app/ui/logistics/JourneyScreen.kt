@@ -108,6 +108,8 @@ fun JourneyScreen(
     onOpenAttachment: (Attachment) -> Unit = {},
     /** Moves the leg at an index one up or down; null hides the arrows. */
     onMoveLeg: ((index: Int, up: Boolean) -> Unit)? = null,
+    /** "Andere Fahrt" on a train leg; null hides it. */
+    onReplaceRide: ((trainId: String) -> Unit)? = null,
 ) {
     val journey = remember(snapshot, journeyId) { journeys(snapshot).firstOrNull { it.id == journeyId } }
     val accent = MaterialTheme.colorScheme.primary
@@ -139,6 +141,7 @@ fun JourneyScreen(
                 LegCard(
                     snapshot, leg, i, journey.legs.size, onOpen = { onOpenLeg(leg.type, leg.id) }, onLeave = { onLeave(leg.type, leg.id) },
                     onOpenAttachment = onOpenAttachment, onMove = onMoveLeg?.let { move -> { up: Boolean -> move(i, up) } },
+                    onReplace = onReplaceRide?.let { r -> { r(leg.id) } },
                 )
                 if (i < journey.legs.lastIndex) {
                     TransferBlock(snapshot, leg, journey.legs[i + 1], i)
@@ -212,6 +215,7 @@ private fun LegCard(
     onLeave: () -> Unit,
     onOpenAttachment: (Attachment) -> Unit,
     onMove: ((up: Boolean) -> Unit)?,
+    onReplace: (() -> Unit)? = null,
 ) {
     Card(
         onClick = onOpen,
@@ -258,6 +262,9 @@ private fun LegCard(
                     }
                 }
                 Spacer(Modifier.weight(1f))
+                if (onReplace != null && leg.movement is Movement.TrainMove) {
+                    TextButton(onClick = onReplace, modifier = Modifier.testTag("journey-replace-${leg.id}")) { Text("Andere Fahrt") }
+                }
                 TextButton(onClick = onLeave, modifier = Modifier.testTag("journey-leg-$index-leave")) { Text("Aus Reise entfernen") }
             }
         }
