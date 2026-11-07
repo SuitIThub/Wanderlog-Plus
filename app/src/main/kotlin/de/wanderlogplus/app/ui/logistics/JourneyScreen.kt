@@ -110,6 +110,8 @@ fun JourneyScreen(
     onMoveLeg: ((index: Int, up: Boolean) -> Unit)? = null,
     /** "Andere Fahrt" on a train leg; null hides it. */
     onReplaceRide: ((trainId: String) -> Unit)? = null,
+    /** "Verbindung ändern" for the whole journey (trains only); null hides it. */
+    onChangeJourney: (() -> Unit)? = null,
 ) {
     val journey = remember(snapshot, journeyId) { journeys(snapshot).firstOrNull { it.id == journeyId } }
     val accent = MaterialTheme.colorScheme.primary
@@ -155,6 +157,9 @@ fun JourneyScreen(
                 t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to") }
             }
             InsertSlot(journey.legs.size) { adding = journey.legs.size }
+            if (onChangeJourney != null && de.wanderlogplus.app.ui.transit.canChangeJourney(journey)) {
+                OutlinedButton(onClick = onChangeJourney, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("journey-change")) { Text("Verbindung ändern") }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 OutlinedButton(onClick = { picking = true }, modifier = Modifier.testTag("journey-add-existing")) { Text("Vorhandene Fahrt hinzufügen") }
                 TextButton(onClick = { confirmDissolve = true }, modifier = Modifier.testTag("journey-dissolve")) { Text("Reise auflösen") }

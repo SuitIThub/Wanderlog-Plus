@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.56.0
+
+- **Ganze Reise ändern:** Eine Reise aus Zügen hat „Verbindung ändern“. Die ÖPNV-Suche startet vom Start der ersten Teilstrecke (bzw. vom Hotel davor) zum Ziel der letzten (bzw. dem Ryokan danach), zur ersten Abfahrt. Die gewählte Verbindung ersetzt alle Teilstrecken: die erste behält Buchung, Notiz und Sitzplätze (mit Hinweis, falls sie nicht mehr passen), überzählige alte Teilstrecken werden entfernt, zusätzliche Fahrten kommen dazu. Reisen mit einem Flug bieten das nicht an.
+
 ## 0.55.0
 
 - **Start und Ziel vor und nach den Bahnhöfen:** Ein Zug kennt jetzt den Ort vor dem ersten Bahnhof (z. B. das Hotel in Tokio) und nach dem letzten (z. B. das Ryokan in Kiso). Wählst du in der ÖPNV-Suche einen Ort statt eines Bahnhofs, wird er beim Übernehmen eingetragen – bei einer Reise an der ersten bzw. letzten Teilstrecke. Im Zug-Formular lassen sich „Start (vor dem Bahnhof)“ und „Ziel (nach dem Bahnhof)“ suchen und entfernen.

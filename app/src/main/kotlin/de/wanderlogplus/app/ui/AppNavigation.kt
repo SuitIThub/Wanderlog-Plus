@@ -150,7 +150,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
-            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE, de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE)
             MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
@@ -463,6 +463,7 @@ fun AppNavigation(
                 onOpenAttachment = { a -> attachmentActions?.onOpen?.invoke(a) },
                 onMoveLeg = { i, up -> vm.moveJourneyLeg(journeyId, i, up) },
                 onReplaceRide = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
+                onChangeJourney = transitApi?.let { { nav.navigate(de.wanderlogplus.app.ui.transit.journeyChangeRoute(journeyId)) } },
             )
         }
 
@@ -877,6 +878,49 @@ fun AppNavigation(
                             } else {
                                 LogisticsEditScreen(s, type, id, onBack = { nav.popBackStack() }, onSave = vm::saveFields, search = placeSearch, transitApi = transitApi)
                             }
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val jid = entry.arguments?.getString("id").orEmpty()
+                    val api = transitApi
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        val journey = s?.let { de.wanderlogplus.client.journeys(it).firstOrNull { j -> j.id == jid } }
+                        if (s == null || journey == null || api == null || !de.wanderlogplus.app.ui.transit.canChangeJourney(journey)) {
+                            EmptyHint("Diese Reise lässt sich nicht als Verbindung ändern.", Modifier.padding(24.dp))
+                        } else {
+                            val tvm: de.wanderlogplus.app.ui.transit.TransitViewModel = viewModel(
+                                key = "journey-change-$jid",
+                                factory = remember(jid) {
+                                    object : androidx.lifecycle.ViewModelProvider.Factory {
+                                        @Suppress("UNCHECKED_CAST")
+                                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                                            val c = de.wanderlogplus.app.ui.transit.journeyChangeSeed(journey)
+                                            return de.wanderlogplus.app.ui.transit.TransitViewModel(
+                                                api, c.seed.from, c.seed.to, c.date, c.time, null, "depart",
+                                                fromIsPlace = c.seed.fromIsPlace, toIsPlace = c.seed.toIsPlace,
+                                            ).also { v -> v.edit { f -> f.copy(fromStation = c.seed.fromStation, toStation = c.seed.toStation) } } as T
+                                        }
+                                    }
+                                },
+                            )
+                            val state by tvm.state.collectAsState()
+                            de.wanderlogplus.app.ui.transit.TransitScreen(
+                                title = "Verbindung ändern: ${journey.first.depart.name} → ${journey.last.arrive.name}",
+                                state = state,
+                                accent = MaterialTheme.colorScheme.primary,
+                                chosen = null,
+                                onEdit = tvm::edit,
+                                onSearch = tvm::search,
+                                onChoose = { r -> vm.replaceJourney(jid, r); nav.popBackStack() },
+                                onClear = {},
+                                onBack = { nav.popBackStack() },
+                                suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
+                                onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                            )
                         }
                     }
                 }
