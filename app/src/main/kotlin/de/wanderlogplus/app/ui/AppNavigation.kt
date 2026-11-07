@@ -664,6 +664,8 @@ fun AppNavigation(
                                 onChoose = { r -> vm.setLegTransit(date, itemId, r); nav.popBackStack() },
                                 onClear = { vm.setLegTransit(date, itemId, null) },
                                 onBack = { nav.popBackStack() },
+                                suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
+                                onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
                             )
                         }
                     }

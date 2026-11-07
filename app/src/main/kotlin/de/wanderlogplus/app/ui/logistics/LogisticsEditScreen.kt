@@ -275,7 +275,7 @@ fun LogisticsEditScreen(
     var transitOpen by remember(type, id) { mutableStateOf(false) }
 
     if (transitOpen && transitApi != null) {
-        TransitPanel(snapshot, draft, transitApi, onPick = { r -> draft = draftFromTransit(draft, r); transitOpen = false }, onCancel = { transitOpen = false }, modifier = modifier)
+        TransitPanel(snapshot, draft, transitApi, search, onPick = { r -> draft = draftFromTransit(draft, r); transitOpen = false }, onCancel = { transitOpen = false }, modifier = modifier)
         return
     }
 
@@ -501,6 +501,8 @@ private fun TransitPanel(
     snapshot: TripSnapshot,
     draft: MoveDraft,
     api: suspend () -> de.wanderlogplus.client.SyncApi?,
+    /** Place search for start/goal suggestions; null: trip places only. */
+    search: PlaceSearch?,
     onPick: (TransitResult) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier,
@@ -536,5 +538,19 @@ private fun TransitPanel(
         onClear = {},
         onBack = onCancel,
         modifier = modifier,
+        suggest = { q ->
+            val near = (state.form.fromPoint ?: state.form.toPoint)?.let { it.lat to it.lng }
+            val online = if (search != null && q.trim().length >= 3) {
+                try {
+                    search(q, near).map { de.wanderlogplus.app.ui.transit.EndpointHit(it.name, it.detail, it.lat, it.lng, false) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            } else emptyList()
+            de.wanderlogplus.app.ui.transit.mergeHits(de.wanderlogplus.app.ui.transit.tripEndpointHits(snapshot, q), online)
+        },
+        onPickFrom = vm::pickFrom, onPickTo = vm::pickTo, onClearFrom = vm::clearFrom, onClearTo = vm::clearTo,
     )
 }

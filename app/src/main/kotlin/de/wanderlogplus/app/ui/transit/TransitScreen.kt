@@ -28,6 +28,11 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -63,6 +68,12 @@ fun TransitScreen(
     onClear: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Suggestions (trip places, then online hits) for what is typed into Von/Nach; null: none. */
+    suggest: EndpointSearch? = null,
+    onPickFrom: (EndpointHit) -> Unit = {},
+    onPickTo: (EndpointHit) -> Unit = {},
+    onClearFrom: () -> Unit = {},
+    onClearTo: () -> Unit = {},
 ) {
     val f = state.form
     Column(modifier.fillMaxSize().imePadding().testTag("transit-screen")) {
@@ -83,11 +94,11 @@ fun TransitScreen(
                 OutlinedButton(onClick = onClear, modifier = Modifier.testTag("transit-clear")) { Text("Auswahl entfernen (wieder automatisch)") }
             }
 
-            SectionLabel("Bahnhöfe", color = accent)
-            StationField("Von", f.fromStation, state.nearFrom, "transit-from") { v -> onEdit { it.copy(fromStation = v) } }
-            StationField("Nach", f.toStation, state.nearTo, "transit-to") { v -> onEdit { it.copy(toStation = v) } }
+            SectionLabel("Start und Ziel", color = accent)
+            StationField("Von", f.fromStation, f.fromPoint, state.nearFrom, "transit-from", suggest, onPickFrom, onClearFrom) { v -> onEdit { it.copy(fromStation = v) } }
+            StationField("Nach", f.toStation, f.toPoint, state.nearTo, "transit-to", suggest, onPickTo, onClearTo) { v -> onEdit { it.copy(toStation = v) } }
             Text(
-                "In Japan auf Japanisch (z. B. 京都), in Deutschland der Name (z. B. Hannover Kröpcke) – DB, üstra und Nahverkehr inklusive. Leer lassen: der nächste Bahnhof wird gesucht.",
+                "Ort oder Hotel suchen und wählen – der nächste Bahnhof samt Fußweg wird gefunden, oder einen Bahnhof darunter antippen. Bahnhöfe auch von Hand: in Japan auf Japanisch (z. B. 京都), in Deutschland der Name (z. B. Hannover Kröpcke).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -147,10 +158,50 @@ fun TransitScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StationField(label: String, value: String, near: List<TransitStationNear>, tag: String, onChange: (String) -> Unit) {
+private fun StationField(
+    label: String,
+    value: String,
+    point: de.wanderlogplus.shared.sync.TransitPoint?,
+    near: List<TransitStationNear>,
+    tag: String,
+    suggest: EndpointSearch?,
+    onPick: (EndpointHit) -> Unit,
+    onClear: () -> Unit,
+    onChange: (String) -> Unit,
+) {
+    var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var hits by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<List<EndpointHit>>(emptyList()) }
+    androidx.compose.runtime.LaunchedEffect(value, typed) {
+        val q = value.trim()
+        if (!typed || suggest == null || q.isEmpty()) { hits = emptyList(); return@LaunchedEffect }
+        // Online hits cost a request: wait until typing pauses.
+        kotlinx.coroutines.delay(if (q.length >= 3) 600 else 150)
+        hits = try { suggest(q).take(8) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { emptyList() }
+    }
     SurfaceCard {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(value, onChange, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(tag))
+            if (point != null && point.name.isNotBlank()) {
+                androidx.compose.material3.InputChip(
+                    selected = true, onClick = onClear,
+                    label = { Text(point.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = { Icon(androidx.compose.material.icons.Icons.Filled.Close, contentDescription = "Entfernen", modifier = Modifier.size(18.dp).testTag("$tag-place-clear")) },
+                    modifier = Modifier.testTag("$tag-place"),
+                )
+            }
+            OutlinedTextField(
+                value, { v -> typed = true; onChange(v) },
+                label = { Text(if (point != null) "$label (Bahnhof, optional)" else "$label (Ort, Hotel oder Bahnhof)") },
+                singleLine = true, modifier = Modifier.fillMaxWidth().testTag(tag),
+            )
+            hits.forEachIndexed { i, h ->
+                Column(
+                    Modifier.fillMaxWidth().clickable { typed = false; hits = emptyList(); onPick(h) }.padding(vertical = 6.dp).testTag("$tag-hit-$i"),
+                ) {
+                    Text(h.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (h.detail.isNotBlank()) Text(h.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
             if (near.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     near.forEachIndexed { i, n ->
