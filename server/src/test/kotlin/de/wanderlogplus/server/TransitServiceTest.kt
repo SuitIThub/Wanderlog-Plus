@@ -99,11 +99,45 @@ class TransitServiceTest {
         assertEquals(1, inputs.size)
         s.search(req.copy(useShinkansen = false))
         assertEquals(2, inputs.size)
+        // "fresh" takes an answer of the last 10 minutes; older ones are asked again.
+        s.search(req.copy(fresh = true))
+        assertEquals(2, inputs.size)
+        clock = clock.plus(java.time.Duration.ofMinutes(11))
         s.search(req.copy(fresh = true))
         assertEquals(3, inputs.size)
         clock = clock.plus(TransitService.TTL).plusSeconds(60)
         s.search(req)
         assertEquals(4, inputs.size)
+    }
+
+    @Test fun sameSearchRunsOnce() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val slow = TransitSource { input -> synchronized(inputs) { inputs += input }; started.countDown(); release.await(); status to body }
+        val s = service(slow)
+        val req = TransitRequest(from = tokyo, to = nakatsugawa, datetime = "2027-05-20T08:00", fresh = true)
+        val first = java.util.concurrent.CompletableFuture.supplyAsync { s.search(req) }
+        started.await()
+        val second = java.util.concurrent.CompletableFuture.supplyAsync { s.search(req) }
+        Thread.sleep(200)
+        release.countDown()
+        assertEquals(first.get(5, java.util.concurrent.TimeUnit.SECONDS).routes.size, second.get(5, java.util.concurrent.TimeUnit.SECONDS).routes.size)
+        assertEquals(1, inputs.size)
+    }
+
+    @Test fun failedSearchReleasesWaiters() {
+        val started = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val failing = TransitSource { _ -> started.countDown(); release.await(); 500 to "" }
+        val s = service(failing)
+        val req = TransitRequest(from = tokyo, to = nakatsugawa, datetime = "2027-05-20T08:00", fresh = true)
+        val first = java.util.concurrent.CompletableFuture.supplyAsync { runCatching { s.search(req) }.exceptionOrNull() }
+        started.await()
+        val second = java.util.concurrent.CompletableFuture.supplyAsync { runCatching { s.search(req) }.exceptionOrNull() }
+        Thread.sleep(200)
+        release.countDown()
+        assertTrue(first.get(5, java.util.concurrent.TimeUnit.SECONDS) is TransitUnavailable)
+        assertTrue(second.get(5, java.util.concurrent.TimeUnit.SECONDS) is TransitUnavailable)
     }
 
     @Test fun givenStationNamesAreUsedAndAMismatchIsReported() {

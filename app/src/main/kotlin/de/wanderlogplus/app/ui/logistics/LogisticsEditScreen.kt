@@ -136,6 +136,9 @@ data class MoveDraft(
     val reservation: ReservationDraft = ReservationDraft(),
     /** Further rides of a picked connection: saved as the next legs of a journey. */
     val extraRides: List<Train> = emptyList(),
+    /** Trains: the place before the first station / after the last one (hotel, ryokan); null: none. */
+    val walkFrom: Endpoint? = null,
+    val walkTo: Endpoint? = null,
 )
 
 /** "JR Shinkansen Nozomi 15" → ("JR Shinkansen", "Nozomi 15"); lines without a numbered train keep their name. */
@@ -144,8 +147,21 @@ internal fun splitLine(line: String): Pair<String, String?> {
     return numbered.find(line.trim())?.let { m -> m.groupValues[1].trim().ifBlank { line.trim() } to m.groupValues[2] } ?: (line.trim() to null)
 }
 
-/** The rides of a connection named like the form does it (operator part and numbered train). */
-fun namedRides(r: TransitResult): List<Train> = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+/**
+ * The rides of a connection named like the form does it (operator part and numbered train); the places the search
+ * started and ended at (not just stations) become the walk before the first and after the last ride.
+ */
+fun namedRides(r: TransitResult): List<Train> {
+    val rides = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+    if (rides.isEmpty()) return rides
+    fun de.wanderlogplus.shared.sync.TransitPoint.endpoint() = Endpoint(name = name, lat = lat, lng = lng)
+    return rides.mapIndexed { i, t ->
+        t.copy(
+            walkFrom = if (i == 0) r.fromPlace?.endpoint() else null,
+            walkTo = if (i == rides.lastIndex) r.toPlace?.endpoint() else null,
+        )
+    }
+}
 
 /** A ride of [de.wanderlogplus.shared.query.TransitRides] named like the form does it: operator part and numbered train. */
 private fun named(t: Train): Train {
@@ -159,7 +175,7 @@ private fun named(t: Train): Train {
  * journey. Walks between stations are left out. A connection with one ride keeps the whole connection as transit.
  */
 fun draftFromTransit(d: MoveDraft, r: TransitResult): MoveDraft {
-    val rides = de.wanderlogplus.shared.query.TransitRides.ridesOf(r).map(::named)
+    val rides = namedRides(r)
     val first = rides.firstOrNull() ?: return d
     fun Endpoint.from(e: Endpoint) = copy(name = e.name, code = null, placeId = null, lat = e.lat, lng = e.lng, date = e.date, time = e.time)
     return d.copy(
@@ -170,6 +186,8 @@ fun draftFromTransit(d: MoveDraft, r: TransitResult): MoveDraft {
         arrive = d.arrive.from(first.arrive),
         transit = if (rides.size == 1) r else first.transit,
         extraRides = rides.drop(1),
+        walkFrom = first.walkFrom ?: d.walkFrom,
+        walkTo = if (rides.size == 1) first.walkTo ?: d.walkTo else null,
     )
 }
 
@@ -203,7 +221,7 @@ fun draftOf(snapshot: TripSnapshot, type: EntityType, id: String): MoveDraft? = 
     isNewId(id) && (type == EntityType.TRAIN || type == EntityType.FLIGHT) ->
         parseNewLeg(id)?.let { (_, prev, next) -> newLegDraft(snapshot, prev, next) } ?: MoveDraft("", "", Endpoint(), emptyList(), Endpoint())
     type == EntityType.TRAIN -> snapshot.trains.firstOrNull { it.id == id }?.let {
-        MoveDraft(it.carrier.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, it.transit, it.travelClass.orEmpty(), it.seats, it.seatMap, it.reservation.toDraft())
+        MoveDraft(it.carrier.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, it.transit, it.travelClass.orEmpty(), it.seats, it.seatMap, it.reservation.toDraft(), walkFrom = it.walkFrom, walkTo = it.walkTo)
     }
     type == EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.let {
         MoveDraft(it.airline.orEmpty(), it.number.orEmpty(), it.depart, it.via, it.arrive, it.confirmationNumber.orEmpty(), it.note, null, it.travelClass.orEmpty(), it.seats, it.seatMap, it.reservation.toDraft())
@@ -238,6 +256,8 @@ fun draftChanges(snapshot: TripSnapshot, type: EntityType, id: String, d: MoveDr
                     reservation = d.reservation.toWindow(t.reservation),
                     // Seats entered again are seats for this ride.
                     seatsForDeparture = if (d.seats != t.seats) null else t.seatsForDeparture,
+                    walkFrom = d.walkFrom?.takeIf { it.name.isNotBlank() },
+                    walkTo = d.walkTo?.takeIf { it.name.isNotBlank() },
                 ),
             )
         }
@@ -269,6 +289,8 @@ private sealed interface SearchTarget {
     data object Arrive : SearchTarget
     data class Via(val index: Int) : SearchTarget
     data object NewVia : SearchTarget
+    data object WalkFrom : SearchTarget
+    data object WalkTo : SearchTarget
 }
 
 /**
@@ -320,6 +342,8 @@ fun LogisticsEditScreen(
                     SearchTarget.Arrive -> draft.copy(arrive = draft.arrive.with(p))
                     is SearchTarget.Via -> draft.copy(via = draft.via.mapIndexed { i, e -> if (i == target.index) e.with(p) else e })
                     SearchTarget.NewVia -> draft.copy(via = draft.via + Endpoint(name = p.name, lat = p.lat, lng = p.lng, date = draft.depart.date))
+                    SearchTarget.WalkFrom -> draft.copy(walkFrom = Endpoint(name = p.name, lat = p.lat, lng = p.lng))
+                    SearchTarget.WalkTo -> draft.copy(walkTo = Endpoint(name = p.name, lat = p.lat, lng = p.lng))
                 }
                 searching = null
             },
@@ -416,6 +440,10 @@ fun LogisticsEditScreen(
 
             SectionLabel(if (type == EntityType.FLIGHT) "Landung" else "Ankunft")
             EndpointFields("arrive", draft.arrive, { draft = draft.copy(arrive = it) }, search?.let { { searching = SearchTarget.Arrive } })
+            if (type == EntityType.TRAIN) {
+                WalkEndField("Start (vor dem Bahnhof)", draft.walkFrom, "edit-walk-from", search?.let { { searching = SearchTarget.WalkFrom } }) { draft = draft.copy(walkFrom = null) }
+                WalkEndField("Ziel (nach dem Bahnhof)", draft.walkTo, "edit-walk-to", search?.let { { searching = SearchTarget.WalkTo } }) { draft = draft.copy(walkTo = null) }
+            }
 
             SectionLabel("Buchung")
             OutlinedTextField(
@@ -537,8 +565,9 @@ private fun TransitPanel(
     modifier: Modifier,
 ) {
     fun point(e: Endpoint) = e.coords(snapshot)?.let { de.wanderlogplus.shared.sync.TransitPoint(it.lat, it.lng, e.name) }
-    val from = point(draft.depart)
-    val to = point(draft.arrive)
+    // The hotel/ryokan before and after the stations when known (places), else the stations themselves.
+    val from = draft.walkFrom?.let(::point) ?: point(draft.depart)
+    val to = draft.walkTo?.let(::point) ?: point(draft.arrive)
     val date = draft.depart.date?.takeIf { it.isNotBlank() } ?: java.time.LocalDate.now().toString()
     val vm: de.wanderlogplus.app.ui.transit.TransitViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
         key = "edit-transit-${draft.depart.name}-${draft.arrive.name}-$date",
@@ -551,6 +580,8 @@ private fun TransitPanel(
                         draft.depart.time ?: draft.arrive.time, draft.transit,
                         // Only a time to be there (e.g. before a flight): search by arrival.
                         searchType = if (draft.depart.time.isNullOrBlank() && !draft.arrive.time.isNullOrBlank()) "arrive" else "depart",
+                        fromIsPlace = draft.walkFrom != null,
+                        toIsPlace = draft.walkTo != null,
                     ) as T
             }
         },

@@ -3,6 +3,20 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.56.0
+
+- **Ganze Reise ändern:** Eine Reise aus Zügen hat „Verbindung ändern“. Die ÖPNV-Suche startet vom Start der ersten Teilstrecke (bzw. vom Hotel davor) zum Ziel der letzten (bzw. dem Ryokan danach), zur ersten Abfahrt. Die gewählte Verbindung ersetzt alle Teilstrecken: die erste behält Buchung, Notiz und Sitzplätze (mit Hinweis, falls sie nicht mehr passen), überzählige alte Teilstrecken werden entfernt, zusätzliche Fahrten kommen dazu. Reisen mit einem Flug bieten das nicht an.
+
+## 0.55.0
+
+- **Start und Ziel vor und nach den Bahnhöfen:** Ein Zug kennt jetzt den Ort vor dem ersten Bahnhof (z. B. das Hotel in Tokio) und nach dem letzten (z. B. das Ryokan in Kiso). Wählst du in der ÖPNV-Suche einen Ort statt eines Bahnhofs, wird er beim Übernehmen eingetragen – bei einer Reise an der ersten bzw. letzten Teilstrecke. Im Zug-Formular lassen sich „Start (vor dem Bahnhof)“ und „Ziel (nach dem Bahnhof)“ suchen und entfernen.
+- **Anzeige mit Fußweg:** Detailseite und Reise-Ansicht zeigen „Hotel · ca. 12 Min. zu Fuß zu Shinjuku“ vor dem ersten und „Nakatsugawa · ca. 25 Min. zu Fuß zu Ryokan“ nach dem letzten Bahnhof (Fußweg von Google, sonst geschätzt; weiter weg nur die Entfernung). „Andere Fahrt suchen“ startet dann vom Hotel bzw. sucht bis zum Ryokan.
+
+## 0.54.2
+
+- **Erste ÖPNV-Suche bricht nicht mehr ab:** Reißt die Verbindung bei einer langen Suche ab (z. B. neue Ziele, Fahrplanauskunft startet kalt), fragt die App nach 5 bzw. 10 Sekunden selbst noch einmal („Verbindung unterbrochen, frage erneut …“) statt sofort „Server nicht erreichbar“ zu melden.
+- **Keine doppelten Kosten (Server):** Dieselbe Suche läuft nur einmal gleichzeitig; eine Wiederholung wartet auf das laufende Ergebnis. „Aktuelle Daten“ nimmt eine Antwort der letzten 10 Minuten aus dem Speicher statt erneut zu bezahlen.
+
 ## 0.54.1
 
 - **Bahnhöfe in der Nähe zuverlässig (Server):** Die ÖPNV-Suche findet die Bahnhöfe um einen Ort jetzt über Google Places (Bahn, U-Bahn, Stadtbahn; japanischer Name für die Fahrplanauskunft, lateinischer für die Anzeige), im Umkreis von 3, dann 10, dann 30 km; ein von Hand eingetragener Bahnhof wird ebenso gefunden. Ergebnisse speichert der Server dauerhaft, jeder Ort kostet also höchstens einmal. Ohne Google-Key oder ohne Treffer hilft weiter OpenStreetMap – dort lieferte die Suche bisher oft nur Bahnsteige und Eingänge statt Bahnhöfen; das ist behoben.

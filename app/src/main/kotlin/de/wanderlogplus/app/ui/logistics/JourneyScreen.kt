@@ -110,6 +110,8 @@ fun JourneyScreen(
     onMoveLeg: ((index: Int, up: Boolean) -> Unit)? = null,
     /** "Andere Fahrt" on a train leg; null hides it. */
     onReplaceRide: ((trainId: String) -> Unit)? = null,
+    /** "Verbindung ändern" for the whole journey (trains only); null hides it. */
+    onChangeJourney: (() -> Unit)? = null,
 ) {
     val journey = remember(snapshot, journeyId) { journeys(snapshot).firstOrNull { it.id == journeyId } }
     val accent = MaterialTheme.colorScheme.primary
@@ -136,6 +138,9 @@ fun JourneyScreen(
         )
         de.wanderlogplus.app.maps.RouteMap(remember(snapshot, journey) { de.wanderlogplus.app.maps.routeFor(journey, snapshot) }, accent, height = 160.dp)
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            ((journey.legs.first().movement as? Movement.TrainMove)?.train)?.let { t ->
+                t.walkFrom?.let { WalkEndRow(snapshot, it, t.depart, before = true, tag = "walk-from") }
+            }
             InsertSlot(0) { adding = 0 }
             journey.legs.forEachIndexed { i, leg ->
                 LegCard(
@@ -148,7 +153,13 @@ fun JourneyScreen(
                     InsertSlot(i + 1) { adding = i + 1 }
                 }
             }
+            ((journey.legs.last().movement as? Movement.TrainMove)?.train)?.let { t ->
+                t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to") }
+            }
             InsertSlot(journey.legs.size) { adding = journey.legs.size }
+            if (onChangeJourney != null && de.wanderlogplus.app.ui.transit.canChangeJourney(journey)) {
+                OutlinedButton(onClick = onChangeJourney, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("journey-change")) { Text("Verbindung ändern") }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 OutlinedButton(onClick = { picking = true }, modifier = Modifier.testTag("journey-add-existing")) { Text("Vorhandene Fahrt hinzufügen") }
                 TextButton(onClick = { confirmDissolve = true }, modifier = Modifier.testTag("journey-dissolve")) { Text("Reise auflösen") }

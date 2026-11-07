@@ -173,14 +173,46 @@ class TransitService(
         val (toStation, toMeters) = station(req.toStation, req.to, finder)
         if (plain(fromStation.nameJa) == plain(toStation.nameJa)) throw NoRoute() // same station: a walk
         val key = cacheKey(req, fromStation.nameJa, toStation.nameJa)
-        if (!req.fresh) {
-            store.cachedRoute(key)?.let { (json, createdAt) ->
-                if (Instant.ofEpochMilli(createdAt).plus(TTL).isAfter(now())) {
-                    if (json == "{}") throw NoRoute()
-                    return JSON.decodeFromString(TransitResult.serializer(), json)
-                }
+        // "fresh" still takes an answer of the last minutes: a search the app lost to a dropped connection is not paid twice.
+        val maxAge = if (req.fresh) FRESH_WINDOW else TTL
+        store.cachedRoute(key)?.let { (json, createdAt) ->
+            if (Instant.ofEpochMilli(createdAt).plus(maxAge).isAfter(now())) {
+                if (json == "{}") throw NoRoute()
+                return JSON.decodeFromString(TransitResult.serializer(), json)
             }
         }
+        // The same search asked again while it runs waits for that run instead of starting another one.
+        val mine = java.util.concurrent.CompletableFuture<TransitResult>()
+        val running = inFlight.putIfAbsent(key, mine)
+        if (running != null) {
+            return try {
+                running.get()
+            } catch (e: java.util.concurrent.ExecutionException) {
+                throw e.cause ?: e
+            }
+        }
+        return try {
+            fetch(req, src, finder, fromStation, toStation, fromMeters, toMeters, key).also { mine.complete(it) }
+        } catch (e: Throwable) {
+            mine.completeExceptionally(e)
+            throw e
+        } finally {
+            inFlight.remove(key, mine)
+        }
+    }
+
+    private val inFlight = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<TransitResult>>()
+
+    private fun fetch(
+        req: TransitRequest,
+        src: TransitSource,
+        finder: StationFinder,
+        fromStation: TransitStation,
+        toStation: TransitStation,
+        fromMeters: Int?,
+        toMeters: Int?,
+        key: String,
+    ): TransitResult {
         val (status, body) = src.run(actorInput(req, fromStation.nameJa, toStation.nameJa))
         when {
             status == 401 || status == 403 -> throw TransitUnavailable("transit_key_rejected")
@@ -329,6 +361,9 @@ class TransitService(
 
     companion object {
         val TTL: Duration = Duration.ofDays(7)
+
+        /** How old an answer may be for a "fresh" search (a retry after a dropped connection). */
+        val FRESH_WINDOW: Duration = Duration.ofMinutes(10)
         const val SAME_STATION_KM = 5.0
         private val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = true }
         private val DATETIME = Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}""")

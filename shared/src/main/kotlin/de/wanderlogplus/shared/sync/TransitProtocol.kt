@@ -95,6 +95,10 @@ data class TransitResult(
     val walkToStationMeters: Int? = null,
     val walkFromStationMeters: Int? = null,
     val stationWarning: String? = null,
+    /** The place the search started at (hotel, sight …) when it was not just a station; set by the app. */
+    val fromPlace: TransitPoint? = null,
+    /** The place the search went to when it was not just a station; set by the app. */
+    val toPlace: TransitPoint? = null,
 )
 
 /** Stations near a point, nearest first (`GET /api/transit/stations`). */

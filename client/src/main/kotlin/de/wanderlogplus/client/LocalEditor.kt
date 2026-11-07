@@ -466,9 +466,35 @@ class LocalEditor(
         val after = t.copy(
             carrier = first.carrier, number = first.number, depart = first.depart, via = emptyList(), arrive = first.arrive, transit = first.transit,
             seatsForDeparture = if (t.seats.isNotEmpty() && t.seatsForDeparture == null) oldDeparture else t.seatsForDeparture,
+            // The place before the first station stays; the one after the last moves to the new last ride.
+            walkFrom = first.walkFrom ?: t.walkFrom,
+            walkTo = if (rides.size == 1) first.walkTo ?: t.walkTo else null,
         )
         setChanged(EntityType.TRAIN, trainId, de.wanderlogplus.shared.model.EntityCodec.fields(t), de.wanderlogplus.shared.model.EntityCodec.fields(after))
-        if (rides.size > 1) addRidesAfter(snapshot, trainId, t.journeyId, rides.drop(1))
+        if (rides.size > 1) {
+            val rest = rides.drop(1)
+            addRidesAfter(snapshot, trainId, t.journeyId, rest.dropLast(1) + rest.last().let { it.copy(walkTo = it.walkTo ?: t.walkTo) })
+        }
+    }
+
+    /**
+     * "Verbindung ändern" for a whole journey of trains: the first leg becomes the first of [rides] (as in
+     * [replaceRide]: booking, notes and seats stay), the other old legs are deleted and the further rides follow. The
+     * place before the first and after the last station carry over. A journey with a flight, or no rides: no change.
+     */
+    fun replaceJourney(snapshot: TripSnapshot, journeyId: String, rides: List<de.wanderlogplus.shared.model.Train>) {
+        val j = journeys(snapshot).firstOrNull { it.id == journeyId } ?: return
+        if (rides.isEmpty() || j.legs.any { it.type != EntityType.TRAIN }) return
+        val old = j.legs.mapNotNull { l -> snapshot.trains.firstOrNull { it.id == l.id } }
+        val first = old.firstOrNull() ?: return
+        val removed = old.drop(1).map { it.id }.toSet()
+        val lastWalk = old.last().walkTo
+        val newRides = rides.dropLast(1) + rides.last().let { it.copy(walkTo = it.walkTo ?: lastWalk) }
+        tx.run { removed.forEach { write(EntityType.TRAIN, it, mapOf("deleted" to JsonPrimitive(true))) } }
+        val rest = snapshot.copy(trains = snapshot.trains.filterNot { it.id in removed })
+        replaceRide(rest, first.id, newRides)
+        // A single ride is no journey any more.
+        if (newRides.size == 1) set(EntityType.TRAIN, first.id, mapOf("journeyId" to JsonNull, "journeyOrder" to JsonNull))
     }
 
     private fun movementOf(snapshot: TripSnapshot, r: Pair<EntityType, String>): de.wanderlogplus.shared.query.Movement = when (r.first) {

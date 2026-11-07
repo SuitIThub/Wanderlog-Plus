@@ -240,6 +240,10 @@ fun LogisticsDetailScreen(
                 )
             }
             SectionLabel("Details", color = view.accent)
+            if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id }?.let { t ->
+                t.walkFrom?.let { WalkEndRow(snapshot, it, t.depart, before = true, tag = "walk-from", modifier = Modifier.padding(bottom = 6.dp)) }
+                t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to", modifier = Modifier.padding(bottom = 6.dp)) }
+            }
             InfoCard {
                 view.details.forEach { (label, value) -> DetailRow(label, value) }
                 if (view.liveStatus && type == EntityType.FLIGHT) FlightLiveCard(id)
