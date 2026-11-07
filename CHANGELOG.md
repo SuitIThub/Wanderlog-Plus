@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.53.0
+
+- **Verbindungen aus der Logistik werden Reisen:** Eine gefundene ÖPNV-Verbindung mit Umstiegen wird beim Speichern eine Reise – jede Fahrt (z. B. Shinkansen, dann Limited Express) eine eigene Teilstrecke mit Linie, Zeiten, Gleisen und Haltestellen; Fußwege und Umstiege zeigt die Reise-Ansicht dazwischen. Das Formular sagt vorher „Wird als Reise mit n Teilstrecken gespeichert“. Beim Bearbeiten eines Zugs bleibt er die erste Teilstrecke (Buchungsnummer, Notiz, Sitzplätze bleiben dort); bei „＋ Teilstrecke“ einer Reise kommen alle Fahrten an diese Stelle. Gesucht im Tagesprogramm, bleibt die Verbindung wie bisher am Weg.
+- **„ÖPNV-Verbindung suchen“** im „Hinzufügen“-Menü der Logistik öffnet direkt die Verbindungssuche.
+
 ## 0.52.0
 
 - **ÖPNV-Suche: Orte und Hotels als Start und Ziel.** In „Von“ und „Nach“ erscheinen beim Tippen Vorschläge: zuerst Orte, Unterkünfte und Programmpunkte der Reise, dann Treffer der Ortssuche (Google). Ein gewählter Ort steht als Chip über dem Feld (✕ entfernt ihn); darunter die Bahnhöfe in der Nähe. Ohne weitere Wahl sucht der Server den nächsten Bahnhof und rechnet den Fußweg ein; ein Bahnhof lässt sich antippen oder weiter von Hand eintragen.

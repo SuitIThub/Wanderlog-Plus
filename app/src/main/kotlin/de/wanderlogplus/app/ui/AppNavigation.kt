@@ -821,6 +821,7 @@ fun AppNavigation(
                                             onOpen = { e -> selected = "${e.type.name}/${e.id}" },
                                             today = rememberMinuteNow(clock).toLocalDate().toString(),
                                             onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
+                                            onAddTransit = { nav.navigate(logisticsEditRoute(EntityType.TRAIN, de.wanderlogplus.app.ui.logistics.NEW_WITH_SEARCH)) },
                                             onOpenJourney = { j -> selected = "JOURNEY/$j" },
                                         )
                                     },
@@ -838,6 +839,7 @@ fun AppNavigation(
                                 onOpen = { e -> nav.navigate(logisticsDetailRoute(e.type, e.id)) },
                                 today = rememberMinuteNow(clock).toLocalDate().toString(),
                                 onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
+                                            onAddTransit = { nav.navigate(logisticsEditRoute(EntityType.TRAIN, de.wanderlogplus.app.ui.logistics.NEW_WITH_SEARCH)) },
                                 onOpenJourney = { j -> nav.navigate(de.wanderlogplus.app.ui.logistics.journeyRoute(j)) },
                             )
                         }

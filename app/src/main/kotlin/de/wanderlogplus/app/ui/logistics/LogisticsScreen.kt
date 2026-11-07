@@ -58,6 +58,7 @@ import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Flight
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
+import androidx.compose.material.icons.filled.Search
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.sync.EntityType
 import java.time.LocalDate
@@ -190,6 +191,8 @@ fun LogisticsScreen(
     today: String? = null,
     /** "Hinzufügen" for a train, flight or stay; null hides the button. */
     onAdd: ((EntityType) -> Unit)? = null,
+    /** "ÖPNV-Verbindung suchen": a new train with the connection search open; null hides it. */
+    onAddTransit: (() -> Unit)? = null,
     /** Opens a journey (several legs); null opens its first leg. */
     onOpenJourney: ((String) -> Unit)? = null,
 ) {
@@ -220,6 +223,13 @@ fun LogisticsScreen(
                             leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Train, contentDescription = null) },
                             modifier = Modifier.testTag("logistics-add-train"),
                         )
+                        if (onAddTransit != null) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("ÖPNV-Verbindung suchen") }, onClick = { menu = false; onAddTransit() },
+                                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
+                                modifier = Modifier.testTag("logistics-add-transit"),
+                            )
+                        }
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text("Flug") }, onClick = { menu = false; onAdd(EntityType.FLIGHT) },
                             leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Flight, contentDescription = null) },

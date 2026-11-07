@@ -211,7 +211,7 @@ class RoutesAndLegsTest {
             WanderlogPlusTheme {
                 LogisticsEditScreen(
                     snap, EntityType.TRAIN, "tr-1", onBack = {},
-                    onSave = { _, _, _, after -> saved = after },
+                    onSave = { _, _, _, after, _ -> saved = after },
                     search = { _, _ -> listOf(hit) },
                 )
             }

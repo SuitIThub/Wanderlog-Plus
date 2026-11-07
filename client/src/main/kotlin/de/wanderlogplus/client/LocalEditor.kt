@@ -415,6 +415,45 @@ class LocalEditor(
         return jid
     }
 
+    /**
+     * Adds [rides] (trains of one timetable connection, ids ignored) right after the train [anchorId] in one journey:
+     * [anchorJourney] (else a new one). The anchor keeps its place, or goes between [prev]/[next] when it is a new leg.
+     * Writes journeyId and the order of every leg. No rides: no change. Returns the journey id.
+     */
+    fun addRidesAfter(
+        snapshot: TripSnapshot,
+        anchorId: String,
+        anchorJourney: String?,
+        rides: List<de.wanderlogplus.shared.model.Train>,
+        prev: Pair<EntityType, String>? = null,
+        next: Pair<EntityType, String>? = null,
+    ): String {
+        if (rides.isEmpty()) return anchorJourney.orEmpty()
+        val anchor = EntityType.TRAIN to anchorId
+        val jid = anchorJourney?.takeIf { it.isNotBlank() } ?: Ids.newId()
+        val existing = journeys(snapshot).firstOrNull { it.id == jid }?.legs?.map { it.type to it.id }.orEmpty()
+        val order = existing.filter { it != anchor }.toMutableList()
+        val at = when {
+            prev != null && prev in order -> order.indexOf(prev) + 1
+            next != null && next in order -> order.indexOf(next)
+            anchor in existing -> existing.indexOf(anchor)
+            else -> order.size
+        }
+        order.add(at.coerceIn(0, order.size), anchor)
+        tx.run {
+            write(EntityType.TRAIN, anchorId, mapOf("journeyId" to JsonPrimitive(jid)))
+            var pos = order.indexOf(anchor) + 1
+            rides.forEach { r ->
+                val id = Ids.newId()
+                writeNew(EntityType.TRAIN, id, de.wanderlogplus.shared.model.EntityCodec.fields(r.copy(id = id, journeyId = jid, journeyOrder = null)))
+                order.add(pos++, EntityType.TRAIN to id)
+            }
+            writeOrder(order)
+        }
+        onChange()
+        return jid
+    }
+
     private fun movementOf(snapshot: TripSnapshot, r: Pair<EntityType, String>): de.wanderlogplus.shared.query.Movement = when (r.first) {
         EntityType.FLIGHT -> movementOf(snapshot.flights.first { it.id == r.second })
         else -> movementOf(snapshot.trains.first { it.id == r.second })

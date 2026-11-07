@@ -59,17 +59,19 @@ class LogisticsManageTest {
 
     @Test fun aConnectionFillsTheTrain() {
         val d = draftFromTransit(MoveDraft("", "", Endpoint(), emptyList(), Endpoint()), connection)
-        assertEquals("JR Shinkansen → JR Ltd. Exp.", d.operator)
-        assertEquals("Nozomi 21 / Shinano 7", d.number)
+        // Two rides: the first fills the train, the second waits to become the next leg of a journey.
+        assertEquals("JR Shinkansen", d.operator)
+        assertEquals("Nozomi 21", d.number)
         assertEquals(Endpoint("Kyoto", lat = 34.98, lng = 135.75, date = "2027-05-22", time = "08:12"), d.depart)
-        assertEquals(listOf(Endpoint("Nagoya", date = "2027-05-22", time = "09:00")), d.via)
-        assertEquals("10:05", d.arrive.time)
-        assertEquals(connection, d.transit)
+        assertTrue(d.via.isEmpty())
+        assertEquals("08:47", d.arrive.time)
+        assertEquals("Shinano 7", d.extraRides.single().number)
+        assertEquals("10:05", d.extraRides.single().arrive.time)
 
         // A new train: no "before", every field "after".
         val (before, after) = draftChanges(snapshot, EntityType.TRAIN, NEW_ID, d.copy(bookingNumber = " XY9 ", note = "Wagen 7"))
         assertTrue(before.isEmpty())
-        assertEquals("Nozomi 21 / Shinano 7", after.getValue("number").jsonPrimitive.content)
+        assertEquals("Nozomi 21", after.getValue("number").jsonPrimitive.content)
         assertEquals("XY9", after.getValue("confirmationNumber").jsonPrimitive.content)
         val train = Train("x", number = "Nozomi 21", transit = connection)
         assertEquals("Gleis 14", train.platformText())
@@ -108,7 +110,7 @@ class LogisticsManageTest {
         var saved: Triple<String, Map<String, JsonElement>, Map<String, JsonElement>>? = null
         rule.setContent {
             WanderlogPlusTheme {
-                LogisticsEditScreen(snapshot, EntityType.TRAIN, NEW_ID, onBack = {}, onSave = { _, id, b, a -> saved = Triple(id, b, a) }, search = null)
+                LogisticsEditScreen(snapshot, EntityType.TRAIN, NEW_ID, onBack = {}, onSave = { _, id, b, a, _ -> saved = Triple(id, b, a) }, search = null)
             }
         }
         rule.onNodeWithText("Neue Fahrt").assertIsDisplayed()
