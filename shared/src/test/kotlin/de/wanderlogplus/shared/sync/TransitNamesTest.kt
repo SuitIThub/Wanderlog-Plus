@@ -18,6 +18,8 @@ class TransitNamesTest {
         // Hiroshima's tram.
         assertEquals("Hiroden Miyajima-Linie", TransitNames.line("広島電鉄宮島線"))
         assertEquals("Hiroden (Straßenbahn)", TransitNames.line("広島電鉄路面電車"))
+        // Seen in a real answer (Hiroshima, May 2027): numbered tram lines.
+        assertEquals("Hiroden Linie 6", TransitNames.line("広島電鉄６号線"))
     }
 
     @Test fun headsignsAndFees() {

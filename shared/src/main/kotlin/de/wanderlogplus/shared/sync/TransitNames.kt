@@ -57,6 +57,8 @@ object TransitNames {
         for ((ja, en) in TRAINS.entries.sortedByDescending { it.key.length }) {
             s = s.replace(Regex(Regex.escape(ja) + "(\\d+)号")) { "$en ${it.groupValues[1]} " }.replace(ja, "$en ")
         }
+        // "６号線" is a numbered line (Hiroshima's trams), not a numbered train.
+        s = s.replace(Regex("(\\d+)号線")) { " Linie ${it.groupValues[1]} " }
         s = s.replace(Regex("(\\d+)号")) { "${it.groupValues[1]} " }
         for ((ja, en) in LINES) s = s.replace(ja, " $en ")
         for ((ja, en) in WORDS) s = s.replace(ja, " $en ")
