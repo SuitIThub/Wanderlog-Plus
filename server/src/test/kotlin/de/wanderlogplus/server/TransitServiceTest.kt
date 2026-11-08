@@ -144,6 +144,16 @@ class TransitServiceTest {
         assertEquals(139.6176, stops[1].lng)
     }
 
+    @Test fun slowStopLookupsDoNotHoldTheAnswer() {
+        val slow = object : StationFinder by finder {
+            override fun point(nameJa: String, lat: Double, lng: Double): TransitStation? { Thread.sleep(3_000); return TransitStation(nameJa, "", 35.6, 139.7) }
+        }
+        val started = System.currentTimeMillis()
+        val r = TransitService(store, source, slow, stopTimeoutMillis = 300) { clock }.search(TransitRequest(from = tokyo, to = nakatsugawa, datetime = "2027-05-20T08:00"))
+        assertTrue(System.currentTimeMillis() - started < 2_500, "answer waited for the stops")
+        assertTrue(r.routes.first().legs.first().stops.all { it.lat == null })
+    }
+
     @Test fun samePrefectureNeedsNoSecondAsk() {
         val kyoto = TransitStation("京都", "Kyoto", 34.985, 135.758, prefecture = "京都府")
         val local = object : StationFinder {

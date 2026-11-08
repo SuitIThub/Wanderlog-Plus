@@ -154,6 +154,8 @@ class TransitService(
     private val stations: StationFinder?,
     /** Connections outside Japan (Germany: DB, üstra …); null: Japan only. */
     private val elsewhere: TransitousSource? = null,
+    /** Locating the stops for the map waits at most this long; the answer must not wait for the map. */
+    private val stopTimeoutMillis: Long = 15_000,
     private val now: () -> Instant = Instant::now,
 ) {
     val configured: Boolean get() = source != null && stations != null
@@ -442,8 +444,9 @@ class TransitService(
         if (wanted.isEmpty()) return routes
         val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(STOP_THREADS, wanted.size))
         val found: Map<Ask, TransitStation?> = try {
-            pool.invokeAll(wanted.map { w -> java.util.concurrent.Callable { runCatching { finder.point(w.name, w.lat, w.lng) }.getOrNull() } })
-                .map { it.get() }.let { wanted.zip(it).toMap() }
+            // Stops not found in time stay without a position (the next search finds them in the store).
+            pool.invokeAll(wanted.map { w -> java.util.concurrent.Callable { runCatching { finder.point(w.name, w.lat, w.lng) }.getOrNull() } }, stopTimeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .map { f -> runCatching { f.get() }.getOrNull() }.let { wanted.zip(it).toMap() }
         } finally {
             pool.shutdownNow()
         }
