@@ -169,8 +169,110 @@ class TransitService(
         val src = source ?: throw TransitNotConfigured()
         val finder = stations ?: throw TransitNotConfigured()
         validate(req)
+        val smartFrom = req.smart && req.fromStation.isNullOrBlank() && req.from != null
+        val smartTo = req.smart && req.toStation.isNullOrBlank() && req.to != null
+        if (smartFrom || smartTo) return smartSearch(req, src, finder, smartFrom, smartTo)
         val (fromStation, fromMeters) = station(req.fromStation, req.from, finder)
         val (toStation, toMeters) = station(req.toStation, req.to, finder)
+        return searchPair(req, src, finder, fromStation, fromMeters, toStation, toMeters)
+    }
+
+    /**
+     * Smart search: up to [SMART_FROM] stations within [SMART_RADIUS_M] of the start place and [SMART_TO] of the goal,
+     * at most [SMART_PAIRS] pairs (nearest first), asked at the same time; each with the walk added to the time. The
+     * connections are ranked by door-to-door minutes + 5 per change + half the walking.
+     */
+    private fun smartSearch(req: TransitRequest, src: TransitSource, finder: StationFinder, smartFrom: Boolean, smartTo: Boolean): TransitResult {
+        fun candidates(smart: Boolean, name: String?, at: TransitPoint?, max: Int): List<Pair<TransitStation, Int?>> {
+            if (smart && at != null) {
+                val near = try { finder.near(at.lat, at.lng, 8) } catch (e: GeocoderUnavailable) { throw TransitUnavailable("stations_unavailable") }
+                    .filter { it.meters <= SMART_RADIUS_M }.distinctBy { plain(it.station.nameJa) }.take(max)
+                if (near.isNotEmpty()) return near.map { it.station to it.meters }
+            }
+            return listOf(station(name, at, finder))
+        }
+        val starts = candidates(smartFrom, req.fromStation, req.from, SMART_FROM)
+        val goals = candidates(smartTo, req.toStation, req.to, SMART_TO)
+        val pairs = starts.flatMap { a -> goals.map { b -> a to b } }
+            .filter { (a, b) -> plain(a.first.nameJa) != plain(b.first.nameJa) }
+            .sortedBy { (a, b) -> (a.second ?: 0) + (b.second ?: 0) }
+            .take(SMART_PAIRS)
+        if (pairs.isEmpty()) throw NoRoute()
+        val wanted = java.time.LocalDateTime.parse(req.datetime)
+        val arrive = req.searchType == "arrive"
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(SMART_PAIRS, pairs.size))
+        val outcomes = try {
+            pool.invokeAll(
+                pairs.map { (a, b) ->
+                    java.util.concurrent.Callable {
+                        val access = walkMinutes(a.second)
+                        val egress = walkMinutes(b.second)
+                        val at = if (arrive) wanted.minusMinutes(egress.toLong()) else wanted.plusMinutes(access.toLong())
+                        val pairReq = req.copy(datetime = at.format(MINUTE), smart = false)
+                        runCatching { searchPair(pairReq, src, finder, a.first, a.second, b.first, b.second) }
+                    }
+                },
+            ).map { it.get() }
+        } finally {
+            pool.shutdownNow()
+        }
+        val found = pairs.zip(outcomes).mapNotNull { (pair, r) -> r.getOrNull()?.let { pair to it } }
+        if (found.isEmpty()) {
+            val errors = outcomes.mapNotNull { it.exceptionOrNull() }
+            throw errors.firstOrNull { it !is NoRoute } ?: errors.firstOrNull() ?: NoRoute()
+        }
+        val scored = found.flatMap { (pair, result) ->
+            val (a, b) = pair
+            val access = walkMinutes(a.second)
+            val egress = walkMinutes(b.second)
+            result.routes.map { route ->
+                val door = doorMinutes(route, wanted, arrive, access, egress)
+                result to route.copy(
+                    accessMeters = a.second, accessMinutes = access, egressMeters = b.second, egressMinutes = egress,
+                    doorMinutes = door, score = (door ?: 0) + CHANGE_PENALTY * route.transfers + ((access + egress) / 2.0).roundToInt(),
+                )
+            }
+        }.distinctBy { (_, r) -> listOf(r.date, r.departure, r.arrival, r.legs.joinToString { it.lineJa + it.from.nameJa }).joinToString("|") }
+        val order = when (req.preference) {
+            "cheapest" -> compareBy<Pair<TransitResult, TransitRoute>>({ it.second.fareYen }, { it.second.score })
+            "fewest_transfers" -> compareBy({ it.second.transfers }, { it.second.score })
+            else -> compareBy { it.second.score }
+        }
+        val ranked = scored.sortedWith(order).take(SMART_SHOWN)
+        val (bestResult, bestRoute) = ranked.first()
+        return bestResult.copy(
+            datetime = req.datetime,
+            routes = ranked.mapIndexed { i, (_, r) -> r.copy(best = i == 0) },
+            walkToStationMeters = bestRoute.accessMeters,
+            walkFromStationMeters = bestRoute.egressMeters,
+            smart = true,
+        )
+    }
+
+    /** Door to door: "Abfahrt um" until at the goal's door, "Ankunft bis" from leaving the start's door. */
+    private fun doorMinutes(r: TransitRoute, wanted: java.time.LocalDateTime, arrive: Boolean, access: Int, egress: Int): Int? {
+        val date = try { java.time.LocalDate.parse(r.date) } catch (e: Exception) { return null }
+        val dep = try { java.time.LocalTime.parse(r.departure.take(5)) } catch (e: Exception) { return null }
+        val arr = try { java.time.LocalTime.parse(r.arrival.take(5)) } catch (e: Exception) { return null }
+        val depAt = date.atTime(dep)
+        val arrAt = date.atTime(arr).let { if (arr < dep) it.plusDays(1) else it }
+        return if (arrive) {
+            java.time.Duration.between(depAt.minusMinutes(access.toLong()), wanted).toMinutes().toInt()
+        } else {
+            java.time.Duration.between(wanted, arrAt.plusMinutes(egress.toLong())).toMinutes().toInt()
+        }
+    }
+
+    /** One station pair (named stations), with the store, the shared run and the prefecture fix. */
+    private fun searchPair(
+        req: TransitRequest,
+        src: TransitSource,
+        finder: StationFinder,
+        fromStation: TransitStation,
+        fromMeters: Int?,
+        toStation: TransitStation,
+        toMeters: Int?,
+    ): TransitResult {
         if (plain(fromStation.nameJa) == plain(toStation.nameJa)) throw NoRoute() // same station: a walk
         val key = cacheKey(req, fromStation.nameJa, toStation.nameJa)
         // "fresh" still takes an answer of the last minutes: a search the app lost to a dropped connection is not paid twice.
@@ -388,6 +490,21 @@ class TransitService(
 
     companion object {
         val TTL: Duration = Duration.ofDays(7)
+
+        /** Smart search: stations in walking distance, how many at start and goal, pairs asked, connections shown. */
+        const val SMART_RADIUS_M = 1500
+        const val SMART_FROM = 4
+        const val SMART_TO = 2
+        const val SMART_PAIRS = 6
+        const val SMART_SHOWN = 5
+
+        /** Minutes added per change when ranking smart results. */
+        const val CHANGE_PENALTY = 5
+
+        private val MINUTE = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")
+
+        /** Walk for a straight-line distance: 1.3 for the detours, 80 m per minute, rounded up; none without a distance. */
+        fun walkMinutes(meters: Int?): Int = if (meters == null || meters <= 0) 0 else kotlin.math.ceil(meters * 1.3 / 80).toInt()
 
         /** How old an answer may be for a "fresh" search (a retry after a dropped connection). */
         val FRESH_WINDOW: Duration = Duration.ofMinutes(10)
