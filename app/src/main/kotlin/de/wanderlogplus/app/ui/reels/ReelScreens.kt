@@ -188,7 +188,8 @@ fun ReelJobScreen(
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    if (!c.onRoute) Badge(BadgeSpec("abseits", BadgeTone.Warning))
+                                    if (c.savedPlaceId != null) Badge(BadgeSpec("bereits gespeichert", BadgeTone.Neutral))
+                                    else if (!c.onRoute) Badge(BadgeSpec("abseits", BadgeTone.Warning))
                                     c.worth?.let { Badge(BadgeSpec(worthLabel(it), worthTone(it))) }
                                 }
                                 if (c.description.isNotBlank()) Text(c.description, style = MaterialTheme.typography.bodyMedium)
@@ -206,7 +207,7 @@ fun ReelJobScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                 }
-                                if (!importable(c)) {
+                                if (!importable(c) && c.savedPlaceId == null) {
                                     Text(missingPositionText(c), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("reel-no-position-$i"))
                                     if (onFindPosition != null && !imported) {
                                         androidx.compose.material3.OutlinedButton(onClick = { onFindPosition(i) }, modifier = Modifier.testTag("reel-find-position-$i")) {

@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.60.0
+
+- **Reel-Import erkennt gespeicherte Orte:** Ist ein im Reel gefundener Ort schon in deinen Orten (gleicher Google-Eintrag oder ähnlicher Name in höchstens 300 m), überspringt der Server die Recherche. In der Auswertung steht er als „bereits gespeichert“ und wird nicht noch einmal übernommen.
+
 ## 0.59.0
 
 - **Durch die Orte wischen:** Auf der Detailseite eines Orts das Titelbild nach links oder rechts wischen, um zum nächsten bzw. vorigen Ort derselben Region zu springen (Reihenfolge wie in der Regionsliste).

@@ -27,7 +27,22 @@ import kotlin.math.sqrt
 data class Anchor(val name: String, val lat: Double, val lng: Double)
 
 /** What the assistant knows about the trip: regions (city names) and anchors. No booking data. */
-data class TripContext(val regionNames: List<String>, val anchors: List<Anchor>) {
+/** A saved place of the trip, for spotting reel places that are already saved. */
+data class SavedRef(val savedPlaceId: String, val name: String, val lat: Double, val lng: Double, val googlePlaceId: String = "")
+
+data class TripContext(val regionNames: List<String>, val anchors: List<Anchor>, val saved: List<SavedRef> = emptyList()) {
+    /**
+     * The saved place a found place already is: the same Google id, or a similar name (one contains the other,
+     * ignoring case, spaces and punctuation) within [SAME_PLACE_KM].
+     */
+    fun alreadySaved(name: String, lat: Double?, lng: Double?, googlePlaceId: String?): SavedRef? {
+        googlePlaceId?.takeIf { it.isNotBlank() }?.let { g -> saved.firstOrNull { it.googlePlaceId == g }?.let { return it } }
+        if (lat == null || lng == null) return null
+        val n = normName(name).ifEmpty { return null }
+        return saved.filter { distanceKm(lat, lng, it.lat, it.lng) <= SAME_PLACE_KM }
+            .firstOrNull { s -> normName(s.name).let { it.isNotEmpty() && (n in it || it in n) } }
+    }
+
     /** Nearest anchor and its distance in km, or null without anchors. */
     fun nearest(lat: Double, lng: Double): Pair<Anchor, Double>? =
         anchors.map { it to distanceKm(lat, lng, it.lat, it.lng) }.minByOrNull { it.second }
@@ -44,10 +59,17 @@ data class TripContext(val regionNames: List<String>, val anchors: List<Anchor>)
             val anchors = (stays.map { it.placeId } + saved.map { it.placeId }).distinct().mapNotNull { places[it] }
                 .filter { !(it.lat == 0.0 && it.lng == 0.0) }
                 .map { Anchor(it.name, it.lat, it.lng) }
-            return TripContext(regions.map { it.name }.filter { it.isNotBlank() }, anchors)
+            val savedRefs = saved.mapNotNull { s ->
+                places[s.placeId]?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) }?.let { SavedRef(s.id, it.name, it.lat, it.lng, it.googlePlaceId) }
+            }
+            return TripContext(regions.map { it.name }.filter { it.isNotBlank() }, anchors, savedRefs)
         }
     }
 }
+
+const val SAME_PLACE_KM = 0.3
+
+private fun normName(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
 
 fun distanceKm(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
     val dLat = Math.toRadians(lat2 - lat1)

@@ -130,6 +130,14 @@ class Assistant(
         if (hit != null) {
             say("Lage: " + (hit.address ?: "gefunden") + near?.let { (a, km) -> " · " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty())
         }
+        context.alreadySaved(p.name, hit?.lat, hit?.lng, hit?.googlePlaceId)?.let { s ->
+            say("Bereits gespeichert als „${s.name}“, Recherche übersprungen")
+            return ReelCandidate(
+                name = p.name, city = p.city, lat = hit?.lat, lng = hit?.lng, address = hit?.address, category = categoryOf(p.kind),
+                distanceKm = 0.0, nearestAnchor = s.name, onRoute = true, evidence = p.evidence, positionIssue = issue,
+                main = p.main, googlePlaceId = hit?.googlePlaceId, savedPlaceId = s.savedPlaceId,
+            )
+        }
         val r = if (!deep) { say("Nur zur Orientierung genannt, ohne Recherche"); null } else try {
             val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
             val evidence = listOfNotNull(p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null }).joinToString("; ")
@@ -216,7 +224,9 @@ class Assistant(
         return inParallel(keyed, onDone) { (key, p) ->
             progress.item(key, state = "RUNNING")
             val c = research(p, context, config, progress.sayFor(key, p.name))
-            if (!p.main) {
+            if (c.savedPlaceId != null) {
+                progress.item(key, state = "DONE", detail = "bereits gespeichert")
+            } else if (!p.main) {
                 progress.item(key, state = "DONE", detail = "nur erwähnt (Bezugspunkt)")
             } else if (c.dossier == null) {
                 progress.item(key, state = "FAILED", detail = "ohne Recherche, nur Lage")

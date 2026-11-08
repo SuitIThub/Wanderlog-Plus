@@ -108,7 +108,7 @@ fun defaultRegion(snapshot: TripSnapshot, c: ReelCandidate): String? =
 data class ReelPick(val candidate: ReelCandidate, val regionId: String?)
 
 /** Places with coordinates only: the rest cannot be shown on maps or used for ways. */
-fun importable(c: ReelCandidate) = c.lat != null && c.lng != null
+fun importable(c: ReelCandidate) = c.lat != null && c.lng != null && c.savedPlaceId == null
 
 /** Takes the picked candidates over as saved places (status "Idee"); returns their ids. */
 fun importPicks(editor: LocalEditor, picks: List<ReelPick>, source: String?): List<String> =
