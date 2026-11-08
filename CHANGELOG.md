@@ -3,6 +3,14 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.58.0
+
+- **Keine falsche Stadt mehr (Server):** Bahnhofsnamen gehen jetzt immer mit Präfektur an die Fahrplanauskunft (z. B. „日本橋(大阪府)“) – vorher machte Yahoo aus dem Bahnhof Nippombashi in Osaka den Nihonbashi in Tokio und führte über Nagoya. Gespeicherte Bahnhöfe ohne Präfektur werden einmal neu geholt.
+- **Route auf der Karte:** Jede gefundene Verbindung hat „Karte“. Auch Zug-Detailseite, Reise-Ansicht, Vorschaukarten der Logistik und Wege im Tagesprogramm zeigen Verbindungen jetzt so: jede Teilstrecke in eigener Farbe durch alle Zwischenhalte (kleine Punkte), Ein-, Um- und Ausstiege als große Punkte, Fußwege zum Hotel bzw. Ziel grau gestrichelt. Die Positionen der Halte sucht der Server einmal und merkt sie sich; ältere Verbindungen zeigen gerade Linien zwischen den Umstiegen.
+- **Zwischenhalte mit Zeiten:** Die Zug-Detailseite listet unter „Zwischenhalte (n)“ alle Halte jeder Fahrt mit Uhrzeit auf.
+- **Frühere und spätere Verbindungen:** Unter den Ergebnissen „‹ Frühere“ und „Spätere ›“.
+- Straßenbahnlinien in Hiroshima heißen „Hiroden Linie 6“ statt „Hiroden 6 線“.
+
 ## 0.57.0
 
 - **Smarte ÖPNV-Suche über mehrere Bahnhöfe:** Ist Start oder Ziel ein Ort (z. B. das Hotel in Akasaka) statt eines Bahnhofs, vergleicht die Suche bis zu 4 Bahnhöfe in Gehweite am Start und 2 am Ziel (höchstens 1,5 km, bis zu 6 Abfragen ≈ 4 Cent, alle gleichzeitig). Der Fußweg zum Bahnhof wird eingerechnet (gesucht wird ab Losgehzeit + Fußweg). Sortiert wird nach der besten Balance: Tür-zu-Tür-Zeit + 5 Min. je Umstieg + halbe Gehzeit; die beste trägt „Beste Balance“. Jede Verbindung zeigt ihren eigenen Start- und Zielbahnhof mit Fußweg und die Tür-zu-Tür-Zeit. Abschaltbar mit „Mehrere Bahnhöfe vergleichen“; ein angetippter Bahnhof gilt wie bisher allein.

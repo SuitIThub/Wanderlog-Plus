@@ -671,6 +671,7 @@ fun AppNavigation(
                                 onBack = { nav.popBackStack() },
                                 suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
                                 onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                                onEarlier = tvm::earlier, onLater = tvm::later,
                             )
                         }
                     }
@@ -920,6 +921,7 @@ fun AppNavigation(
                                 onBack = { nav.popBackStack() },
                                 suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
                                 onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                                onEarlier = tvm::earlier, onLater = tvm::later,
                             )
                         }
                     }
@@ -964,6 +966,7 @@ fun AppNavigation(
                                 onBack = { nav.popBackStack() },
                                 suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
                                 onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                                onEarlier = tvm::earlier, onLater = tvm::later,
                             )
                         }
                     }

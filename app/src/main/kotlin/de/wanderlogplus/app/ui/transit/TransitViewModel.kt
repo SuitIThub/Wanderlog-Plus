@@ -39,6 +39,31 @@ data class TransitForm(
     val smart: Boolean = true,
 )
 
+/** When one leaves the start's door for [r] (its departure minus the walk to the station); null without times. */
+private fun doorDeparture(r: TransitRoute): java.time.LocalDateTime? = try {
+    java.time.LocalDate.parse(r.date).atTime(java.time.LocalTime.parse(r.departure.take(5))).minusMinutes((r.accessMinutes ?: 0).toLong())
+} catch (e: Exception) {
+    null
+}
+
+/** When one is at the goal's door for [r] (arrival, next day after midnight, plus the walk); null without times. */
+private fun doorArrival(r: TransitRoute): java.time.LocalDateTime? = try {
+    val date = java.time.LocalDate.parse(r.date)
+    val dep = java.time.LocalTime.parse(r.departure.take(5))
+    val arr = java.time.LocalTime.parse(r.arrival.take(5))
+    date.atTime(arr).let { if (arr < dep) it.plusDays(1) else it }.plusMinutes((r.egressMinutes ?: 0).toLong())
+} catch (e: Exception) {
+    null
+}
+
+/** "Spätere": leave one minute after the earliest shown departure (date, "HH:mm"); null without times. */
+fun laterStart(result: TransitResult): Pair<String, String>? =
+    result.routes.mapNotNull(::doorDeparture).minOrNull()?.plusMinutes(1)?.let { it.toLocalDate().toString() to it.toLocalTime().toString().take(5) }
+
+/** "Frühere": be there one minute before the earliest shown arrival (date, "HH:mm"); null without times. */
+fun earlierEnd(result: TransitResult): Pair<String, String>? =
+    result.routes.mapNotNull(::doorArrival).minOrNull()?.minusMinutes(1)?.let { it.toLocalDate().toString() to it.toLocalTime().toString().take(5) }
+
 /** Whether the smart search can apply: a place without a station as start or goal. */
 fun smartApplies(f: TransitForm): Boolean =
     (f.fromPoint != null && f.fromIsPlace && f.fromStation.isBlank()) || (f.toPoint != null && f.toIsPlace && f.toStation.isBlank())
@@ -203,6 +228,20 @@ class TransitViewModel(
                 // No chips: the server still finds the nearest station.
             }
         }
+    }
+
+    /** "Spätere Verbindungen": a new search leaving after the earliest shown one. */
+    fun later() {
+        val (date, time) = _state.value.result?.let(::laterStart) ?: return
+        edit { it.copy(date = date, time = time, searchType = "depart") }
+        search()
+    }
+
+    /** "Frühere Verbindungen": a new search arriving before the earliest shown one. */
+    fun earlier() {
+        val (date, time) = _state.value.result?.let(::earlierEnd) ?: return
+        edit { it.copy(date = date, time = time, searchType = "arrive") }
+        search()
     }
 
     fun search() {
