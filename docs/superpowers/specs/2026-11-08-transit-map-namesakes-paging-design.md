@@ -28,7 +28,9 @@ Die Präfektur-Korrektur griff nicht, weil der dauerhafte Bahnhofsspeicher (0.54
 - `transitGeometry(route, fromPlace, toPlace, colorOffset)`: Hotel → (Fußweg) → Bahnhöfe mit Zwischenhalten je Fahrt
   → (Fußweg) → Ziel. Ohne Haltkoordinaten gerade Linien zwischen Ein- und Ausstieg.
 - Genutzt für: Suchergebnis-Karte, Zug-Detailseite und Reise-Ansicht (Züge mit Verbindung; Farbe läuft über die
-  Reise weiter), Wege im Tagesprogramm mit gewählter Verbindung.
+  Reise weiter), Vorschaukarten der Logistik-Liste (Züge und Reisen), Wege im Tagesprogramm mit gewählter Verbindung.
+- Zug-Detailseite: „Zwischenhalte (n)“ (`train-stops`) zum Aufklappen, je Fahrt der Verbindung: Einstieg mit
+  Abfahrt, jeder Zwischenhalt mit Zeit (`train-stop-<i>`), Ausstieg mit Ankunft; Name lateinisch, sonst japanisch.
 
 ## 4. Suchergebnisse: Karte, frühere/spätere
 

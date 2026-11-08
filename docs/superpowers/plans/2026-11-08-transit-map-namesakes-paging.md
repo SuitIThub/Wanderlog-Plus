@@ -19,7 +19,7 @@ Files: `GoogleStationFinder.kt`, `TransitService.kt`, `TransitProtocol.kt`; test
 - [ ] tests → FAIL → implement → PASS → server suite → commit.
 
 ### Task 2: Route geometry with segments
-Files: `app/.../maps/RouteGeometry.kt`, `RouteMapRenderer.kt`, new `app/.../maps/TransitGeometry.kt`; callers in Logistics/Journey/LegRow; test `app/.../maps/TransitGeometryTest.kt`.
+Files: `app/.../maps/RouteGeometry.kt`, `RouteMapRenderer.kt`, new `app/.../maps/TransitGeometry.kt`; callers in Logistics list cards/detail/Journey/LegRow; stop list on the train detail (`train-stops`); test `app/.../maps/TransitGeometryTest.kt`.
 - [ ] tests → FAIL → implement → PASS → commit.
 
 ### Task 3: Result map and earlier/later (0.58.0)
