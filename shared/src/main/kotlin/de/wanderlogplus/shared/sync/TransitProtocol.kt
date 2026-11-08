@@ -31,7 +31,14 @@ data class TransitRequest(
 
 /** A station: Japanese name (what the timetable search understands), Latin name for display, position when known. */
 @Serializable
-data class TransitStation(val nameJa: String, val name: String = "", val lat: Double? = null, val lng: Double? = null)
+data class TransitStation(
+    val nameJa: String,
+    val name: String = "",
+    val lat: Double? = null,
+    val lng: Double? = null,
+    /** Prefecture (広島県, 東京都 …) when known: tells namesakes in other cities apart. */
+    val prefecture: String? = null,
+)
 
 /** An intermediate stop of a leg. */
 @Serializable

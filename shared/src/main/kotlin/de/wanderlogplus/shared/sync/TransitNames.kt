@@ -26,6 +26,7 @@ object TransitNames {
         "新快速" to "Special Rapid", "区間快速" to "Section Rapid", "通勤快速" to "Commuter Rapid", "快速" to "Rapid",
         "準急" to "Semi Exp.", "各駅停車" to "Local", "普通" to "Local", "徒歩" to "zu Fuß", "地下鉄" to "U-Bahn",
         "高速バス" to "Fernbus", "路線バス" to "Bus", "バス" to "Bus", "ライナー" to "Liner", "本線" to "Hauptlinie",
+        "路面電車" to "Straßenbahn",
     ).sortedByDescending { it.first.length }
 
     /** Lines that are good to recognise. */
@@ -40,6 +41,7 @@ object TransitNames {
         "京都市営地下鉄" to "Kyōto U-Bahn", "京都市営" to "Kyōto U-Bahn", "名古屋市営" to "Nagoya U-Bahn", "大阪メトロ" to "Ōsaka Metro",
         "みやこ路" to "Miyakoji", "ＪＲ" to "JR", "烏丸線" to "Karasuma-Linie", "東西線" to "Tōzai-Linie", "名古屋市営地下鉄" to "Nagoya U-Bahn",
         "ゆいレール" to "Yui Rail", "嵐電" to "Randen", "叡山電鉄" to "Eizan-Bahn",
+        "広島電鉄" to "Hiroden", "広電" to "Hiroden", "宮島線" to "Miyajima-Linie",
     ).sortedByDescending { it.first.length }
 
     /** Full-width Latin letters and digits → ASCII (ＪＲ → JR, １５ → 15). */
