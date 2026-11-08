@@ -103,6 +103,16 @@ fun TransitScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (smartApplies(f)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Mehrere Bahnhöfe vergleichen", style = MaterialTheme.typography.bodyLarge)
+                        Text("bis zu 6 Abfragen (≈ 4 Cent); Fußweg, Fahrzeit und Umstiege werden abgewogen", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    androidx.compose.material3.Switch(checked = f.smart, onCheckedChange = { v -> onEdit { it.copy(smart = v) } }, modifier = Modifier.testTag("transit-smart"))
+                }
+            }
+
             SectionLabel("Zeit", color = accent)
             DateTimeFields(f.date, f.time, onDate = { v -> onEdit { it.copy(date = v) } }, onTime = { v -> onEdit { it.copy(time = v) } })
             Segments(
@@ -129,7 +139,7 @@ fun TransitScreen(
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("transit-message")) }
 
             state.result?.let { r ->
-                SectionLabel("Verbindungen ${stationLabel(r.fromStation)} → ${stationLabel(r.toStation)}", color = accent)
+                SectionLabel(if (r.smart) "Verbindungen (mehrere Bahnhöfe verglichen)" else "Verbindungen ${stationLabel(r.fromStation)} → ${stationLabel(r.toStation)}", color = accent)
                 r.stationWarning?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 Text(
                     "Preise für einen Erwachsenen, freier Sitz. Fahrpläne für die Reisezeit können sich mit der Fahrplanumstellung im März noch ändern.",
@@ -137,7 +147,7 @@ fun TransitScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 r.routes.forEachIndexed { i, route ->
-                    TransitRouteCard(r, route, i, accent, onChoose = { onChoose(r.copy(routes = listOf(route))) })
+                    TransitRouteCard(r, route, i, accent, onChoose = { onChoose(chosenRoute(r, route)) })
                 }
             }
         }

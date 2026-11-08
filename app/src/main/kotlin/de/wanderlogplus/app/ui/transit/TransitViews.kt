@@ -2,6 +2,7 @@ package de.wanderlogplus.app.ui.transit
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -106,15 +107,30 @@ fun TransitRouteCard(
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (chosen) Badge(BadgeSpec("gewählt", BadgeTone.Positive))
+                if (route.best) Box(Modifier.testTag("transit-best-$index")) { Badge(BadgeSpec("Beste Balance", BadgeTone.Positive)) }
                 if (route.fastest) Badge(BadgeSpec("schnellste", BadgeTone.Accent))
                 if (route.cheapest) Badge(BadgeSpec("günstigste", BadgeTone.Accent))
                 if (route.fewestTransfers) Badge(BadgeSpec("wenigste Umstiege", BadgeTone.Accent))
             }
             if (route.fareYen > 0) FareBreakdown(route)
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            result.walkToStationMeters?.takeIf { it > 0 }?.let { WalkLine("${walkLabel(it)} zu Fuß zum Bahnhof ${stationLabel(result.fromStation)}") }
-            route.legs.forEachIndexed { n, leg -> LegLine(leg, accent, Modifier.testTag("transit-leg-$index-$n")) }
-            result.walkFromStationMeters?.takeIf { it > 0 }?.let { WalkLine("${walkLabel(it)} zu Fuß vom Bahnhof ${stationLabel(result.toStation)}") }
+            val rides = route.legs.filter { !it.walk }
+            if (route.accessMinutes != null || route.egressMinutes != null) {
+                // Smart search: each connection has its own stations and walks.
+                route.doorMinutes?.let { d ->
+                    Text(
+                        if (result.searchType == "arrive") "losgehen ${durationLabel(d * 60L)} vorher" else "Tür zu Tür ${durationLabel(d * 60L)}",
+                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                route.accessMinutes?.takeIf { it > 0 }?.let { m -> rides.firstOrNull()?.let { WalkLine("ab ${stationLabel(it.from)} · $m Min. zu Fuß") } }
+                route.legs.forEachIndexed { n, leg -> LegLine(leg, accent, Modifier.testTag("transit-leg-$index-$n")) }
+                route.egressMinutes?.takeIf { it > 0 }?.let { m -> rides.lastOrNull()?.let { WalkLine("an ${stationLabel(it.to)} · $m Min. zu Fuß") } }
+            } else {
+                result.walkToStationMeters?.takeIf { it > 0 }?.let { WalkLine("${walkLabel(it)} zu Fuß zum Bahnhof ${stationLabel(result.fromStation)}") }
+                route.legs.forEachIndexed { n, leg -> LegLine(leg, accent, Modifier.testTag("transit-leg-$index-$n")) }
+                result.walkFromStationMeters?.takeIf { it > 0 }?.let { WalkLine("${walkLabel(it)} zu Fuß vom Bahnhof ${stationLabel(result.toStation)}") }
+            }
             if (onChoose != null) {
                 Button(onClick = onChoose, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("transit-choose-$index")) {
                     Text(if (chosen) "Erneut übernehmen" else "Für diesen Weg übernehmen")

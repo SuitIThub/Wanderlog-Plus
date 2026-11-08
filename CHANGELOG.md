@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.57.0
+
+- **Smarte ÖPNV-Suche über mehrere Bahnhöfe:** Ist Start oder Ziel ein Ort (z. B. das Hotel in Akasaka) statt eines Bahnhofs, vergleicht die Suche bis zu 4 Bahnhöfe in Gehweite am Start und 2 am Ziel (höchstens 1,5 km, bis zu 6 Abfragen ≈ 4 Cent, alle gleichzeitig). Der Fußweg zum Bahnhof wird eingerechnet (gesucht wird ab Losgehzeit + Fußweg). Sortiert wird nach der besten Balance: Tür-zu-Tür-Zeit + 5 Min. je Umstieg + halbe Gehzeit; die beste trägt „Beste Balance“. Jede Verbindung zeigt ihren eigenen Start- und Zielbahnhof mit Fußweg und die Tür-zu-Tür-Zeit. Abschaltbar mit „Mehrere Bahnhöfe vergleichen“; ein angetippter Bahnhof gilt wie bisher allein.
+- Bei einem Ort wird kein Bahnhof mehr vorausgefüllt; die Bahnhöfe in der Nähe stehen weiter als Auswahl darunter.
+
 ## 0.56.1
 
 - **Straßenbahn Hiroshima (Server):** Die Bahnhofssuche findet jetzt auch Straßenbahn-Haltestellen (z. B. 原爆ドーム前) – bei Google als ÖPNV-Haltestelle ohne Bushaltestellen, bei OpenStreetMap über `tram_stop`; Zusätze wie 停留場/電停 fallen weg. Linien heißen lesbar „Hiroden …“ bzw. „Straßenbahn“.

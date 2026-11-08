@@ -171,7 +171,8 @@ class TransitTest {
                 }
             }
         }), "https://s", "tok")
-        val vm = TransitViewModel({ api }, TransitPoint(35.684, 139.77), TransitPoint(35.49, 137.5), "2027-05-20", "8:15", null)
+        // Positions of stations (not places): the nearest station is filled in.
+        val vm = TransitViewModel({ api }, TransitPoint(35.684, 139.77), TransitPoint(35.49, 137.5), "2027-05-20", "8:15", null, fromIsPlace = false, toIsPlace = false)
         waitUntil { vm.state.value.form.toStation.isNotEmpty() }
         assertEquals("東京", vm.state.value.form.fromStation)
         assertEquals("中津川", vm.state.value.form.toStation)

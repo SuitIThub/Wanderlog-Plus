@@ -8,6 +8,7 @@ import de.wanderlogplus.client.SyncApi
 import de.wanderlogplus.shared.sync.TransitPoint
 import de.wanderlogplus.shared.sync.TransitRequest
 import de.wanderlogplus.shared.sync.TransitResult
+import de.wanderlogplus.shared.sync.TransitRoute
 import de.wanderlogplus.shared.sync.TransitStationNear
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -34,7 +35,25 @@ data class TransitForm(
     /** Whether [fromPoint] is a place (hotel, sight) rather than just the station's position: it becomes the walk start. */
     val fromIsPlace: Boolean = false,
     val toIsPlace: Boolean = false,
+    /** Compare several stations in walking distance of a place (start or goal without a station). */
+    val smart: Boolean = true,
 )
+
+/** Whether the smart search can apply: a place without a station as start or goal. */
+fun smartApplies(f: TransitForm): Boolean =
+    (f.fromPoint != null && f.fromIsPlace && f.fromStation.isBlank()) || (f.toPoint != null && f.toIsPlace && f.toStation.isBlank())
+
+/** The connection [route] of [r] alone, with its own stations and walks (a smart search mixes stations). */
+fun chosenRoute(r: TransitResult, route: TransitRoute): TransitResult {
+    val rides = route.legs.filter { !it.walk }
+    return r.copy(
+        routes = listOf(route.copy(best = false)),
+        fromStation = rides.firstOrNull()?.from ?: r.fromStation,
+        toStation = rides.lastOrNull()?.to ?: r.toStation,
+        walkToStationMeters = route.accessMeters ?: r.walkToStationMeters,
+        walkFromStationMeters = route.egressMeters ?: r.walkFromStationMeters,
+    )
+}
 
 /** [r] with the places of [f] that are real places (not just stations), for the walk before and after the stations. */
 fun resultWithPlaces(r: TransitResult, f: TransitForm): TransitResult = r.copy(
@@ -73,6 +92,7 @@ fun requestFor(f: TransitForm): TransitRequest = TransitRequest(
     useHighwayBus = f.useHighwayBus,
     useLocalBus = f.useLocalBus,
     fresh = true,
+    smart = f.smart && smartApplies(f),
 )
 
 fun transitError(e: ApiException): String = when {
@@ -140,9 +160,11 @@ class TransitViewModel(
                 s.copy(
                     nearFrom = nf,
                     nearTo = nt,
+                    // A place (hotel, sight) keeps "no station": the smart search compares the stations around it;
+                    // a station's own position gets the nearest station's name.
                     form = s.form.copy(
-                        fromStation = s.form.fromStation.ifBlank { nf.firstOrNull()?.station?.nameJa.orEmpty() },
-                        toStation = s.form.toStation.ifBlank { nt.firstOrNull()?.station?.nameJa.orEmpty() },
+                        fromStation = s.form.fromStation.ifBlank { if (s.form.fromIsPlace) "" else nf.firstOrNull()?.station?.nameJa.orEmpty() },
+                        toStation = s.form.toStation.ifBlank { if (s.form.toIsPlace) "" else nt.firstOrNull()?.station?.nameJa.orEmpty() },
                     ),
                 )
             }
