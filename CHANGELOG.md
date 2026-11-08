@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.61.0
+
+- **„Trotzdem importieren“:** Ein im Reel als „bereits gespeichert“ erkannter Ort hat jetzt diesen Knopf – für den Fall, dass es doch ein anderer Ort ist. Er wird dann als eigener Ort übernommen und anschließend recherchiert (der Server wartet kurz, bis der Ort per Sync angekommen ist).
+
 ## 0.60.0
 
 - **Reel-Import erkennt gespeicherte Orte:** Ist ein im Reel gefundener Ort schon in deinen Orten (gleicher Google-Eintrag oder ähnlicher Name in höchstens 300 m), überspringt der Server die Recherche. In der Auswertung steht er als „bereits gespeichert“ und wird nicht noch einmal übernommen.

@@ -34,6 +34,7 @@ class ReelsViewModel(
     private val writeScope: CoroutineScope,
     private val pollMillis: Long = 2_500,
     private val config: suspend () -> de.wanderlogplus.shared.sync.AssessConfig = { de.wanderlogplus.shared.sync.AssessConfig() },
+    private val syncNow: () -> Unit = {},
 ) : ViewModel() {
     private val _snapshot = MutableStateFlow<TripSnapshot?>(null)
     val snapshot: StateFlow<TripSnapshot?> = _snapshot
@@ -114,9 +115,18 @@ class ReelsViewModel(
         if (imported.contains(jobId) || picks.isEmpty()) return
         writeScope.launch {
             try {
-                edit { e, _ -> importPicks(e, picks, source); Unit }
+                var ids: List<String> = emptyList()
+                edit { e, _ -> ids = importPicks(e, picks, source); Unit }
                 imported.add(jobId)
                 _importedNow.value = true
+                // "Trotzdem importieren": the place was skipped as a duplicate, so it is researched now (the server
+                // waits until the sync has brought it over).
+                val kept = picks.filter { importable(it.candidate) }
+                val toResearch = ids.filterIndexed { i, _ -> kept.getOrNull(i)?.research == true }
+                if (toResearch.isNotEmpty()) {
+                    syncNow()
+                    call { a -> a.startResearch(toResearch, config()) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

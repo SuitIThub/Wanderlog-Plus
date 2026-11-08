@@ -61,6 +61,8 @@ class AiJobs(
     private val stayResearch: StayResearch? = null,
     /** Reads the stays' confirmations and keeps room photos. */
     private val files: de.wanderlogplus.server.FileStore? = null,
+    /** How long a research waits for places it does not know yet (just added in the app, sync still on its way). */
+    private val arrivalWaitMillis: Long = 60_000,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -466,6 +468,12 @@ class AiJobs(
         val a = assistant ?: run { t.fail("ai_not_configured"); return }
         try {
             t.status("RESEARCHING")
+            val waitUntil = System.currentTimeMillis() + arrivalWaitMillis
+            fun missing() = ids.count { id -> store.get(EntityType.SAVED_PLACE, id)?.takeIf { !it.isDeleted } == null }
+            if (missing() > 0) {
+                t.step("Wartet, bis neue Orte vom Handy angekommen sind …")
+                while (missing() > 0 && System.currentTimeMillis() < waitUntil) Thread.sleep(2_000)
+            }
             t.step(
                 "Recherche für ${ids.size} " + (if (ids.size == 1) "Ort" else "Orte") + " nach ${config.criteria.size} Kriterien" +
                     (if (config.extraPrompt.isNotBlank()) " mit eigenen Anweisungen" else "") +
