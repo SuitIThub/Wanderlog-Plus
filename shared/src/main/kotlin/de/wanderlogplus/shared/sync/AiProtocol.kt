@@ -76,6 +76,8 @@ data class ReelCandidate(
     val main: Boolean = true,
     /** Google's id when Google Places found the position; the imported place then gets photos and details. */
     val googlePlaceId: String? = null,
+    /** The saved place of the trip this already is (research skipped); null for a new place. */
+    val savedPlaceId: String? = null,
 )
 
 /** The judgement for one saved place. */
