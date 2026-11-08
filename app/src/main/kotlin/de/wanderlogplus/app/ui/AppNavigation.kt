@@ -383,7 +383,7 @@ fun AppNavigation(
         }
 
         @Composable
-        fun PlaceDetailFor(vm: PlacesViewModel, snap: TripSnapshot, id: String, onBack: (() -> Unit)?) {
+        fun PlaceDetailFor(vm: PlacesViewModel, snap: TripSnapshot, id: String, onBack: (() -> Unit)?, onOpenSibling: ((String) -> Unit)? = null) {
             val failures by vm.failures.collectAsState()
             val researching by vm.researching.collectAsState()
             val researchJob by vm.researchJob.collectAsState()
@@ -405,6 +405,7 @@ fun AppNavigation(
                 onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
+                onOpenSibling = onOpenSibling,
             )
         }
 
@@ -780,7 +781,7 @@ fun AppNavigation(
                                         if (id == null) EmptyHint("Ort in der Liste antippen", Modifier.padding(24.dp))
                                         else {
                                             de.wanderlogplus.app.ui.chat.ReportChatPane(REGION_ROUTE, PLACE_ROUTE, mapOf("savedPlaceId" to id))
-                                            PlaceDetailFor(vm, it, id, onBack = null)
+                                            PlaceDetailFor(vm, it, id, onBack = null, onOpenSibling = { next -> selectedPlace = next })
                                         }
                                     },
                                 )
@@ -804,7 +805,11 @@ fun AppNavigation(
                     ErrorSnack(vm.error, vm::consumeError, snackbar)
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
-                        snap?.let { PlaceDetailFor(vm, it, id, onBack = { nav.popBackStack() }) }
+                        snap?.let {
+                            PlaceDetailFor(vm, it, id, onBack = { nav.popBackStack() }, onOpenSibling = { next ->
+                                nav.navigate(placeRoute(next)) { popUpTo(entry.destination.id) { inclusive = true } }
+                            })
+                        }
                     }
                 }
             }

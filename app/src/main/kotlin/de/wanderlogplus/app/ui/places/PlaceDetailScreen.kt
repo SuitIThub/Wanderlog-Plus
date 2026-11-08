@@ -40,6 +40,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.EventAvailable
@@ -172,6 +174,8 @@ fun PlaceDetailScreen(
     googleSearch: GoogleSearch? = null,
     /** Links the place to a Google entry (null: unlinks), optionally taking its position. */
     onLinkGoogle: ((placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) -> Unit)? = null,
+    /** Opens another place of the same region (swipe across the header); null disables swiping. */
+    onOpenSibling: ((savedPlaceId: String) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -213,6 +217,13 @@ fun PlaceDetailScreen(
             onChangeImage = onSetHeaderImage?.let { { choosingImage = true } },
             titleMaxLines = 1,
             onTitleOverflow = { titleCut = it },
+            modifier = if (onOpenSibling == null) Modifier else Modifier.pointerInput(saved.id, snapshot) {
+                var dx = 0f
+                detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
+                    val step = when { dx < -SWIPE_PX -> 1; dx > SWIPE_PX -> -1; else -> 0 }
+                    if (step != 0) regionSibling(snapshot, saved.id, step)?.let(onOpenSibling)
+                }) { _, d -> dx += d }
+            },
         )
 
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -544,4 +555,20 @@ private fun ReservationRow(
             }
         }
     }
+}
+
+private const val SWIPE_PX = 120f
+
+/**
+ * The place [step] positions away from [savedPlaceId] in its region's list order ("Alle", as in the region screen),
+ * wrapping around; null when the region holds no other place.
+ */
+fun regionSibling(snapshot: TripSnapshot, savedPlaceId: String, step: Int): String? {
+    val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId } ?: return null
+    val key = saved.regionId?.takeIf { id -> snapshot.regions.any { it.id == id } } ?: NO_REGION
+    val ids = placeGroups(savedPlacesIn(snapshot, key).map { Suggestion(it, snapshot.places[it.placeId]) }, null)
+        .flatMap { g -> g.places.map { it.saved.id } }
+    val i = ids.indexOf(savedPlaceId)
+    if (i < 0 || ids.size < 2) return null
+    return ids[Math.floorMod(i + step, ids.size)]
 }
