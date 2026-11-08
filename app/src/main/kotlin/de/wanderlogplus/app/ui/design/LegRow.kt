@@ -208,7 +208,8 @@ fun LegRow(
                 }
                 val path = (result as? LegResult.Route)?.path?.takeIf { it.size >= 2 }
                 RouteMap(
-                    RouteGeometry(listOf(from, to), arc = false, path = path),
+                    // A chosen connection: its rides in colors with all stops; else the computed path.
+                    route?.let { de.wanderlogplus.app.maps.transitGeometry(it, from, to) } ?: RouteGeometry(listOf(from, to), arc = false, path = path),
                     accent,
                     height = 160.dp,
                     modifier = Modifier.padding(top = 8.dp).testTag("leg-map"),

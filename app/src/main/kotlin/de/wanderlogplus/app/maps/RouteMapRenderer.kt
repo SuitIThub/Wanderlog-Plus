@@ -143,6 +143,8 @@ private object RouteSnapshots {
     suspend fun snapshot(context: Context, route: RouteGeometry, widthPx: Int, heightPx: Int): Bitmap? {
         MapLibre.getInstance(context) // lazy: only when a snapshot is really needed
         val points = route.points().map { Point.fromLngLat(it.lng, it.lat) }
+        val segments = route.segments
+        if (segments != null) return snapshotSegments(context, route, segments, widthPx, heightPx)
         val style = Style.Builder().fromUri(MAP_STYLE_URL)
             .withSource(GeoJsonSource("route", FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(points)))))
             .withSource(
@@ -167,6 +169,54 @@ private object RouteSnapshots {
                     PropertyFactory.circleStrokeWidth(2.5f),
                 ),
             )
+        return shoot(context, style, route, widthPx, heightPx)
+    }
+
+    /** Rides in their colors, walks grey and dashed, small dots at the stops, big ones where one boards/changes/leaves. */
+    private suspend fun snapshotSegments(context: Context, route: RouteGeometry, segments: List<RouteSegment>, widthPx: Int, heightPx: Int): Bitmap? {
+        fun line(s: RouteSegment) = Feature.fromGeometry(LineString.fromLngLats(s.points.map { Point.fromLngLat(it.lng, it.lat) })).also { f ->
+            f.addStringProperty("color", s.color)
+        }
+        val style = Style.Builder().fromUri(MAP_STYLE_URL)
+            .withSource(GeoJsonSource("rides", FeatureCollection.fromFeatures(segments.filter { !it.walk }.map(::line))))
+            .withSource(GeoJsonSource("walks", FeatureCollection.fromFeatures(segments.filter { it.walk }.map(::line))))
+            .withSource(GeoJsonSource("minor", FeatureCollection.fromFeatures(route.minorStops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })))
+            .withSource(GeoJsonSource("route-ends", FeatureCollection.fromFeatures(route.stops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })))
+            .withLayer(
+                LineLayer("walk-line", "walks").withProperties(
+                    PropertyFactory.lineColor(WALK_COLOR),
+                    PropertyFactory.lineWidth(3f),
+                    PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
+                ),
+            )
+            .withLayer(
+                LineLayer("ride-line", "rides").withProperties(
+                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("color")),
+                    PropertyFactory.lineWidth(4.5f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                ),
+            )
+            .withLayer(
+                CircleLayer("minor-layer", "minor").withProperties(
+                    PropertyFactory.circleColor("#FFFFFF"),
+                    PropertyFactory.circleRadius(2.5f),
+                    PropertyFactory.circleStrokeColor("#555555"),
+                    PropertyFactory.circleStrokeWidth(1f),
+                ),
+            )
+            .withLayer(
+                CircleLayer("route-ends-layer", "route-ends").withProperties(
+                    PropertyFactory.circleColor("#37474F"),
+                    PropertyFactory.circleRadius(6f),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                ),
+            )
+        return shoot(context, style, route, widthPx, heightPx)
+    }
+
+    private suspend fun shoot(context: Context, style: Style.Builder, route: RouteGeometry, widthPx: Int, heightPx: Int): Bitmap? {
         // Options take logical pixels; with the screen's pixel ratio the bitmap has ~widthPx x heightPx and crisp labels.
         val ratio = context.resources.displayMetrics.density.coerceAtLeast(1f)
         val options = MapSnapshotter.Options((widthPx / ratio).toInt().coerceAtLeast(1), (heightPx / ratio).toInt().coerceAtLeast(1))

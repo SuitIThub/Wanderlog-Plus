@@ -13,14 +13,22 @@ data class LatLngD(val lat: Double, val lng: Double)
  * Version of the route snapshot rendering, part of every cache key. Raising it orphans all cached PNGs, so a changed
  * renderer (or a bug that cached bad pictures) never keeps showing old snapshots.
  */
-const val RENDER_VERSION = 1
+const val RENDER_VERSION = 2
 
 /**
  * Route through [stops] (start, stopovers, destination): straight segments (train) or one arc per segment (flight),
  * unless a real [path] is known (a computed walking/transit route), which is then drawn instead. Without a path this is
  * an "as the crow flies" picture, not real track geometry.
  */
-data class RouteGeometry(val stops: List<LatLngD>, val arc: Boolean, val path: List<LatLngD>? = null) {
+data class RouteGeometry(
+    val stops: List<LatLngD>,
+    val arc: Boolean,
+    val path: List<LatLngD>? = null,
+    /** Drawn parts in their own colors (rides of a connection, walks dashed); null: one line in the accent color. */
+    val segments: List<RouteSegment>? = null,
+    /** Small dots: stops between boarding and leaving. */
+    val minorStops: List<LatLngD> = emptyList(),
+) {
     init {
         require(stops.size >= 2) { "A route needs at least two stops" }
     }
@@ -32,6 +40,7 @@ data class RouteGeometry(val stops: List<LatLngD>, val arc: Boolean, val path: L
 
     /** The [path] if known; else the stops joined by straight lines, or 32-point quadratic Bézier arcs per segment for a flight. */
     fun points(): List<LatLngD> {
+        segments?.flatMap { it.points }?.takeIf { it.size >= 2 }?.let { return it }
         path?.takeIf { it.size >= 2 }?.let { return it }
         if (!arc) return stops
         return stops.zipWithNext().flatMapIndexed { seg, (a, b) -> arcPoints(a, b).let { if (seg == 0) it else it.drop(1) } }
@@ -57,7 +66,9 @@ data class RouteGeometry(val stops: List<LatLngD>, val arc: Boolean, val path: L
     fun cacheKey(widthPx: Int, heightPx: Int, version: Int = RENDER_VERSION): String {
         fun r(v: Double) = String.format(Locale.ROOT, "%.5f", v + 0.0) // + 0.0 folds -0.0 into 0.0
         val coords = (stops + listOf(LatLngD(Double.NaN, Double.NaN)) + path.orEmpty()).flatMap { listOf(r(it.lat), r(it.lng)) }
-        val raw = (listOf("v$version") + coords + listOf(arc.toString(), widthPx.toString(), heightPx.toString())).joinToString("|")
+        val parts = segments.orEmpty().flatMap { s -> listOf(s.color, s.walk.toString()) + s.points.flatMap { listOf(r(it.lat), r(it.lng)) } } +
+            listOf("minor") + minorStops.flatMap { listOf(r(it.lat), r(it.lng)) }
+        val raw = (listOf("v$version") + coords + parts + listOf(arc.toString(), widthPx.toString(), heightPx.toString())).joinToString("|")
         return MessageDigest.getInstance("SHA-256").digest(raw.toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
@@ -112,8 +123,15 @@ fun routeFor(flight: Flight, snapshot: TripSnapshot): RouteGeometry? {
     return RouteGeometry(listOf(from) + flight.via.mapNotNull { c(it) } + listOf(to), arc = true)
 }
 
-/** Straight lines through the train's start, stopovers and destination; stopovers without coordinates are skipped. */
-fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? {
+/**
+ * A train with a connection from the search: its rides in colors with all stops, the walk from/to the places before
+ * and after the stations ([colorOffset]: where the colors start). Else straight lines through start, stopovers and
+ * destination; stopovers without coordinates are skipped.
+ */
+fun routeFor(train: Train, snapshot: TripSnapshot, colorOffset: Int = 0): RouteGeometry? {
+    train.transit?.routes?.firstOrNull()?.takeIf { rideCount(it) > 0 }?.let { r ->
+        transitGeometry(r, train.walkFrom?.coords(snapshot), train.walkTo?.coords(snapshot), colorOffset)?.let { return it }
+    }
     val from = train.depart.coords(snapshot) ?: return null
     val to = train.arrive.coords(snapshot) ?: return null
     return RouteGeometry(listOf(from) + train.via.mapNotNull { it.coords(snapshot) } + listOf(to), arc = false)
@@ -121,14 +139,28 @@ fun routeFor(train: Train, snapshot: TripSnapshot): RouteGeometry? {
 
 /** One line through all legs of a journey (flight arcs and train lines joined); null when no leg has coordinates. */
 fun routeFor(journey: de.wanderlogplus.client.Journey, snapshot: TripSnapshot): RouteGeometry? {
+    // Each ride (and each leg without a connection) takes the next color, across the whole journey.
+    var color = 0
     val parts = journey.legs.mapNotNull { l ->
         when (val m = l.movement) {
-            is de.wanderlogplus.shared.query.Movement.FlightMove -> routeFor(m.flight, snapshot)
-            is de.wanderlogplus.shared.query.Movement.TrainMove -> routeFor(m.train, snapshot)
+            is de.wanderlogplus.shared.query.Movement.FlightMove -> routeFor(m.flight, snapshot)?.let { g ->
+                g.copy(segments = listOf(RouteSegment(g.points(), RIDE_COLORS[color++ % RIDE_COLORS.size])))
+            }
+            is de.wanderlogplus.shared.query.Movement.TrainMove -> routeFor(m.train, snapshot, color)?.let { g ->
+                if (g.segments != null) {
+                    color += m.train.transit?.routes?.firstOrNull()?.let(::rideCount) ?: 1
+                    g
+                } else {
+                    g.copy(segments = listOf(RouteSegment(g.points(), RIDE_COLORS[color++ % RIDE_COLORS.size])))
+                }
+            }
         }
     }
     if (parts.isEmpty()) return null
     val stops = parts.flatMap { it.stops }.fold(mutableListOf<LatLngD>()) { acc, p -> if (acc.lastOrNull() != p) acc += p; acc }
     if (stops.size < 2) return null
-    return RouteGeometry(stops, arc = false, path = parts.flatMap { it.points() })
+    return RouteGeometry(
+        stops, arc = false, path = parts.flatMap { it.points() },
+        segments = parts.flatMap { it.segments.orEmpty() }, minorStops = parts.flatMap { it.minorStops },
+    )
 }
