@@ -47,7 +47,7 @@ class GoogleStationFinderTest {
         assertEquals("Gion-Shijō", list.first().station.name)
         assertTrue(list.first().meters in 500..700, list.first().meters.toString())
         val body = Json.parseToJsonElement(calls.first().second).jsonObject
-        assertEquals(listOf("train_station", "subway_station", "light_rail_station"), (body["includedTypes"] as JsonArray).map { it.jsonPrimitive.content })
+        assertEquals(listOf("train_station", "subway_station", "light_rail_station", "transit_station"), (body["includedTypes"] as JsonArray).map { it.jsonPrimitive.content })
         assertEquals("DISTANCE", body["rankPreference"]!!.jsonPrimitive.content)
         assertEquals(3000.0, body["locationRestriction"]!!.jsonObject["circle"]!!.jsonObject["radius"]!!.jsonPrimitive.double)
         assertEquals(0, fallbackUsed)
@@ -95,10 +95,35 @@ class GoogleStationFinderTest {
     }
 
     @Test
+    fun tramStopsCountBusStopsDoNot() {
+        answer = { _, body ->
+            200 to """{"places":[
+                {"id":"t1","displayName":{"text":"原爆ドーム前停留場"},"formattedAddress":"日本、〒730-0051 広島県広島市中区大手町１丁目","location":{"latitude":34.3955,"longitude":132.4536},"types":["transit_station","point_of_interest"]},
+                {"id":"b1","displayName":{"text":"紙屋町"},"location":{"latitude":34.3960,"longitude":132.4560},"types":["transit_station","bus_stop"]}]}"""
+        }
+        val list = finder().near(34.3953, 132.4535)
+        assertEquals(listOf("原爆ドーム前"), list.map { it.station.nameJa })
+        assertEquals("広島県", list.single().station.prefecture)
+        val body = Json.parseToJsonElement(calls.first().second).jsonObject
+        assertTrue((body["includedTypes"] as JsonArray).any { it.jsonPrimitive.content == "transit_station" })
+        assertTrue((body["excludedTypes"] as JsonArray).any { it.jsonPrimitive.content == "bus_stop" })
+    }
+
+    @Test
+    fun prefectures() {
+        assertEquals("広島県", GoogleStationFinder.prefectureOf("日本、〒726-0005 広島県府中市府中町"))
+        assertEquals("東京都", GoogleStationFinder.prefectureOf("日本、〒183-0055 東京都府中市府中町１丁目"))
+        assertEquals("北海道", GoogleStationFinder.prefectureOf("日本、〒060-0806 北海道札幌市北区北６条西４丁目"))
+        assertEquals("京都府", GoogleStationFinder.prefectureOf("日本、〒600-8216 京都府京都市下京区"))
+        assertEquals(null, GoogleStationFinder.prefectureOf("Kyoto, Japan"))
+    }
+
+    @Test
     fun stationNames() {
         assertEquals("京都", GoogleStationFinder.nameJa("京都駅"))
         assertEquals("祇園四条", GoogleStationFinder.nameJa("祇園四条駅"))
         assertEquals("四条", GoogleStationFinder.nameJa("四条駅（京都市営）"))
+        assertEquals("紙屋町東", GoogleStationFinder.nameJa("紙屋町東電停"))
         assertEquals("Kyoto", GoogleStationFinder.nameLatin("Kyoto Station"))
         assertEquals("Shijō", GoogleStationFinder.nameLatin("Shijō Station (Kyoto Municipal Subway)"))
     }

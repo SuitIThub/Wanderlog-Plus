@@ -11,7 +11,7 @@ import java.time.LocalTime
 object TransitRides {
     private val carriers = listOf(
         "JR", "Tokyo Metro", "Toei", "Ōsaka Metro", "Kyōto U-Bahn", "Nagoya U-Bahn", "Kintetsu", "Keihan", "Hankyū", "Hankyu",
-        "Hanshin", "Meitetsu", "Odakyū", "Keiō", "Seibu", "Tōbu", "Keisei", "Nankai",
+        "Hanshin", "Meitetsu", "Odakyū", "Keiō", "Seibu", "Tōbu", "Keisei", "Nankai", "Hiroden",
     )
 
     /** The operator from a readable line name ("JR Shinkansen Nozomi 15" → "JR"); null when not known. */

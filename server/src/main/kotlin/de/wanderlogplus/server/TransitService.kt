@@ -93,7 +93,7 @@ class PhotonStationFinder(private val photon: PhotonGeocoder) : StationFinder {
         for (radius in listOf(3, 10, 30)) {
             // Only stations and halts: "railway" alone also returns platforms, entrances and switches, which fill the
             // nearest results and leave no station after filtering.
-            val q = "reverse?lat=$lat&lon=$lng&limit=12&radius=$radius&osm_tag=railway:station&osm_tag=railway:halt"
+            val q = "reverse?lat=$lat&lon=$lng&limit=12&radius=$radius&osm_tag=railway:station&osm_tag=railway:halt&osm_tag=railway:tram_stop"
             val ja = stations(photon.features(q))
             if (ja.isEmpty()) continue
             val en = stations(photon.features("$q&lang=en")).associateBy { it.first }
@@ -126,7 +126,7 @@ class PhotonStationFinder(private val photon: PhotonGeocoder) : StationFinder {
         val o = f as? JsonObject ?: return@mapNotNull null
         val props = o["properties"] as? JsonObject ?: return@mapNotNull null
         fun p(k: String) = (props[k] as? JsonPrimitive)?.content
-        if (p("osm_key") != "railway" || p("osm_value") !in setOf("station", "halt")) return@mapNotNull null
+        if (p("osm_key") != "railway" || p("osm_value") !in setOf("station", "halt", "tram_stop")) return@mapNotNull null
         val name = p("name")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
         val c = (o["geometry"] as? JsonObject)?.get("coordinates") as? JsonArray ?: return@mapNotNull null
         val lng = (c.getOrNull(0) as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
@@ -213,18 +213,21 @@ class TransitService(
         toMeters: Int?,
         key: String,
     ): TransitResult {
-        val (status, body) = src.run(actorInput(req, fromStation.nameJa, toStation.nameJa))
-        when {
-            status == 401 || status == 403 -> throw TransitUnavailable("transit_key_rejected")
-            status == 402 -> throw TransitUnavailable("transit_no_credit")
-            status !in 200..299 -> throw TransitUnavailable()
+        var routes = ask(src, req, fromStation.nameJa, toStation.nameJa)
+        if (routes.isNotEmpty()) {
+            // A namesake in another prefecture ("府中(東京都)" for Hiroshima's 府中): ask again with Yahoo's own
+            // disambiguation "府中(広島県)"; keep the first answer when that finds nothing.
+            val fixFrom = otherPrefecture(routes.first().str("resolved_origin_ja"), fromStation)
+            val fixTo = otherPrefecture(routes.first().str("resolved_destination_ja"), toStation)
+            if (fixFrom || fixTo) {
+                val again = ask(
+                    src, req,
+                    if (fixFrom) "${base(fromStation.nameJa)}(${fromStation.prefecture})" else fromStation.nameJa,
+                    if (fixTo) "${base(toStation.nameJa)}(${toStation.prefecture})" else toStation.nameJa,
+                )
+                if (again.isNotEmpty()) routes = again
+            }
         }
-        val items = try {
-            JSON.parseToJsonElement(body) as? JsonArray
-        } catch (e: Exception) {
-            null
-        } ?: throw TransitUnavailable()
-        val routes = items.mapNotNull { it as? JsonObject }.filter { it.containsKey("rank") }
         if (routes.isEmpty()) {
             store.putCachedRoute(key, "{}", now().toEpochMilli())
             throw NoRoute()
@@ -252,6 +255,28 @@ class TransitService(
         return result
     }
 
+    /** One timetable request; the connections found (empty: none). */
+    private fun ask(src: TransitSource, req: TransitRequest, from: String, to: String): List<JsonObject> {
+        val (status, body) = src.run(actorInput(req, from, to))
+        when {
+            status == 401 || status == 403 -> throw TransitUnavailable("transit_key_rejected")
+            status == 402 -> throw TransitUnavailable("transit_no_credit")
+            status !in 200..299 -> throw TransitUnavailable()
+        }
+        val items = try {
+            JSON.parseToJsonElement(body) as? JsonArray
+        } catch (e: Exception) {
+            null
+        } ?: throw TransitUnavailable()
+        return items.mapNotNull { it as? JsonObject }.filter { it.containsKey("rank") }
+    }
+
+    /** True when the timetable took a station of another prefecture than [wanted]'s ("府中(東京都)" for 広島県). */
+    private fun otherPrefecture(resolved: String?, wanted: TransitStation): Boolean {
+        val pref = resolved?.let { prefectureIn(it) } ?: return false
+        return wanted.prefecture != null && pref != wanted.prefecture
+    }
+
     /** The station to use: the given Japanese name (located near the place) or the nearest one; with the walk in metres. */
     private fun station(name: String?, at: TransitPoint?, finder: StationFinder): Pair<TransitStation, Int?> = try {
         val given = name?.trim()?.takeIf { it.isNotEmpty() }
@@ -274,6 +299,8 @@ class TransitService(
     private fun mismatch(resolved: String, wanted: TransitStation, finder: StationFinder): Boolean {
         if (plain(resolved) == plain(wanted.nameJa)) return false
         if (base(resolved) != base(wanted.nameJa)) return true
+        // The disambiguation names another prefecture: a namesake elsewhere, whatever lies near the place.
+        if (otherPrefecture(resolved, wanted)) return true
         val lat = wanted.lat ?: return false
         val lng = wanted.lng ?: return false
         val found = try { finder.locate(resolved, lat, lng) } catch (e: GeocoderUnavailable) { return false } ?: return true
@@ -369,6 +396,10 @@ class TransitService(
         private val DATETIME = Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}""")
 
         /** Station names compare without the 駅 suffix and spaces. */
+        /** "府中(広島県)" → "広島県"; null without a prefecture in brackets. */
+        fun prefectureIn(nameJa: String): String? =
+            Regex("""[(（]([^)）]*(?:都|道|府|県))[)）]\s*$""").find(nameJa.trim())?.groupValues?.get(1)
+
         fun plain(nameJa: String) = nameJa.trim().removeSuffix("駅").replace(" ", "").replace("　", "")
 
         /** The name without a disambiguation in brackets: "六地蔵(京都市営)" → "六地蔵", "稲荷（京都府）" → "稲荷". */

@@ -110,6 +110,35 @@ class TransitServiceTest {
         assertEquals(4, inputs.size)
     }
 
+    @Test fun namesakeElsewhereIsAskedAgainWithThePrefecture() {
+        // 府中 near the hotel is in Hiroshima; the timetable first takes Tokyo's 府中.
+        val fuchu = TransitStation("府中", "Fuchū", 34.568, 133.236, prefecture = "広島県")
+        val local = object : StationFinder {
+            override fun near(lat: Double, lng: Double, limit: Int) = listOf(TransitStationNear(fuchu, 300))
+            override fun locate(nameJa: String, lat: Double?, lng: Double?) = fuchu.copy(nameJa = nameJa)
+        }
+        val src = TransitSource { input ->
+            inputs += input
+            val origin = input["origin"]!!.jsonPrimitive.content
+            val resolved = if (origin == "府中(広島県)") "府中(広島県)" else "府中(東京都)"
+            201 to answer.replace("\"resolved_origin_ja\":\"東京\"", "\"resolved_origin_ja\":\"$resolved\"")
+        }
+        val r = TransitService(store, src, local) { clock }.search(TransitRequest(from = TransitPoint(34.57, 133.24, "Hotel"), toStation = "中津川", datetime = "2027-05-20T08:00"))
+        assertEquals(listOf("府中", "府中(広島県)"), inputs.map { it["origin"]!!.jsonPrimitive.content })
+        assertNull(r.stationWarning)
+    }
+
+    @Test fun samePrefectureNeedsNoSecondAsk() {
+        val kyoto = TransitStation("京都", "Kyoto", 34.985, 135.758, prefecture = "京都府")
+        val local = object : StationFinder {
+            override fun near(lat: Double, lng: Double, limit: Int) = listOf(TransitStationNear(kyoto, 300))
+            override fun locate(nameJa: String, lat: Double?, lng: Double?) = kyoto.copy(nameJa = nameJa)
+        }
+        val src = TransitSource { input -> inputs += input; 201 to answer.replace("\"resolved_origin_ja\":\"東京\"", "\"resolved_origin_ja\":\"京都\"") }
+        TransitService(store, src, local) { clock }.search(TransitRequest(from = TransitPoint(34.99, 135.76, "Hotel"), toStation = "中津川", datetime = "2027-05-20T08:00"))
+        assertEquals(1, inputs.size)
+    }
+
     @Test fun sameSearchRunsOnce() {
         val started = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)

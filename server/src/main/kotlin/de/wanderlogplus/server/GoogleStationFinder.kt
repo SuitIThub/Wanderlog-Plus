@@ -70,7 +70,7 @@ class GoogleStationFinder(
             val en = nearby(lat, lng, radius, "en").orEmpty().associate { it.id to it.name }
             val list = ja.map { p ->
                 TransitStationNear(
-                    TransitStation(nameJa(p.name), en[p.id]?.let(::nameLatin).orEmpty(), p.lat, p.lng),
+                    TransitStation(nameJa(p.name), en[p.id]?.let(::nameLatin).orEmpty(), p.lat, p.lng, prefectureOf(p.address)),
                     (distanceKm(lat, lng, p.lat, p.lng) * 1000).roundToInt(),
                 )
             }.filter { it.station.nameJa.isNotBlank() }.distinctBy { it.station.nameJa }.sortedBy { it.meters }
@@ -89,17 +89,19 @@ class GoogleStationFinder(
         val hit = ja.firstOrNull { p -> lat == null || lng == null || distanceKm(lat, lng, p.lat, p.lng) <= MAX_LOCATE_KM }
             ?: return fallback?.locate(nameJa, lat, lng)
         val latin = textSearch(query, lat, lng, "en").orEmpty().firstOrNull { it.id == hit.id }?.let { nameLatin(it.name) }.orEmpty()
-        val station = TransitStation(nameJa, latin, hit.lat, hit.lng)
+        val station = TransitStation(nameJa, latin, hit.lat, hit.lng, prefectureOf(hit.address))
         store.putCachedRoute(key, json.encodeToString(TransitStation.serializer(), station), System.currentTimeMillis())
         return station
     }
 
-    private class Hit(val id: String, val name: String, val lat: Double, val lng: Double)
+    private class Hit(val id: String, val name: String, val lat: Double, val lng: Double, val address: String)
 
     /** Stations within [radius] m, nearest first; null when Google failed. */
     private fun nearby(lat: Double, lng: Double, radius: Double, lang: String): List<Hit>? {
         val body = buildJsonObject {
-            putJsonArray("includedTypes") { STATION_TYPES.forEach { add(it) } }
+            putJsonArray("includedTypes") { (STATION_TYPES + "transit_station").forEach { add(it) } }
+            // Tram stops are often only "transit_station"; bus stops are that too, so they are left out.
+            putJsonArray("excludedTypes") { EXCLUDED_TYPES.forEach { add(it) } }
             put("maxResultCount", 10)
             put("rankPreference", "DISTANCE")
             put("languageCode", lang)
@@ -143,25 +145,34 @@ class GoogleStationFinder(
         return places.mapNotNull { e ->
             val p = e as? JsonObject ?: return@mapNotNull null
             val types = (p["types"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
-            if (types.none { it in STATION_TYPES }) return@mapNotNull null
+            val rail = types.any { it in STATION_TYPES }
+            if (!rail && ("transit_station" !in types || types.any { it in EXCLUDED_TYPES })) return@mapNotNull null
             val id = (p["id"] as? JsonPrimitive)?.content ?: return@mapNotNull null
             val name = ((p["displayName"] as? JsonObject)?.get("text") as? JsonPrimitive)?.content?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val loc = p["location"] as? JsonObject ?: return@mapNotNull null
             val la = (loc["latitude"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
             val ln = (loc["longitude"] as? JsonPrimitive)?.doubleOrNull ?: return@mapNotNull null
-            Hit(id, name, la, ln)
+            Hit(id, name, la, ln, (p["formattedAddress"] as? JsonPrimitive)?.content.orEmpty())
         }
     }
 
     companion object {
         val STATION_TYPES = listOf("train_station", "subway_station", "light_rail_station")
         val RADII = listOf(3_000.0, 10_000.0, 30_000.0)
-        const val FIELD_MASK = "places.id,places.displayName,places.location,places.types"
+        const val FIELD_MASK = "places.id,places.displayName,places.location,places.types,places.formattedAddress"
+
+        /** Stops that are no rail: never offered as a station. */
+        val EXCLUDED_TYPES = listOf("bus_stop", "bus_station", "taxi_stand", "ferry_terminal", "airport")
+
+        private val PREFECTURE = Regex("""(北海道|東京都|大阪府|京都府|[^\s、〒0-9-]{2,3}県)""")
+
+        /** "日本、〒726-0005 広島県府中市…" → "広島県"; null without a Japanese prefecture. */
+        fun prefectureOf(address: String): String? = PREFECTURE.find(address)?.value
         const val MAX_LOCATE_KM = 400.0
 
         /** "四条駅（京都市営）" → "四条": the name the timetable search understands. */
         fun nameJa(display: String): String =
-            display.replace(Regex("""[(（][^)）]*[)）]"""), "").trim().removeSuffix("駅").trim()
+            display.replace(Regex("""[(（][^)）]*[)）]"""), "").trim().removeSuffix("停留場").removeSuffix("停留所").removeSuffix("電停").removeSuffix("駅").trim()
 
         /** "Shijō Station (Kyoto Municipal Subway)" → "Shijō". */
         fun nameLatin(display: String): String =

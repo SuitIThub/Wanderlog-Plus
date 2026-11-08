@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.56.1
+
+- **Straßenbahn Hiroshima (Server):** Die Bahnhofssuche findet jetzt auch Straßenbahn-Haltestellen (z. B. 原爆ドーム前) – bei Google als ÖPNV-Haltestelle ohne Bushaltestellen, bei OpenStreetMap über `tram_stop`; Zusätze wie 停留場/電停 fallen weg. Linien heißen lesbar „Hiroden …“ bzw. „Straßenbahn“.
+- **Keine gleichnamigen Stationen anderswo (Server):** Der Server merkt sich die Präfektur jedes Bahnhofs. Wählt die Fahrplanauskunft eine gleichnamige Station in einer anderen Präfektur (z. B. 府中 in Tokio statt in Hiroshima), fragt er sofort noch einmal mit dem eindeutigen Namen „府中(広島県)“; die Warnung „Die Fahrplanauskunft hat … gewählt“ erkennt solche Verwechslungen jetzt zuverlässig.
+
 ## 0.56.0
 
 - **Ganze Reise ändern:** Eine Reise aus Zügen hat „Verbindung ändern“. Die ÖPNV-Suche startet vom Start der ersten Teilstrecke (bzw. vom Hotel davor) zum Ziel der letzten (bzw. dem Ryokan danach), zur ersten Abfahrt. Die gewählte Verbindung ersetzt alle Teilstrecken: die erste behält Buchung, Notiz und Sitzplätze (mit Hinweis, falls sie nicht mehr passen), überzählige alte Teilstrecken werden entfernt, zusätzliche Fahrten kommen dazu. Reisen mit einem Flug bieten das nicht an.
