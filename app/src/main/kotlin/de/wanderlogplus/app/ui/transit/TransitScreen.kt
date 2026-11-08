@@ -74,6 +74,9 @@ fun TransitScreen(
     onPickTo: (EndpointHit) -> Unit = {},
     onClearFrom: () -> Unit = {},
     onClearTo: () -> Unit = {},
+    /** "Frühere" / "Spätere" below the connections; null hides them. */
+    onEarlier: (() -> Unit)? = null,
+    onLater: (() -> Unit)? = null,
 ) {
     val f = state.form
     Column(modifier.fillMaxSize().imePadding().testTag("transit-screen")) {
@@ -148,6 +151,12 @@ fun TransitScreen(
                 )
                 r.routes.forEachIndexed { i, route ->
                     TransitRouteCard(r, route, i, accent, onChoose = { onChoose(chosenRoute(r, route)) })
+                }
+                if (onEarlier != null || onLater != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        onEarlier?.let { OutlinedButton(onClick = it, enabled = !state.searching, modifier = Modifier.weight(1f).testTag("transit-earlier")) { Text("‹ Frühere") } }
+                        onLater?.let { OutlinedButton(onClick = it, enabled = !state.searching, modifier = Modifier.weight(1f).testTag("transit-later")) { Text("Spätere ›") } }
+                    }
                 }
             }
         }

@@ -612,5 +612,6 @@ private fun TransitPanel(
             de.wanderlogplus.app.ui.transit.mergeHits(de.wanderlogplus.app.ui.transit.tripEndpointHits(snapshot, q), online)
         },
         onPickFrom = vm::pickFrom, onPickTo = vm::pickTo, onClearFrom = vm::clearFrom, onClearTo = vm::clearTo,
+        onEarlier = vm::earlier, onLater = vm::later,
     )
 }

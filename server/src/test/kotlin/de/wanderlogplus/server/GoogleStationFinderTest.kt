@@ -110,6 +110,26 @@ class GoogleStationFinderTest {
     }
 
     @Test
+    fun oldCacheWithoutPrefectureIsAskedAgain() {
+        store.putCachedRoute("gstations:35.004,135.779", """[{"station":{"nameJa":"古い"},"meters":10}]""", 1)
+        val list = finder().near(35.0037, 135.7788)
+        assertEquals("祇園四条", list.first().station.nameJa)
+    }
+
+    @Test
+    fun pointOfAStopNearItsLeg() {
+        answer = { _, body ->
+            200 to """{"places":[{"id":"s1","displayName":{"text":"姫路駅"},"formattedAddress":"日本、〒670-0927 兵庫県姫路市駅前町","location":{"latitude":34.8267,"longitude":134.6908},"types":["train_station"]}]}"""
+        }
+        val p = finder().point("姫路", 34.7, 135.2)!!
+        assertEquals(34.8267, p.lat)
+        assertEquals(1, calls.size) // Japanese only
+        finder().point("姫路", 34.7, 135.2)
+        assertEquals(1, calls.size) // kept
+        assertNull(finder().point("姫路", 43.0, 141.3)) // a namesake 900 km away is no stop of this leg
+    }
+
+    @Test
     fun prefectures() {
         assertEquals("広島県", GoogleStationFinder.prefectureOf("日本、〒726-0005 広島県府中市府中町"))
         assertEquals("東京都", GoogleStationFinder.prefectureOf("日本、〒183-0055 東京都府中市府中町１丁目"))

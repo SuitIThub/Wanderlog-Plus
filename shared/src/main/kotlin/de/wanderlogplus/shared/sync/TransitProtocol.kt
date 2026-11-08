@@ -44,7 +44,14 @@ data class TransitStation(
 
 /** An intermediate stop of a leg. */
 @Serializable
-data class TransitStop(val nameJa: String, val name: String = "", val time: String = "")
+data class TransitStop(
+    val nameJa: String,
+    val name: String = "",
+    val time: String = "",
+    /** Position for the map (found near the leg); null when unknown. */
+    val lat: Double? = null,
+    val lng: Double? = null,
+)
 
 /** One ride (or walk between stations) of a connection; [line] is a readable version of [lineJa]. */
 @Serializable

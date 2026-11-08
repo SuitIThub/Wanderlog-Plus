@@ -62,7 +62,8 @@ class GoogleStationFinder(
     private val nearSer = ListSerializer(TransitStationNear.serializer())
 
     override fun near(lat: Double, lng: Double, limit: Int): List<TransitStationNear> {
-        val key = "gstations:" + String.format(java.util.Locale.ROOT, "%.3f,%.3f", lat, lng)
+        // "2": entries before the prefecture was kept are asked again.
+        val key = "gstations2:" + String.format(java.util.Locale.ROOT, "%.3f,%.3f", lat, lng)
         store.cachedRoute(key)?.let { (cached, _) -> runCatching { json.decodeFromString(nearSer, cached) }.getOrNull()?.let { return it.take(limit) } }
         for (radius in RADII) {
             val ja = nearby(lat, lng, radius, "ja") ?: return fallback?.near(lat, lng, limit).orEmpty()
@@ -82,7 +83,7 @@ class GoogleStationFinder(
     }
 
     override fun locate(nameJa: String, lat: Double?, lng: Double?): TransitStation? {
-        val key = "gstation:" + nameJa + "|" + (lat?.let { String.format(java.util.Locale.ROOT, "%.1f,%.1f", it, lng) } ?: "")
+        val key = "gstation2:" + nameJa + "|" + (lat?.let { String.format(java.util.Locale.ROOT, "%.1f,%.1f", it, lng) } ?: "")
         store.cachedRoute(key)?.let { (cached, _) -> runCatching { json.decodeFromString(TransitStation.serializer(), cached) }.getOrNull()?.let { return it } }
         val query = TransitService.base(nameJa) + "駅"
         val ja = textSearch(query, lat, lng, "ja") ?: return fallback?.locate(nameJa, lat, lng)
@@ -91,6 +92,20 @@ class GoogleStationFinder(
         val latin = textSearch(query, lat, lng, "en").orEmpty().firstOrNull { it.id == hit.id }?.let { nameLatin(it.name) }.orEmpty()
         val station = TransitStation(nameJa, latin, hit.lat, hit.lng, prefectureOf(hit.address))
         store.putCachedRoute(key, json.encodeToString(TransitStation.serializer(), station), System.currentTimeMillis())
+        return station
+    }
+
+    /** A stop of a leg near [lat]/[lng] (Japanese search only, kept for good); null beyond [MAX_POINT_KM] or when unknown. */
+    override fun point(nameJa: String, lat: Double, lng: Double): TransitStation? {
+        val key = "gpoint:" + nameJa + "|" + String.format(java.util.Locale.ROOT, "%.1f,%.1f", lat, lng)
+        store.cachedRoute(key)?.let { (cached, _) ->
+            if (cached == "{}") return null
+            runCatching { json.decodeFromString(TransitStation.serializer(), cached) }.getOrNull()?.let { return it }
+        }
+        val hits = textSearch(TransitService.base(nameJa) + "駅", lat, lng, "ja") ?: return null // Google failed: try again next time
+        val hit = hits.firstOrNull { distanceKm(lat, lng, it.lat, it.lng) <= MAX_POINT_KM }
+        val station = hit?.let { TransitStation(nameJa, "", it.lat, it.lng, prefectureOf(it.address)) }
+        store.putCachedRoute(key, station?.let { json.encodeToString(TransitStation.serializer(), it) } ?: "{}", System.currentTimeMillis())
         return station
     }
 
@@ -169,6 +184,7 @@ class GoogleStationFinder(
         /** "日本、〒726-0005 広島県府中市…" → "広島県"; null without a Japanese prefecture. */
         fun prefectureOf(address: String): String? = PREFECTURE.find(address)?.value
         const val MAX_LOCATE_KM = 400.0
+        const val MAX_POINT_KM = 200.0
 
         /** "四条駅（京都市営）" → "四条": the name the timetable search understands. */
         fun nameJa(display: String): String =

@@ -131,6 +131,24 @@ fun TransitRouteCard(
                 route.legs.forEachIndexed { n, leg -> LegLine(leg, accent, Modifier.testTag("transit-leg-$index-$n")) }
                 result.walkFromStationMeters?.takeIf { it > 0 }?.let { WalkLine("${walkLabel(it)} zu Fuß vom Bahnhof ${stationLabel(result.toStation)}") }
             }
+            // The connection on a map: each ride in its color through all stops, walks to and from the places dashed.
+            var showMap by androidx.compose.runtime.saveable.rememberSaveable(index, route.departure, route.arrival) { androidx.compose.runtime.mutableStateOf(false) }
+            androidx.compose.material3.TextButton(onClick = { showMap = !showMap }, modifier = Modifier.testTag("transit-map-$index")) {
+                Text(if (showMap) "Karte ausblenden" else "Karte")
+            }
+            if (showMap) {
+                val geometry = androidx.compose.runtime.remember(result, route) {
+                    de.wanderlogplus.app.maps.transitGeometry(
+                        route,
+                        result.fromPlace?.let { de.wanderlogplus.app.maps.LatLngD(it.lat, it.lng) },
+                        result.toPlace?.let { de.wanderlogplus.app.maps.LatLngD(it.lat, it.lng) },
+                    )
+                }
+                Box(Modifier.fillMaxWidth().testTag("transit-map-view-$index")) {
+                    if (geometry != null) de.wanderlogplus.app.maps.RouteMap(geometry, accent, height = 220.dp)
+                    else Text("Für diese Verbindung sind keine Positionen bekannt.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
             if (onChoose != null) {
                 Button(onClick = onChoose, modifier = Modifier.fillMaxWidth().padding(top = 4.dp).testTag("transit-choose-$index")) {
                     Text(if (chosen) "Erneut übernehmen" else "Für diesen Weg übernehmen")

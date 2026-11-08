@@ -124,8 +124,34 @@ class TransitServiceTest {
             201 to answer.replace("\"resolved_origin_ja\":\"東京\"", "\"resolved_origin_ja\":\"$resolved\"")
         }
         val r = TransitService(store, src, local) { clock }.search(TransitRequest(from = TransitPoint(34.57, 133.24, "Hotel"), toStation = "中津川", datetime = "2027-05-20T08:00"))
-        assertEquals(listOf("府中", "府中(広島県)"), inputs.map { it["origin"]!!.jsonPrimitive.content })
+        // The prefecture goes along from the start: one request, the right 府中.
+        assertEquals(listOf("府中(広島県)"), inputs.map { it["origin"]!!.jsonPrimitive.content })
         assertNull(r.stationWarning)
+    }
+
+    @Test fun stopsGetPositionsNearTheirLeg() {
+        val withPoints = object : StationFinder by finder {
+            override fun point(nameJa: String, lat: Double, lng: Double): TransitStation? = when (nameJa) {
+                "品川" -> TransitStation("品川", "", 35.6285, 139.7387)
+                "新横浜" -> TransitStation("新横浜", "", 35.5069, 139.6176)
+                else -> null
+            }
+        }
+        val r = TransitService(store, source, withPoints) { clock }.search(TransitRequest(from = tokyo, to = nakatsugawa, datetime = "2027-05-20T08:00"))
+        val stops = r.routes.first().legs.first().stops
+        assertEquals(listOf("品川", "新横浜"), stops.map { it.nameJa })
+        assertEquals(35.6285, stops[0].lat)
+        assertEquals(139.6176, stops[1].lng)
+    }
+
+    @Test fun slowStopLookupsDoNotHoldTheAnswer() {
+        val slow = object : StationFinder by finder {
+            override fun point(nameJa: String, lat: Double, lng: Double): TransitStation? { Thread.sleep(3_000); return TransitStation(nameJa, "", 35.6, 139.7) }
+        }
+        val started = System.currentTimeMillis()
+        val r = TransitService(store, source, slow, stopTimeoutMillis = 300) { clock }.search(TransitRequest(from = tokyo, to = nakatsugawa, datetime = "2027-05-20T08:00"))
+        assertTrue(System.currentTimeMillis() - started < 2_500, "answer waited for the stops")
+        assertTrue(r.routes.first().legs.first().stops.all { it.lat == null })
     }
 
     @Test fun samePrefectureNeedsNoSecondAsk() {

@@ -249,6 +249,7 @@ fun LogisticsDetailScreen(
                 if (view.liveStatus && type == EntityType.FLIGHT) FlightLiveCard(id)
                 if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
+            if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id }?.transit?.routes?.firstOrNull()?.let { TrainStops(it) }
 
             val train = if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id } else null
             val flight = if (type == EntityType.FLIGHT) snapshot.flights.firstOrNull { it.id == id } else null
@@ -602,3 +603,34 @@ private fun LegActions(
 /** Seats entered for an earlier departure of this train (it was replaced by another ride). */
 fun seatsStale(t: de.wanderlogplus.shared.model.Train): Boolean =
     t.seats.isNotEmpty() && t.seatsForDeparture != null && t.seatsForDeparture != listOfNotNull(t.depart.date, t.depart.time).joinToString("T")
+
+/**
+ * "Zwischenhalte (n)" to unfold: for each ride of the connection the boarding station with its departure, every stop
+ * between with its time and the station where one leaves with the arrival.
+ */
+@Composable
+internal fun TrainStops(route: de.wanderlogplus.shared.sync.TransitRoute) {
+    val rides = route.legs.filter { !it.walk }
+    val count = rides.sumOf { it.stops.size }
+    if (count == 0) return
+    var open by remember { mutableStateOf(false) }
+    androidx.compose.material3.TextButton(onClick = { open = !open }, modifier = Modifier.testTag("train-stops")) {
+        Text((if (open) "▾ " else "▸ ") + "Zwischenhalte ($count)")
+    }
+    if (!open) return
+    var n = 0
+    Column(Modifier.fillMaxWidth().padding(start = 12.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        rides.forEach { leg ->
+            fun name(s: de.wanderlogplus.shared.sync.TransitStation) = s.name.ifBlank { s.nameJa }
+            if (rides.size > 1) Text(leg.line.ifBlank { leg.lineJa }, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+            Text("${leg.departure} ${name(leg.from)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            leg.stops.forEach { s ->
+                Text(
+                    "${s.time} ${s.name.ifBlank { s.nameJa }}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp).testTag("train-stop-${n++}"),
+                )
+            }
+            Text("${leg.arrival} ${name(leg.to)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
