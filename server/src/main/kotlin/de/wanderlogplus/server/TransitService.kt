@@ -78,6 +78,9 @@ interface StationFinder {
     /** Stations within a few km, nearest first. */
     fun near(lat: Double, lng: Double, limit: Int = 6): List<TransitStationNear>
 
+    /** Position of a stop of a leg near [lat]/[lng] (for the map); null when unknown. */
+    fun point(nameJa: String, lat: Double, lng: Double): TransitStation? = locate(nameJa, lat, lng)
+
     /** A station by its Japanese name, near ([lat], [lng]) when given; null when not found. */
     fun locate(nameJa: String, lat: Double?, lng: Double?): TransitStation?
 }
@@ -315,12 +318,13 @@ class TransitService(
         toMeters: Int?,
         key: String,
     ): TransitResult {
-        var routes = ask(src, req, fromStation.nameJa, toStation.nameJa)
+        // Yahoo's own disambiguation from the start ("日本橋(大阪府)"): a plain 日本橋 is Tokyo's.
+        var routes = ask(src, req, yahooName(fromStation), yahooName(toStation))
         if (routes.isNotEmpty()) {
             // A namesake in another prefecture ("府中(東京都)" for Hiroshima's 府中): ask again with Yahoo's own
             // disambiguation "府中(広島県)"; keep the first answer when that finds nothing.
-            val fixFrom = otherPrefecture(routes.first().str("resolved_origin_ja"), fromStation)
-            val fixTo = otherPrefecture(routes.first().str("resolved_destination_ja"), toStation)
+            val fixFrom = otherPrefecture(routes.first().str("resolved_origin_ja"), fromStation) && yahooName(fromStation) == fromStation.nameJa
+            val fixTo = otherPrefecture(routes.first().str("resolved_destination_ja"), toStation) && yahooName(toStation) == toStation.nameJa
             if (fixFrom || fixTo) {
                 val again = ask(
                     src, req,
@@ -347,7 +351,7 @@ class TransitService(
             toStation = located[plain(toStation.nameJa)] ?: toStation,
             datetime = req.datetime,
             searchType = req.searchType,
-            routes = routes.map { parseRoute(it, located, req.datetime.take(10)) },
+            routes = locateStops(routes.map { parseRoute(it, located, req.datetime.take(10)) }, finder),
             fetchedAt = now().toEpochMilli(),
             walkToStationMeters = fromMeters,
             walkFromStationMeters = toMeters,
@@ -371,6 +375,13 @@ class TransitService(
             null
         } ?: throw TransitUnavailable()
         return items.mapNotNull { it as? JsonObject }.filter { it.containsKey("rank") }
+    }
+
+    /** "日本橋" in 大阪府 → "日本橋(大阪府)"; names that already carry a bracket, or without a known prefecture, stay. */
+    private fun yahooName(s: TransitStation): String {
+        val pref = s.prefecture?.takeIf { it.isNotBlank() } ?: return s.nameJa
+        if (s.nameJa.contains('(') || s.nameJa.contains('（')) return s.nameJa
+        return "${base(s.nameJa)}($pref)"
     }
 
     /** True when the timetable took a station of another prefecture than [wanted]'s ("府中(東京都)" for 広島県). */
@@ -407,6 +418,41 @@ class TransitService(
         val lng = wanted.lng ?: return false
         val found = try { finder.locate(resolved, lat, lng) } catch (e: GeocoderUnavailable) { return false } ?: return true
         return distanceKm(lat, lng, found.lat ?: return false, found.lng ?: return false) > SAME_STATION_KM
+    }
+
+    /**
+     * Positions of the stops between boarding and leaving (for the map): each looked up near the point between the
+     * leg's two stations that fits its place in the order, up to [STOP_THREADS] at once; unknown ones stay without.
+     */
+    private fun locateStops(routes: List<TransitRoute>, finder: StationFinder): List<TransitRoute> {
+        data class Ask(val name: String, val lat: Double, val lng: Double)
+        fun asks(leg: TransitLeg): List<Ask?> {
+            val aLat = leg.from.lat; val aLng = leg.from.lng
+            if (leg.walk || aLat == null || aLng == null) return leg.stops.map { null }
+            val bLat = leg.to.lat ?: aLat; val bLng = leg.to.lng ?: aLng
+            val n = leg.stops.size + 1
+            return leg.stops.mapIndexed { i, s ->
+                val t = (i + 1).toDouble() / n
+                val lat = aLat + (bLat - aLat) * t
+                val lng = aLng + (bLng - aLng) * t
+                Ask(s.nameJa, Math.round(lat * 10) / 10.0, Math.round(lng * 10) / 10.0)
+            }
+        }
+        val wanted = routes.flatMap { r -> r.legs.flatMap { asks(it) } }.filterNotNull().distinct()
+        if (wanted.isEmpty()) return routes
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(minOf(STOP_THREADS, wanted.size))
+        val found: Map<Ask, TransitStation?> = try {
+            pool.invokeAll(wanted.map { w -> java.util.concurrent.Callable { runCatching { finder.point(w.name, w.lat, w.lng) }.getOrNull() } })
+                .map { it.get() }.let { wanted.zip(it).toMap() }
+        } finally {
+            pool.shutdownNow()
+        }
+        return routes.map { r ->
+            r.copy(legs = r.legs.map { leg ->
+                val list = asks(leg)
+                leg.copy(stops = leg.stops.mapIndexed { i, s -> list[i]?.let { found[it] }?.let { p -> s.copy(lat = p.lat, lng = p.lng) } ?: s })
+            })
+        }
     }
 
     /** Positions of every station where a leg starts or ends (for the map), each looked up near the previous one. */
@@ -490,6 +536,9 @@ class TransitService(
 
     companion object {
         val TTL: Duration = Duration.ofDays(7)
+
+        /** Stops looked up at the same time. */
+        const val STOP_THREADS = 8
 
         /** Smart search: stations in walking distance, how many at start and goal, pairs asked, connections shown. */
         const val SMART_RADIUS_M = 1500
