@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.59.0
+
+- **Durch die Orte wischen:** Auf der Detailseite eines Orts das Titelbild nach links oder rechts wischen, um zum nächsten bzw. vorigen Ort derselben Region zu springen (Reihenfolge wie in der Regionsliste).
+
 ## 0.58.0
 
 - **Keine falsche Stadt mehr (Server):** Bahnhofsnamen gehen jetzt immer mit Präfektur an die Fahrplanauskunft (z. B. „日本橋(大阪府)“) – vorher machte Yahoo aus dem Bahnhof Nippombashi in Osaka den Nihonbashi in Tokio und führte über Nagoya. Gespeicherte Bahnhöfe ohne Präfektur werden einmal neu geholt.
