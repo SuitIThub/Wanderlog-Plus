@@ -126,7 +126,9 @@ fun ReelJobScreen(
     /** Opens the place search to set candidate [index]'s position by hand; null hides "Position suchen". */
     onFindPosition: ((index: Int) -> Unit)? = null,
 ) {
-    val candidates = job?.candidates.orEmpty()
+    // "Trotzdem importieren": the candidate counts as new (no duplicate) and is researched after the import.
+    val forced = remember(job?.id) { mutableStateMapOf<Int, Boolean>() }
+    val candidates = job?.candidates.orEmpty().mapIndexed { i, c -> if (forced[i] == true) c.copy(savedPlaceId = null) else c }
     val picked = remember(job?.id, candidates.size) {
         mutableStateMapOf<Int, Boolean>().apply { candidates.forEachIndexed { i, c -> put(i, c.main && c.onRoute && importable(c)) } }
     }
@@ -192,6 +194,15 @@ fun ReelJobScreen(
                                     else if (!c.onRoute) Badge(BadgeSpec("abseits", BadgeTone.Warning))
                                     c.worth?.let { Badge(BadgeSpec(worthLabel(it), worthTone(it))) }
                                 }
+                                if (c.savedPlaceId != null && !imported && c.lat != null && c.lng != null) {
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = { forced[i] = true; picked[i] = true; if (snapshot != null) regions[i] = defaultRegion(snapshot, c) },
+                                        modifier = Modifier.testTag("reel-import-anyway-$i"),
+                                    ) { Text("Trotzdem importieren") }
+                                }
+                                if (forced[i] == true && !imported) {
+                                    Text("Wird als eigener Ort übernommen und danach recherchiert.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                                 if (c.description.isNotBlank()) Text(c.description, style = MaterialTheme.typography.bodyMedium)
                                 if (c.worthReason.isNotBlank()) Text(c.worthReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 val note = reelNote(c, null)
@@ -224,7 +235,7 @@ fun ReelJobScreen(
                     Button(onClick = onOpenPlaces, modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-imported")) { Text("Übernommen – zu den Orten") }
                 } else {
                     Button(
-                        onClick = { onImport(candidates.indices.filter { picked[it] == true }.map { ReelPick(candidates[it], regions[it]) }) },
+                        onClick = { onImport(candidates.indices.filter { picked[it] == true }.map { ReelPick(candidates[it], regions[it], research = forced[it] == true) }) },
                         enabled = count > 0,
                         modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-import"),
                     ) { Text(if (count == 1) "1 Ort übernehmen" else "$count Orte übernehmen") }

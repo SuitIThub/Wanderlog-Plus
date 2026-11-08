@@ -105,14 +105,14 @@ fun defaultRegion(snapshot: TripSnapshot, c: ReelCandidate): String? =
     if (c.lat != null && c.lng != null) nearestRegion(snapshot, c.lat!!, c.lng!!) else null
 
 /** A candidate chosen for import and the region it goes into. */
-data class ReelPick(val candidate: ReelCandidate, val regionId: String?)
+data class ReelPick(val candidate: ReelCandidate, val regionId: String?, val research: Boolean = false)
 
 /** Places with coordinates only: the rest cannot be shown on maps or used for ways. */
 fun importable(c: ReelCandidate) = c.lat != null && c.lng != null && c.savedPlaceId == null
 
 /** Takes the picked candidates over as saved places (status "Idee"); returns their ids. */
 fun importPicks(editor: LocalEditor, picks: List<ReelPick>, source: String?): List<String> =
-    picks.filter { importable(it.candidate) }.map { (c, region) ->
+    picks.filter { importable(it.candidate) }.map { (c, region, _) ->
         editor.addPlaceToCollection(
             name = c.name,
             lat = c.lat!!,

@@ -361,7 +361,7 @@ class MainActivity : ComponentActivity() {
     private fun reelsFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            ReelsViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, { container.syncApi() }, PrefsImportedJobs(applicationContext), container.scope, config = { container.settings.assessConfig.first() }) as T
+            ReelsViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, { container.syncApi() }, PrefsImportedJobs(applicationContext), container.scope, config = { container.settings.assessConfig.first() }, syncNow = container.syncScheduler::requestNow) as T
     }
 
     private fun tripFactory(container: AppContainer) = object : ViewModelProvider.Factory {
