@@ -27,6 +27,8 @@ data class TransitRequest(
     val useHighwayBus: Boolean = true,
     val useLocalBus: Boolean = true,
     val fresh: Boolean = false,
+    /** Compare several stations in walking distance of a place (start or goal without a station name). */
+    val smart: Boolean = false,
 )
 
 /** A station: Japanese name (what the timetable search understands), Latin name for display, position when known. */
@@ -84,6 +86,18 @@ data class TransitRoute(
     val legs: List<TransitLeg> = emptyList(),
     /** Station-to-station part only; [TransitResult] carries the walks to and from the stations. */
     val date: String = "",
+    /** Smart search: straight-line distance and walk from the start place to this route's first station. */
+    val accessMeters: Int? = null,
+    val accessMinutes: Int? = null,
+    /** Smart search: from this route's last station to the goal place. */
+    val egressMeters: Int? = null,
+    val egressMinutes: Int? = null,
+    /** Smart search: door to door ("Abfahrt um": wanted time → at the goal's door; "Ankunft bis": leaving → wanted time). */
+    val doorMinutes: Int? = null,
+    /** Smart search: door minutes + 5 per change + half the walking; smaller is better. */
+    val score: Int? = null,
+    /** The best balance of a smart search. */
+    val best: Boolean = false,
 )
 
 /**
@@ -106,6 +120,8 @@ data class TransitResult(
     val fromPlace: TransitPoint? = null,
     /** The place the search went to when it was not just a station; set by the app. */
     val toPlace: TransitPoint? = null,
+    /** The routes come from several stations (smart search); each route has its own walks. */
+    val smart: Boolean = false,
 )
 
 /** Stations near a point, nearest first (`GET /api/transit/stations`). */
