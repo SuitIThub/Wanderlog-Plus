@@ -53,8 +53,9 @@ class WebPhotosService(
 
     fun search(q: String, near: Pair<Double, Double>?): List<WebPhoto> {
         val fromGoogle = try {
-            google.search(q, near, null, GOOGLE_PLACES).flatMap { hit ->
-                hit.photos.take(PER_PLACE).map { WebPhoto("g:" + it.name, WebPhotoSource.GOOGLE, hit.name, "Google", it.width, it.height) }
+            // The best match (usually the place asked for) gives all its photos (Google hands out at most 10), the others a few.
+            google.search(q, near, null, GOOGLE_PLACES).flatMapIndexed { i, hit ->
+                hit.photos.take(if (i == 0) FIRST_PLACE else PER_PLACE).map { WebPhoto("g:" + it.name, WebPhotoSource.GOOGLE, hit.name, "Google", it.width, it.height) }
             }
         } catch (e: Exception) {
             emptyList()
@@ -145,6 +146,7 @@ class WebPhotosService(
         const val WIKI_MAX = 12
         const val GOOGLE_PLACES = 5
         const val PER_PLACE = 4
+        const val FIRST_PLACE = 10
         const val MAX_BYTES = 15 * 1024 * 1024
         val IMAGE_TYPES = setOf("image/jpeg", "image/png", "image/webp")
 

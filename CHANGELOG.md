@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.66.0
+
+- **Zimmerfotos wählen:** Im Fotos-Reiter einer Unterkunft öffnet ein Tipp das Foto jetzt direkt groß (kein Rückfrage-Fenster mehr). Ein unauffälliger Knopf „Zimmerfotos wählen“ schaltet in einen Auswahlmodus: alle Fotos eures Zimmers antippen, „Fertig“ – sie erscheinen in der Zimmer-Karte und lassen sich dort antippen.
+- **Google-Fotos der Unterkunft:** Der Fotos-Reiter zeigt wie bei Orten die Google-Fotos der Unterkunft.
+- **Online-Fotosuche ergiebiger:** Der beste Treffer (meist die gesuchte Unterkunft oder der Ort selbst) liefert jetzt alle seine Google-Fotos – bis zu 10, mehr gibt Google nicht heraus – statt 4.
+
 ## 0.65.1
 
 - **„In Tabelog öffnen“ öffnet jetzt das Restaurant** in der mehrsprachigen Tabelog-App statt nur deren Startseite. Die App versteht keine Webadressen, sondern ihren eigenen Link (`tabelog-tourists://rstdtl/<id>/top/`, wie ihn Tabelogs englische Seiten im App-Knopf verwenden). Ohne App öffnet sich wie bisher die englische Seite im Browser.

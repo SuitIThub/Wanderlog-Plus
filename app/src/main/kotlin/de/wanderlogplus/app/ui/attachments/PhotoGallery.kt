@@ -20,6 +20,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.CloudDownload
@@ -67,6 +70,8 @@ fun PhotoGrid(
     onAdd: (() -> Unit)?,
     onOpen: (index: Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Picking mode: the ids ticked so far (a tap still goes to [onOpen], which toggles); null: normal grid. */
+    selected: Set<String>? = null,
 ) {
     Column(modifier.fillMaxWidth().testTag("photo-gallery"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (onAdd != null) {
@@ -87,7 +92,19 @@ fun PhotoGrid(
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         chunk.forEachIndexed { col, p ->
                             val i = row * columns + col
-                            Thumbnail(p, files, Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { onOpen(i) }.testTag("photo-$i"))
+                            Box(Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(6.dp)).clickable { onOpen(i) }.testTag("photo-$i")) {
+                                Thumbnail(p, files, Modifier.fillMaxSize())
+                                if (selected != null) {
+                                    val on = p.id in selected
+                                    Icon(
+                                        if (on) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                                        contentDescription = if (on) "Zimmerfoto" else "Kein Zimmerfoto",
+                                        tint = if (on) MaterialTheme.colorScheme.primary else Color.White,
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp).size(24.dp)
+                                            .background(if (on) Color.White else Color.Black.copy(alpha = 0.25f), CircleShape),
+                                    )
+                                }
+                            }
                         }
                         repeat(columns - chunk.size) { Box(Modifier.weight(1f)) }
                     }

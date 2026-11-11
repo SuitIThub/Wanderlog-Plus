@@ -46,17 +46,27 @@ class WebPhotosServiceTest {
     @Test
     fun mixesGoogleFirst() {
         val photos = service().search("Kinkaku-ji", null)
-        assertEquals(11, photos.size)
-        assertTrue(photos.take(8).all { it.source == WebPhotoSource.GOOGLE && it.id.startsWith("g:") })
-        assertEquals(4, photos.count { it.id.startsWith("g:places/a/") })
-        assertEquals(listOf("w:A.jpg", "w:B.png", "w:C.jpg"), photos.drop(8).map { it.id })
+        assertEquals(12, photos.size)
+        assertTrue(photos.take(9).all { it.source == WebPhotoSource.GOOGLE && it.id.startsWith("g:") })
+        // The best match gives all its photos (up to Google's 10), the others four each.
+        assertEquals(5, photos.count { it.id.startsWith("g:places/a/") })
+        assertEquals(4, photos.count { it.id.startsWith("g:places/b/") })
+        assertEquals(listOf("w:A.jpg", "w:B.png", "w:C.jpg"), photos.drop(9).map { it.id })
         assertEquals("Ort a", photos.first().title)
+    }
+
+    @Test
+    fun aHotelGivesAllTenGooglePhotos() {
+        val g = GooglePlacesSearch(PlacesSearchTransport { 200 to """{"places":[${googlePlace("hotel", 10)},${googlePlace("other", 10)}]}""" }, store)
+        val photos = service(g, wiki { 404 to ByteArray(0) }).search("Hotel Gion", null)
+        assertEquals(10, photos.count { it.id.startsWith("g:places/hotel/") })
+        assertEquals(4, photos.count { it.id.startsWith("g:places/other/") })
     }
 
     @Test
     fun wikimediaDownStillGoogle() {
         val photos = service(w = wiki { throw IOException("down") }).search("Kinkaku-ji", null)
-        assertEquals(8, photos.size)
+        assertEquals(9, photos.size) // 5 of the best match + 4 of the next
     }
 
     @Test
