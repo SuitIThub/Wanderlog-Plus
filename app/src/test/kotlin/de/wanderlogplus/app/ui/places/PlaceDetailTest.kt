@@ -164,8 +164,16 @@ class PlaceDetailTest {
     @Test fun placeWithoutOpeningHoursShowsUnbekannt() {
         seedPlace()
         show()
-        rule.onNode(hasText("unbekannt") and hasAnyAncestor(hasTestTag("hours-Mo"))).assertExists()
-        rule.onNode(hasText("unbekannt") and hasAnyAncestor(hasTestTag("hours-So"))).assertExists()
+        // Seven times "unbekannt" are one line.
+        rule.onNode(hasText("Öffnungszeiten unbekannt") and hasTestTag("hours-unknown")).assertExists()
+        rule.onNodeWithTag("hours-Mo").assertDoesNotExist()
+    }
+
+    @Test fun sameHoursEveryDayAreOneLine() {
+        seedPlace(Place("p1", name = "Schrein Alpha", openingPeriods = (0..6).map { OpeningPeriod(it, "09:30", it, "18:00") }))
+        show()
+        rule.onNode(hasText("Täglich 09:30–18:00") and hasTestTag("hours-daily")).assertExists()
+        rule.onNodeWithTag("hours-Mo").assertDoesNotExist()
     }
 
     @Test fun showsFactsRatingDurationTagsAndHours() {
@@ -229,11 +237,11 @@ class PlaceDetailTest {
         rule.onNodeWithTag("tab-info").assertExists()
         // Info is the default tab.
         rule.onNodeWithText("Alter Schrein").assertIsDisplayed()
-        rule.onNodeWithTag("hours-Mo").assertExists()
+        rule.onNodeWithTag("hours-unknown").assertExists()
         rule.onNodeWithTag("place-note").assertDoesNotExist()
         rule.onNodeWithTag("tab-note").performClick()
         rule.onNodeWithTag("place-note").assertIsDisplayed()
-        rule.onNodeWithTag("hours-Mo").assertDoesNotExist()
+        rule.onNodeWithTag("hours-unknown").assertDoesNotExist()
         rule.onNodeWithTag("attachment-at1").assertDoesNotExist()
         rule.onNodeWithTag("tab-files").performClick()
         rule.onNodeWithTag("attachment-at1").assertExists()
