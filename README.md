@@ -49,6 +49,8 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 ### Reels (KI)
 
 - Ein Instagram-Reel an die App teilen; ein kleines Popup bestätigt, man bleibt in Instagram. Der Server erkennt die Orte in Bild, Ton und Beschreibung, trennt das eigentliche Ziel von Bahnhöfen, Vierteln und Kulisse („Nur erwähnt“) und von weiteren Filialen, prüft die Lage auf der Route und recherchiert (Parallel, OpenRouter). Eine Benachrichtigung führt zur Vorschau, dort übernimmt man die gewünschten Orte.
+- Auch Posts mit einem Bild oder einer Bildergalerie gehen (gallery-dl auf dem Server); Text auf den Bildern wird mitgelesen.
+- **Tipps:** Allgemeine Tipps im Beitrag (Etikette, Verkehr, Geld, Apps …) werden mit den Guides abgeglichen. Neue prüft der Server auf Wahrheit (stimmt / übertrieben – korrigiert / falsch / nicht belegt, mit Begründung und Quellen). In der Vorschau wählt man sie aus und bestimmt den Guide; übernommen werden sie in einen bestehenden Guide eingearbeitet oder als neuer Guide geschrieben.
 - Ist ein Ort schon gespeichert (gleicher Google-Eintrag oder ähnlicher Name in höchstens 300 m), wird die Recherche übersprungen. „Trotzdem importieren“ übernimmt ihn doch als eigenen Ort. Fehlt die Position, setzt „Position suchen“ sie. Die Liste aller Auswertungen steht unter Orte → Reels und unter Mehr → Reels auswerten.
 
 ### Logistik
@@ -93,6 +95,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - Unter Mehr → Guides: Themen wie Japanisch für unterwegs, Onsen, Im Restaurant bestellen (mit Omakase, Izakaya, Ramen), Shinkansen, Tempel & Schreine. Die App schlägt vor, was Orte, Unterkünfte und Fahrten berühren; abhaken und „Ausgewählte erstellen“. Abgelehnte Themen kommen nicht wieder. Alles liegt offline auf dem Gerät.
 - Jeder Guide hat das Wichtigste vorn, Tun- und Lassen-Listen und Sätze auf Japanisch mit Lautschrift, zum Vorlesen und groß zum Hinhalten. Unten steht „Zuletzt recherchiert“.
 - Chips an Orten, Unterkünften, Fahrten und Tagen (lange drücken blendet ihn hier aus, Plus heftet ihn an). Auf der Heute-Seite steht „Für heute“.
+- **Apps & Links:** Erwähnt ein Guide eine App oder Webseite, steht sie als Chip im Guide und überall, wo der Guide gezeigt wird. Eine installierte App öffnet sich direkt, sonst ihr Play-Store-Eintrag; Webseiten im Browser. Der Server prüft jeden Link (Seite erreichbar, Play-Store-Eintrag vorhanden). „Links ergänzen“ (Menü der Guide-Übersicht) trägt sie für bestehende Guides nach.
 
 ### KI-Kriterien und Ablauf
 
