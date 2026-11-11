@@ -98,6 +98,10 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - Chips an Orten, Unterkünften, Fahrten und Tagen (lange drücken blendet ihn hier aus, Plus heftet ihn an). Auf der Heute-Seite steht „Für heute“.
 - **Apps & Links:** Erwähnt ein Guide eine App oder Webseite, steht sie als Chip im Guide. Eine installierte App öffnet sich direkt, sonst ihr Play-Store-Eintrag; Webseiten im Browser. Der Server prüft jeden Link (Seite erreichbar, Play-Store-Eintrag vorhanden). „Links ergänzen“ (Menü der Guide-Übersicht) trägt sie für bestehende Guides nach.
 
+### Guthaben & Limits
+
+- Unter Mehr → Guthaben & Limits: Guthaben und Kontingente der bezahlten Dienste, live vom Server abgefragt (Keys bleiben auf dem Server): OpenRouter, Apify (Monatsbudget), AirLabs (Abfragen, Ablauf des Keys). Parallel nur als Link aufs Dashboard; für Google zählt der Server seine eigenen Aufrufe pro Monat (ohne Karten und Aufrufe direkt aus der App), dazu ein Link zur Cloud Console. Markiert ab 80 % Verbrauch (OpenRouter: unter 5 $ übrig) oder 14 Tage vor Ablauf.
+
 ### KI-Kriterien und Ablauf
 
 - Unter Mehr → KI-Kriterien wählt man, wonach die KI bewertet (18 Kriterien wie Andrang, Authentisch statt touristisch, Buchbarkeit, Wartezeiten, Preis-Leistung, Reisezeit Mai …), und kann eigene Anweisungen ergänzen. Jedes Kriterium bekommt 1–5 Punkte, dazu ein Gesamtfazit. Die Kriterien gelten für Einschätzung, Recherche und Reels.
