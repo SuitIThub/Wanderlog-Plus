@@ -29,7 +29,46 @@ data class ResearchRequest(val savedPlaceIds: List<String>, val config: AssessCo
  * topic already has one). [wish] is what the user wants in or changed.
  */
 @Serializable
-data class GuideAsk(val topic: String? = null, val title: String = "", val parentId: String? = null, val wish: String = "", val guideId: String? = null)
+data class GuideAsk(
+    val topic: String? = null,
+    val title: String = "",
+    val parentId: String? = null,
+    val wish: String = "",
+    val guideId: String? = null,
+    /** Checked information to work in (tips from a reel); with an existing guide it is merged without new research. */
+    val additions: List<GuideAddition> = emptyList(),
+)
+
+/** One checked piece of information for a guide and the pages that back it. */
+@Serializable
+data class GuideAddition(val text: String, val sources: List<String> = emptyList())
+
+/** `POST /api/ai/guide-links`: find and check the apps and pages the guides mention (empty = all guides). */
+@Serializable
+data class GuideLinksRequest(val guideIds: List<String> = emptyList())
+
+/** How true a tip from a reel turned out. */
+enum class TipVerdict { TRUE, PARTLY, FALSE, UNVERIFIED }
+
+/** A general travel tip found in a reel or post: already in a guide, or checked, with the guide it should go into. */
+@Serializable
+data class ReelTip(
+    val claim: String,
+    val topic: String = "",
+    val evidence: String = "",
+    /** The guide that already says this; then it is not checked. */
+    val coveredBy: String? = null,
+    val coveredQuote: String = "",
+    val verdict: TipVerdict? = null,
+    /** What goes into the guide (for PARTLY the corrected version). */
+    val text: String = "",
+    val reason: String = "",
+    val sources: List<String> = emptyList(),
+    /** Suggested target, exactly one: an existing guide, a catalog topic, or a new free guide's title. */
+    val guideId: String? = null,
+    val targetTopic: String? = null,
+    val targetTitle: String? = null,
+)
 
 /** `POST /api/ai/stay`: research the room and amenities of a stay; [fresh] also replaces what was changed by hand. */
 @Serializable
@@ -99,6 +138,8 @@ data class AiJobInfo(
     val error: String? = null,
     val summary: String? = null,
     val candidates: List<ReelCandidate> = emptyList(),
+    /** Reel: general travel tips, matched against the guides and checked. */
+    val tips: List<ReelTip> = emptyList(),
     val assessments: List<Assessment> = emptyList(),
     val dossiers: List<DossierResult> = emptyList(),
     /** Places done / to do while a research job runs. */
