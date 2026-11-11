@@ -22,9 +22,14 @@ import java.time.Duration
 /** A restaurant's Japanese name (what Tabelog's search understands) and its prefecture as Tabelog area slug. */
 data class JaName(val name: String, val area: String)
 
-/** Finds the Japanese name of a place; null when unknown. */
+/** Finds the Japanese name of a place; null when there is none; [TabelogUnavailable] when the source cannot be asked. */
 fun interface JaNameSource {
     fun find(place: Place): JaName?
+}
+
+/** Without a Google key: the name as saved and all of Japan (Tabelog's search rarely finds Latin names). */
+object LatinNames : JaNameSource {
+    override fun find(place: Place): JaName? = place.name.trim().takeIf { it.isNotEmpty() }?.let { JaName(it, "all") }
 }
 
 /** Google Places in Japanese: details by id, or a text search around the place. */
@@ -43,12 +48,19 @@ class GoogleJaNames(private val transport: GoogleJaTransport) : JaNameSource {
     override fun find(place: Place): JaName? = try {
         if (place.googlePlaceId.isNotBlank()) {
             val (status, body) = transport.details(place.googlePlaceId)
-            if (status !in 200..299) null else nameOf(json.parseToJsonElement(body).jsonObject)
+            when {
+                status == 404 -> null
+                status !in 200..299 -> throw TabelogUnavailable("google_$status")
+                else -> nameOf(json.parseToJsonElement(body).jsonObject)
+            }
         } else {
             searchNear(place)
         }
+    } catch (e: TabelogUnavailable) {
+        throw e
     } catch (e: Exception) {
-        null
+        // An answer we cannot read: Google is not usable right now, not "this place has no name".
+        throw TabelogUnavailable("google_bad_answer")
     }
 
     private fun searchNear(place: Place): JaName? {
@@ -66,7 +78,7 @@ class GoogleJaNames(private val transport: GoogleJaTransport) : JaNameSource {
             }
         }.toString()
         val (status, text) = transport.search(body)
-        if (status !in 200..299) return null
+        if (status !in 200..299) throw TabelogUnavailable("google_$status")
         val places = json.parseToJsonElement(text).jsonObject["places"] as? JsonArray ?: return null
         return places.mapNotNull { it as? JsonObject }.firstOrNull { p ->
             val loc = p["location"] as? JsonObject ?: return@firstOrNull false

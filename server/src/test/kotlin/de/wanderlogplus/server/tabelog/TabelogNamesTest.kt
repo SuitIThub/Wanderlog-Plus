@@ -47,6 +47,9 @@ class TabelogNamesTest {
     fun `a far search hit or an error gives nothing`() {
         val far = Fake(search = 200 to """{"places":[{"displayName":{"text":"麺屋 猪一"},"formattedAddress":"京都府","location":{"latitude":35.02,"longitude":135.7668}}]}""")
         assertNull(GoogleJaNames(far).find(inoichi.copy(googlePlaceId = "")))
-        assertNull(GoogleJaNames(Fake(details = 403 to "{}")).find(inoichi))
+        kotlin.test.assertFailsWith<TabelogUnavailable> { GoogleJaNames(Fake(details = 403 to "{}")).find(inoichi) }
+        kotlin.test.assertFailsWith<TabelogUnavailable> { GoogleJaNames(Fake(details = 200 to "kein json")).find(inoichi) }
+        // Google answers but has no entry: that is "no name", not an outage.
+        assertNull(GoogleJaNames(Fake(details = 404 to "{}")).find(inoichi))
     }
 }

@@ -49,4 +49,10 @@ class TabelogMatchTest {
         assertFalse(TabelogMatch.similar("すし ざんまい", "一蘭 渋谷店"))
         assertFalse(TabelogMatch.similar("", "一蘭"))
     }
+
+    @Test
+    fun `one-character names do not match by containment`() {
+        assertFalse(TabelogMatch.similar("鮨", "鮨 さいとう"))
+        assertTrue(TabelogMatch.similar("鮨 さいとう", "鮨さいとう"))
+    }
 }

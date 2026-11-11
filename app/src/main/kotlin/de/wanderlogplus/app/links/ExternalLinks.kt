@@ -56,8 +56,12 @@ object GoogleExternalLinks : ExternalLinkProvider {
 }
 
 /** ACTION_DIAL for tel:, ACTION_VIEW otherwise; false when no app handles it. */
+/** A Tabelog restaurant page (not the search): worth handing to the Tabelog app. */
+fun opensInTabelogApp(link: ExternalLink): Boolean =
+    link.kind == LinkKind.TABELOG && de.wanderlogplus.shared.model.canonicalTabelogUrl(link.uri) != null
+
 fun openExternalLink(context: Context, link: ExternalLink): Boolean {
-    if (link.kind == LinkKind.TABELOG) return openTabelog(context, link.uri)
+    if (opensInTabelogApp(link)) return openTabelog(context, link.uri)
     val action = if (link.uri.startsWith("tel:")) Intent.ACTION_DIAL else Intent.ACTION_VIEW
     val intent = Intent(action, Uri.parse(link.uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return try {

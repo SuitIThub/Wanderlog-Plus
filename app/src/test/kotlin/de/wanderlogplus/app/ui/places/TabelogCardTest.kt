@@ -60,7 +60,10 @@ class TabelogCardTest {
 
     @Test fun notFoundOffersLinkAndSearch() {
         var searched = 0
-        rule.setContent { WanderlogPlusTheme { TabelogCard(TabelogInfo(TabelogStatus.NOT_FOUND), onOpen = {}, onRefresh = {}, onSetLink = {}, onSearch = { searched++ }) } }
+        var retried = 0
+        rule.setContent { WanderlogPlusTheme { TabelogCard(TabelogInfo(TabelogStatus.NOT_FOUND), onOpen = {}, onRefresh = { retried++ }, onSetLink = {}, onSearch = { searched++ }) } }
+        rule.onNodeWithTag("tabelog-retry").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, retried)
         rule.onNodeWithText("Bei Tabelog nicht gefunden").assertExists()
         rule.onNodeWithTag("tabelog-set-link").assertExists()
         rule.onNodeWithTag("tabelog-search").performSemanticsAction(SemanticsActions.OnClick)
@@ -77,6 +80,9 @@ class TabelogCardTest {
         rule.setContent { WanderlogPlusTheme { TabelogCard(TabelogInfo(TabelogStatus.NOT_FOUND), onOpen = {}, onRefresh = {}, onSetLink = { set = it }, onSearch = {}) } }
         rule.onNodeWithTag("tabelog-set-link").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("tabelog-link-input").performTextReplacement("https://example.com/x")
+        rule.onNodeWithTag("tabelog-link-save").assertIsNotEnabled()
+        // A search or list page is no restaurant.
+        rule.onNodeWithTag("tabelog-link-input").performTextReplacement("https://tabelog.com/rstLst/?vs=1&sw=ramen")
         rule.onNodeWithTag("tabelog-link-save").assertIsNotEnabled()
         rule.onNodeWithTag("tabelog-link-input").performTextReplacement("https://tabelog.com/tokyo/A1303/A130301/13001762/")
         rule.onNodeWithTag("tabelog-link-save").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)

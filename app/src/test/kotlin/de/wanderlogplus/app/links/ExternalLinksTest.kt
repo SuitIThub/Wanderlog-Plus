@@ -84,6 +84,12 @@ class ExternalLinksTest {
         assertEquals(true, uri(found, LinkKind.TABELOG, PlaceCategory.NIGHTLIFE) != null)
     }
 
+    @Test fun onlyRestaurantPagesGoToTheTabelogApp() {
+        org.junit.Assert.assertTrue(opensInTabelogApp(ExternalLink(LinkKind.TABELOG, "Tabelog", "https://tabelog.com/en/kyoto/A2601/A260201/26032368/")))
+        org.junit.Assert.assertFalse(opensInTabelogApp(ExternalLink(LinkKind.TABELOG, "Tabelog", "https://tabelog.com/rstLst/?vs=1&sw=Ramen")))
+        org.junit.Assert.assertFalse(opensInTabelogApp(ExternalLink(LinkKind.WEBSITE, "Website", "https://tabelog.com/en/kyoto/A2601/A260201/26032368/")))
+    }
+
     @Test fun tabelogTargetsPreferTheMultilingualApp() {
         val info = de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.FOUND, "https://tabelog.com/kyoto/A2601/A260201/26032368/")
         val en = "https://tabelog.com/en/kyoto/A2601/A260201/26032368/"

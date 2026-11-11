@@ -35,7 +35,7 @@ import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.TabelogInfo
 import de.wanderlogplus.shared.model.TabelogStatus
-import de.wanderlogplus.shared.model.isTabelogUrl
+import de.wanderlogplus.shared.model.canonicalTabelogUrl
 import java.util.Locale
 
 /** "3,71 · 1.159 Bewertungen"; null without a score. */
@@ -101,6 +101,7 @@ fun TabelogCard(
                 }
                 TabelogStatus.NOT_FOUND -> {
                     Text("Bei Tabelog nicht gefunden", style = MaterialTheme.typography.bodyMedium)
+                    if (onRefresh != null) TextButton(onClick = onRefresh, modifier = Modifier.testTag("tabelog-retry")) { Text("Neu suchen") }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (onSetLink != null) OutlinedButton(onClick = { linking = true }, modifier = Modifier.testTag("tabelog-set-link")) { Text("Tabelog-Link setzen") }
                         OutlinedButton(onClick = onSearch, modifier = Modifier.testTag("tabelog-search")) { Text("In Tabelog suchen") }
@@ -112,11 +113,12 @@ fun TabelogCard(
     }
     if (linking && onSetLink != null) {
         var url by remember { mutableStateOf(info?.url.orEmpty()) }
-        val ok = isTabelogUrl(url)
+        // Only a restaurant's own page; a search or list page would give some other restaurant.
+        val ok = canonicalTabelogUrl(url) != null
         de.wanderlogplus.app.ui.design.EditSheet("Tabelog-Link setzen", onDismiss = { linking = false }) {
-            Text("Die Adresse des Restaurants bei Tabelog (https://tabelog.com/…), z. B. aus der Tabelog-App geteilt.", style = MaterialTheme.typography.bodySmall)
+            Text("Die Adresse der Restaurantseite bei Tabelog (https://tabelog.com/…/A1234/A123456/12345678/), z. B. aus der Tabelog-App geteilt.", style = MaterialTheme.typography.bodySmall)
             OutlinedTextField(url, { url = it.trim() }, singleLine = true, isError = url.isNotEmpty() && !ok, label = { Text("Tabelog-Adresse") }, modifier = Modifier.fillMaxWidth().testTag("tabelog-link-input"))
-            Button(onClick = { onSetLink(url); linking = false }, enabled = ok, modifier = Modifier.fillMaxWidth().testTag("tabelog-link-save")) { Text("Übernehmen") }
+            Button(onClick = { onSetLink(canonicalTabelogUrl(url) ?: url); linking = false }, enabled = ok, modifier = Modifier.fillMaxWidth().testTag("tabelog-link-save")) { Text("Übernehmen") }
         }
     }
 }

@@ -35,8 +35,16 @@ data class TabelogHit(
 /** One review (Japanese) with its title and visit/post date. */
 data class TabelogReview(val title: String, val text: String, val date: String)
 
-/** Apify could not be asked (network, credit, actor error); [code] is fixed text like "apify_402". */
-class TabelogUnavailable(val code: String) : RuntimeException(code)
+/** Apify or Google could not be asked (network, credit, actor error); [code] is fixed text like "apify_402". */
+class TabelogUnavailable(val code: String) : RuntimeException(code) {
+    /**
+     * True when no lookup can work right now (credit, key, rate limit, outage, Google): the sweep stops and pauses.
+     * False for a problem of this one place (bad input, timeout, odd answer): it is marked not found and the sweep goes on.
+     */
+    val global: Boolean
+        get() = code.startsWith("google_") || code == "apify_unreachable" ||
+            code in setOf("apify_401", "apify_402", "apify_403", "apify_429") || Regex("""apify_5\d\d""").matches(code)
+}
 
 /** Tabelog lookups; replaced by fakes in tests. Blocking; throws [TabelogUnavailable]. */
 interface TabelogSource {
@@ -74,6 +82,7 @@ class ApifyTabelogSource(
         val (hits, reviews) = run(
             buildJsonObject {
                 putJsonArray("startUrls") { add(buildJsonObject { put("url", url) }) }
+                put("maxRestaurants", 1)
                 put("includeReviews", true)
                 put("maxReviewsPerRestaurant", 3)
                 put("sortBy", "newest")
@@ -120,7 +129,7 @@ private val rowsJson = Json { ignoreUnknownKeys = true }
 
 /** The actor's rows (one per review, restaurant fields repeated) as restaurants in order and their reviews by id. */
 internal fun parseTabelogRows(body: String): Pair<List<TabelogHit>, Map<String, List<TabelogReview>>> {
-    val rows = rowsJson.parseToJsonElement(body) as? JsonArray ?: return emptyList<TabelogHit>() to emptyMap()
+    val rows = rowsJson.parseToJsonElement(body) as? JsonArray ?: throw IllegalArgumentException("not a list")
     val hits = LinkedHashMap<String, TabelogHit>()
     val reviews = LinkedHashMap<String, MutableList<TabelogReview>>()
     rows.forEach { e ->

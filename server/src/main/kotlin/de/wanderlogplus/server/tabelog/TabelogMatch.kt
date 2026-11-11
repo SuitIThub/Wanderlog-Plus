@@ -26,7 +26,8 @@ object TabelogMatch {
         val x = norm(a)
         val y = norm(b)
         if (x.isEmpty() || y.isEmpty()) return false
-        if (x in y || y in x) return true
+        // Containment only for names of two characters or more: "鮨" alone is in every sushi bar's name.
+        if (minOf(x.length, y.length) >= 2 && (x in y || y in x)) return true
         val headA = norm(Normalizer.normalize(a, Normalizer.Form.NFKC).trim().substringBefore(' '))
         val headB = norm(Normalizer.normalize(b, Normalizer.Form.NFKC).trim().substringBefore(' '))
         return headA.length >= 2 && headA == headB

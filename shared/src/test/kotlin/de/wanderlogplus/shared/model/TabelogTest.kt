@@ -57,4 +57,17 @@ class TabelogTest {
         assertFalse(isRestaurant(SavedPlace("s", "p1", category = PlaceCategory.FOOD), p.copy(lat = 0.0, lng = 0.0)))
         assertFalse(isRestaurant(SavedPlace("s", "p1", category = PlaceCategory.FOOD), null))
     }
+
+    @Test
+    fun `restaurant pages only, in their Japanese form`() {
+        val ja = "https://tabelog.com/kyoto/A2601/A260201/26032368/"
+        assertEquals(ja, canonicalTabelogUrl(ja))
+        assertEquals(ja, canonicalTabelogUrl("  https://tabelog.com/en/kyoto/A2601/A260201/26032368/  "))
+        assertEquals(ja, canonicalTabelogUrl("https://tabelog.com/tw/kyoto/A2601/A260201/26032368/dtlrvwlst/"))
+        assertEquals(ja, canonicalTabelogUrl("https://s.tabelog.com/kyoto/A2601/A260201/26032368"))
+        assertNull(canonicalTabelogUrl("https://tabelog.com/rstLst/?vs=1&sw=ramen"))
+        assertNull(canonicalTabelogUrl("https://tabelog.com/kyoto/A2601/A260201/"))
+        assertNull(canonicalTabelogUrl("https://example.com/kyoto/A2601/A260201/26032368/"))
+        assertNull(canonicalTabelogUrl("http://tabelog.com/kyoto/A2601/A260201/26032368/"))
+    }
 }

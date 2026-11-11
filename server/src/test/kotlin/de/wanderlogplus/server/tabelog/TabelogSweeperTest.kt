@@ -86,12 +86,12 @@ class TabelogSweeperTest {
 
     @Test
     fun `a link set by hand is fetched directly`() {
-        restaurant("h", tabelog = TabelogInfo(TabelogStatus.REQUESTED, "https://tabelog.com/x/real/"))
+        restaurant("h", tabelog = TabelogInfo(TabelogStatus.REQUESTED, "https://tabelog.com/kyoto/A2601/A260201/26029810/"))
         val src = FakeSource()
         sweeper(src).sweep()
         assertEquals(emptyList(), src.searches)
-        assertEquals(listOf("https://tabelog.com/x/real/"), src.details)
-        assertEquals("https://tabelog.com/x/real/", tabelogOf("h")!!.url)
+        assertEquals(listOf("https://tabelog.com/kyoto/A2601/A260201/26029810/"), src.details)
+        assertEquals(TabelogStatus.FOUND, tabelogOf("h")!!.status)
     }
 
     @Test
@@ -153,5 +153,93 @@ class TabelogSweeperTest {
         val s = TabelogSummary(ChatModel { _, parts, _ -> asked += (parts.single() as AiPart.Text).text; """{"summary":"Gut."}""" })
         assertEquals("Gut.", s.summarize(listOf(TabelogReview("最高", "とてもおいしい", "2026/10"))))
         assertTrue("とてもおいしい" in asked.single())
+    }
+
+    @Test
+    fun `google being down stops the sweep instead of marking not found`() {
+        restaurant("a"); restaurant("b")
+        val down = JaNameSource { throw TabelogUnavailable("google_429") }
+        assertEquals(0, sweeper(FakeSource(), n = down).sweep())
+        assertEquals(null, tabelogOf("a"))
+        assertEquals(null, tabelogOf("b"))
+    }
+
+    @Test
+    fun `a failure of one place does not block the others`() {
+        restaurant("bad"); restaurant("ok")
+        val src = object : TabelogSource {
+            val asked = mutableListOf<String>()
+            override fun search(keyword: String, area: String): List<TabelogHit> {
+                asked += keyword
+                if (keyword == "店 bad") throw TabelogUnavailable("apify_400")
+                return listOf(hit(keyword.removePrefix("店 ")))
+            }
+            override fun details(url: String) = hit(url.trimEnd('/').substringAfterLast('/')) to emptyList<TabelogReview>()
+        }
+        assertEquals(2, sweeper(src).sweep())
+        assertEquals(TabelogStatus.NOT_FOUND, tabelogOf("bad")!!.status)
+        assertEquals(TabelogStatus.FOUND, tabelogOf("ok")!!.status)
+    }
+
+    @Test
+    fun `after a global failure sweeps pause for an hour`() {
+        restaurant("a")
+        var t = 1_000L
+        val src = FakeSource(failOn = 1)
+        val sw = TabelogSweeper(store, src, names, summary, write = { e -> e.forEach(::applyEdit); e.size }, now = { t })
+        assertEquals(0, sw.sweep())
+        assertEquals(1, src.searches.size)
+        t += 30 * 60_000
+        assertEquals(0, sw.sweep())
+        assertEquals(1, src.searches.size)
+        t += 31 * 60_000
+        sw.sweep()
+        assertEquals(2, src.searches.size)
+    }
+
+    @Test
+    fun `a link set by hand during a lookup is not overwritten`() {
+        restaurant("a")
+        val src = object : TabelogSource {
+            override fun search(keyword: String, area: String): List<TabelogHit> {
+                // The user sets a link while the server is still searching.
+                val rec = store.get(EntityType.PLACE, "p-a")!!
+                val p = EntityCodec.decode<Place>(rec).copy(tabelog = TabelogInfo(TabelogStatus.REQUESTED, "https://tabelog.com/kyoto/A2601/A260201/26032368/"))
+                applyEdit(ServerEdit(EntityType.PLACE, "p-a", mapOf("tabelog" to EntityCodec.fields(p).getValue("tabelog"))))
+                return emptyList()
+            }
+            override fun details(url: String) = error("no details")
+        }
+        assertEquals(0, sweeper(src).sweep())
+        assertEquals(TabelogStatus.REQUESTED, tabelogOf("a")!!.status)
+    }
+
+    @Test
+    fun `hand links are cleaned and list pages are searched normally`() {
+        restaurant("h", tabelog = TabelogInfo(TabelogStatus.REQUESTED, " https://tabelog.com/en/kyoto/A2601/A260201/26032368/dtlrvwlst/ "))
+        restaurant("l", tabelog = TabelogInfo(TabelogStatus.REQUESTED, "https://tabelog.com/rstLst/?vs=1&sw=ramen"))
+        val src = FakeSource()
+        sweeper(src).sweep()
+        assertEquals(listOf("https://tabelog.com/kyoto/A2601/A260201/26032368/"), src.details.filter { "26032368" in it })
+        assertEquals(listOf("店 l"), src.searches)
+    }
+
+    @Test
+    fun `a match without detail rows keeps the search hit`() {
+        restaurant("a")
+        val src = object : TabelogSource {
+            override fun search(keyword: String, area: String) = listOf(hit("a"))
+            override fun details(url: String) = null to emptyList<TabelogReview>()
+        }
+        sweeper(src).sweep()
+        val t = tabelogOf("a")!!
+        assertEquals(TabelogStatus.FOUND, t.status)
+        assertEquals(3.5, t.score)
+    }
+
+    @Test
+    fun `without google the latin name is searched everywhere`() {
+        restaurant("a")
+        assertEquals(JaName("Lokal a", "all"), LatinNames.find(EntityCodec.decode<Place>(store.get(EntityType.PLACE, "p-a")!!)))
     }
 }

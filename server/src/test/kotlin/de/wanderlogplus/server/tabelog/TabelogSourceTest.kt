@@ -58,7 +58,23 @@ class TabelogSourceTest {
         assertEquals("麺屋 猪一", hit!!.name)
         assertEquals(3, reviews.size)
         val body = bodies.single()
-        assertTrue("\"maxReviewsPerRestaurant\":3" in body && "\"includeReviews\":true" in body && "26032368" in body && "\"sortBy\":\"newest\"" in body, body)
+        assertTrue("\"maxReviewsPerRestaurant\":3" in body && "\"includeReviews\":true" in body && "26032368" in body && "\"sortBy\":\"newest\"" in body && "\"maxRestaurants\":1" in body, body)
+    }
+
+    @Test
+    fun `an answer that is no list is a bad answer`() {
+        val s = ApifyTabelogSource("t", transport = { 200 to """{"error":"blocked"}""" })
+        assertEquals("apify_bad_answer", assertFailsWith<TabelogUnavailable> { s.search("x", "all") }.code)
+    }
+
+    @Test
+    fun `global errors are told apart`() {
+        assertTrue(TabelogUnavailable("apify_402").global)
+        assertTrue(TabelogUnavailable("apify_unreachable").global)
+        assertTrue(TabelogUnavailable("google_429").global)
+        assertTrue(TabelogUnavailable("apify_503").global)
+        assertTrue(!TabelogUnavailable("apify_400").global)
+        assertTrue(!TabelogUnavailable("apify_bad_answer").global)
     }
 
     @Test

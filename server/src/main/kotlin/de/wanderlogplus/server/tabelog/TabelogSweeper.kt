@@ -10,7 +10,7 @@ import de.wanderlogplus.shared.model.SavedPlace
 import de.wanderlogplus.shared.model.TabelogInfo
 import de.wanderlogplus.shared.model.TabelogStatus
 import de.wanderlogplus.shared.model.isRestaurant
-import de.wanderlogplus.shared.model.isTabelogUrl
+import de.wanderlogplus.shared.model.canonicalTabelogUrl
 import de.wanderlogplus.shared.sync.EntityStore
 import de.wanderlogplus.shared.sync.EntityType
 import kotlinx.serialization.json.Json
@@ -42,7 +42,8 @@ class TabelogSummary(private val model: ChatModel) {
 /**
  * Fills [Place.tabelog] for saved restaurants: those never looked at, and those the app asked for (REQUESTED, with
  * or without a link set by hand). At most [batch] per sweep, so a big trip's first run spreads its Apify cost. When
- * Apify fails, the sweep stops and nothing is written for that place; it comes again next time.
+ * Apify or Google is unusable (credit, key, outage) the sweep stops, writes nothing for that place and pauses an hour;
+ * a failure of a single place marks it not found and the sweep goes on.
  */
 open class TabelogSweeper(
     private val store: EntityStore,
@@ -58,20 +59,36 @@ open class TabelogSweeper(
     private val log = LoggerFactory.getLogger(TabelogSweeper::class.java)
     private var scheduler: ScheduledExecutorService? = null
 
-    /** One sweep now (blocking); the number of places written. A sweep already running makes this one a no-op (0). */
+    /** After an outage (no credit, Google down …) sweeps pause until then (epoch millis). */
+    @Volatile private var pausedUntil = 0L
+
+    /**
+     * One sweep now (blocking); the number of places written. A sweep already running makes this one a no-op (0), as
+     * does a pause after an outage. Each place is read again right before and after its lookup: what the app changed
+     * in the meantime (a link set by hand) is never overwritten.
+     */
     fun sweep(): Int {
+        if (now() < pausedUntil) return 0
         if (!running.compareAndSet(false, true)) return 0
         try {
             var written = 0
-            for (place in due()) {
+            for (id in due().map { it.id }) {
+                val place = current(id)?.takeIf(::isDue) ?: continue
                 val info = try {
                     lookup(place)
                 } catch (e: TabelogUnavailable) {
-                    log.warn("Tabelog sweep stopped: {}", e.code)
-                    break
+                    if (e.global) {
+                        pausedUntil = now() + PAUSE_MS
+                        log.warn("Tabelog sweep stopped: {}, paused for an hour", e.code)
+                        break
+                    }
+                    // A problem of this place only: not found, so it does not block the others (the app can search again).
+                    log.warn("Tabelog lookup failed: {}", e.code)
+                    notFound()
                 }
+                if (current(id)?.tabelog != place.tabelog) continue
                 val field = json.encodeToJsonElement(TabelogInfo.serializer(), info)
-                written += write(listOf(ServerEdit(EntityType.PLACE, place.id, mapOf("tabelog" to field))))
+                written += write(listOf(ServerEdit(EntityType.PLACE, id, mapOf("tabelog" to field))))
             }
             if (written > 0) log.info("Tabelog: {} place(s) written", written)
             return written
@@ -79,6 +96,11 @@ open class TabelogSweeper(
             running.set(false)
         }
     }
+
+    private fun current(id: String): Place? =
+        store.get(EntityType.PLACE, id)?.takeIf { !it.isDeleted }?.let { runCatching { EntityCodec.decode<Place>(it) }.getOrNull() }
+
+    private fun isDue(p: Place) = p.tabelog == null || p.tabelog?.status == TabelogStatus.REQUESTED
 
     /** Restaurants to look at: asked for first, then never looked at; each place once, at most [batch]. */
     internal fun due(): List<Place> {
@@ -94,29 +116,33 @@ open class TabelogSweeper(
     }
 
     private fun lookup(place: Place): TabelogInfo {
-        val byHand = place.tabelog?.takeIf { it.status == TabelogStatus.REQUESTED }?.url?.takeIf(::isTabelogUrl)
-        val url = byHand ?: run {
-            val ja = names.find(place) ?: return notFound()
-            TabelogMatch.pick(place, ja.name, source.search(ja.name, ja.area))?.url ?: return notFound()
+        val byHand = place.tabelog?.takeIf { it.status == TabelogStatus.REQUESTED }?.url?.let(::canonicalTabelogUrl)
+        if (byHand != null) {
+            val (hit, reviews) = source.details(byHand)
+            return hit?.let { found(it, reviews, byHand) } ?: notFound()
         }
-        val (hit, reviews) = source.details(url)
-        hit ?: return notFound()
-        return TabelogInfo(
-            status = TabelogStatus.FOUND,
-            url = hit.url.ifBlank { url },
-            name = hit.name,
-            score = hit.score,
-            reviewCount = hit.reviewCount,
-            genre = hit.genre,
-            budgetLunch = hit.budgetLunch,
-            budgetDinner = hit.budgetDinner,
-            hours = hit.hours,
-            reservation = hit.reservation,
-            station = hit.station,
-            summary = summary?.summarize(reviews).orEmpty(),
-            checkedAt = now(),
-        )
+        val ja = names.find(place) ?: return notFound()
+        val match = TabelogMatch.pick(place, ja.name, source.search(ja.name, ja.area)) ?: return notFound()
+        val (hit, reviews) = source.details(canonicalTabelogUrl(match.url) ?: match.url)
+        // No detail rows (e.g. no reviews yet): the search already said what we need.
+        return found(hit ?: match, reviews, match.url)
     }
+
+    private fun found(hit: TabelogHit, reviews: List<TabelogReview>, fallbackUrl: String) = TabelogInfo(
+        status = TabelogStatus.FOUND,
+        url = canonicalTabelogUrl(hit.url) ?: canonicalTabelogUrl(fallbackUrl) ?: fallbackUrl,
+        name = hit.name,
+        score = hit.score,
+        reviewCount = hit.reviewCount,
+        genre = hit.genre,
+        budgetLunch = hit.budgetLunch,
+        budgetDinner = hit.budgetDinner,
+        hours = hit.hours,
+        reservation = hit.reservation,
+        station = hit.station,
+        summary = summary?.summarize(reviews).orEmpty(),
+        checkedAt = now(),
+    )
 
     private fun notFound() = TabelogInfo(TabelogStatus.NOT_FOUND, checkedAt = now())
 
@@ -134,8 +160,13 @@ open class TabelogSweeper(
     private fun runSafely() {
         try {
             sweep()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // Never let anything escape: the scheduled task would silently stop for good.
             log.error("Tabelog sweep failed: {}", e.javaClass.simpleName)
         }
+    }
+
+    private companion object {
+        const val PAUSE_MS = 60 * 60_000L
     }
 }

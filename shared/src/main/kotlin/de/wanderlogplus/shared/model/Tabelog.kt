@@ -37,6 +37,14 @@ fun TabelogInfo.englishUrl(): String {
     return if (rest.startsWith("/en/")) u else "https://tabelog.com/en$rest"
 }
 
+private val RESTAURANT_PAGE = Regex("""^https://(?:s\.)?tabelog\.com/(?:(?:en|cn|tw|kr)/)?([a-z]+/A\d{4}/A\d{6}/\d+)(?:/.*)?$""")
+
+/**
+ * The Japanese page of a single restaurant ("https://tabelog.com/kyoto/A2601/A260201/26032368/"), whatever language,
+ * host or sub-page [u] points to; null for anything else (searches, lists, other sites).
+ */
+fun canonicalTabelogUrl(u: String): String? = RESTAURANT_PAGE.find(u.trim())?.let { "https://tabelog.com/" + it.groupValues[1] + "/" }
+
 /** Only real Tabelog pages: https on tabelog.com or s.tabelog.com. */
 fun isTabelogUrl(u: String): Boolean = Regex("""^https://(s\.)?tabelog\.com/\S*$""").matches(u.trim())
 

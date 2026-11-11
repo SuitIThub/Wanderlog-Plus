@@ -118,7 +118,7 @@ fun main() {
                 store,
                 de.wanderlogplus.server.tabelog.ApifyTabelogSource(token, config.apifyTabelogActor),
                 config.googlePlacesKey?.let { de.wanderlogplus.server.tabelog.GoogleJaNames(de.wanderlogplus.server.tabelog.HttpGoogleJaTransport(it)) }
-                    ?: de.wanderlogplus.server.tabelog.JaNameSource { null },
+                    ?: de.wanderlogplus.server.tabelog.LatinNames,
                 (textModel ?: openRouter)?.let { de.wanderlogplus.server.tabelog.TabelogSummary(it) },
                 write = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
             )
