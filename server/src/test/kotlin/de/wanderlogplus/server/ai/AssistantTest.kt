@@ -136,7 +136,7 @@ class AssistantTest {
             override fun find(query: String): GeoHit? { asked += query; return GeoHit(34.97, 135.77, query, "JP") }
         }
         val a = Assistant(model, geocoder)
-        val (_, found) = a.findPlaces("caption", Media(emptyList(), null), TripContext.from(store))
+        val (_, found) = a.analyze("caption", Media(emptyList(), null), TripContext.from(store)).let { it.summary to it.places }
         assertEquals(listOf(false, true), found.map { it.main })
         assertEquals("Fushimi", found.last().area)
         val candidates = a.researchAll(found, TripContext.from(store), de.wanderlogplus.shared.sync.AssessConfig())
@@ -204,6 +204,33 @@ class AssistantTest {
         j.drain()
         assertEquals("FAILED", j.get(id)!!.status)
         assertEquals("download_failed", j.get(id)!!.error)
+    }
+
+    private fun analyzeWith(answer: String): Analysis =
+        Assistant(ChatModel { _, _, _ -> answer }, FakeGeocoder()).analyze("caption", Media(emptyList(), null), TripContext.from(store))
+
+    @Test fun analyzeParsesTipsBesidePlaces() {
+        val a = analyzeWith(
+            """{"summary":"Tipps","locations":[{"name":"Fushimi Inari Taisha","city":"Kyoto","kind":"sight","role":"main"}],
+               "tips":[{"claim":"In Japan gibt man kein Trinkgeld.","topic":"Geld","evidence":"Folie 2"},{"claim":"Suica geht in Google Wallet.","topic":"IC-Karte"}]}""",
+        )
+        assertEquals(1, a.places.size)
+        assertEquals(listOf("In Japan gibt man kein Trinkgeld.", "Suica geht in Google Wallet."), a.tips.map { it.claim })
+        assertEquals("Folie 2", a.tips.first().evidence)
+        assertEquals("Tipps", a.summary)
+    }
+
+    @Test fun analyzeTipsOnly() {
+        val a = analyzeWith("""{"summary":"x","locations":[],"tips":[{"claim":"Rolltreppe: in Tokio links stehen.","topic":"Verkehr"}]}""")
+        assertTrue(a.places.isEmpty())
+        assertEquals(1, a.tips.size)
+    }
+
+    @Test fun analyzeCapsTipsAndDropsBlankClaims() {
+        val tips = (1..15).joinToString(",") { if (it == 3) """{"claim":"  "}""" else """{"claim":"Tipp $it"}""" }
+        val a = analyzeWith("""{"locations":[],"tips":[$tips]}""")
+        assertEquals(MAX_TIPS, a.tips.size)
+        assertFalse(a.tips.any { it.claim.isBlank() })
     }
 
     @Test fun imagePostIsAnalyzed() {

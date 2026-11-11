@@ -422,7 +422,9 @@ class AiJobs(
             t.step(countText(extracted.frames.size, "Bild", "Bilder") + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
             val context = TripContext.from(store)
             t.step("KI erkennt Orte in Bild, Ton und Beschreibung …")
-            val (summary, found) = a.findPlaces(caption, extracted, context)
+            val analysis = a.analyze(caption, extracted, context)
+            val summary = analysis.summary
+            val found = analysis.places
             summary?.let { t.step("Inhalt: $it") }
             if (found.isEmpty()) {
                 t.step("Kein konkreter Ort erkannt", JobProgress.WARN)
