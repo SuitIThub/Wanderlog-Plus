@@ -143,6 +143,10 @@ class TodayScreenTest {
         rule.onNode(hasText("JETZT · bis ca. 12:00") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Museum Gamma") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Danach: Teehaus Delta · 13:00", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+        // What the card shows is not repeated in the day's list below it.
+        rule.onNodeWithTag("today-item-i1").assertDoesNotExist()
+        rule.onNodeWithTag("today-item-i2").assertDoesNotExist()
+        rule.onNodeWithTag("movement-0").assertExists()
     }
 
     @Test fun nextPlaceWarnsAboutAMissingReservation() {
@@ -179,17 +183,17 @@ class TodayScreenTest {
         seedTrip()
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", openingPeriods = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))))
         show("2027-05-09T09:00")
-        rule.onNode(hasText("offen bis 18:00", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
-        // The next place is the big card: with its opening state.
+        // The next place is the big card, with its opening state (and not repeated below).
         rule.onNode(hasText("offen bis 18:00") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("today-item-i1").assertDoesNotExist()
     }
 
     @Test fun closedPlaceHasNoOpenBadge() {
         seedTrip()
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", openingPeriods = listOf(OpeningPeriod(0, "13:00", 0, "18:00"))))
         show("2027-05-09T09:00")
-        rule.onNode(hasText("offen bis", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertDoesNotExist()
-        rule.onNode(hasText("geschlossen – öffnet 13:00", substring = true) and hasAnyAncestor(hasTestTag("today-item-i1")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("offen bis", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertDoesNotExist()
+        rule.onNode(hasText("geschlossen – öffnet 13:00", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun checkInHintOnArrivalDay() {
@@ -227,22 +231,51 @@ class TodayScreenTest {
         assertEquals("2027-05-09", openedDay)
     }
 
-    @Test fun openNowFiltersClosedSortsAndLimitsToFive() {
+    @Test fun openNowShowsNearbyOrMarkedPlacesWithDistance() {
         seedTrip()
-        // 2027-05-09 is a Sunday (day 0); "now" is 12:00.
-        seed(EntityType.PLACE, "closed", Place("closed", name = "Zu", openingPeriods = listOf(OpeningPeriod(0, "13:00", 0, "18:00"))))
-        seed(EntityType.SAVED_PLACE, "sv-closed", SavedPlace("sv-closed", "closed", "r1"))
-        seed(EntityType.PLACE, "open", Place("open", name = "Auf", rating = 4.8, openingPeriods = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))))
-        seed(EntityType.SAVED_PLACE, "sv-open", SavedPlace("sv-open", "open", "r1"))
-        for (i in 1..6) {
-            seed(EntityType.PLACE, "u$i", Place("u$i", name = "Unbekannt $i", rating = 3.0))
-            seed(EntityType.SAVED_PLACE, "sv-u$i", SavedPlace("sv-u$i", "u$i", "r1"))
+        // The stay is the anchor (no program step at 12:00); 2027-05-09 is a Sunday (day 0).
+        seed(EntityType.PLACE, "hotel", Place("hotel", name = "Hotel Sakura", lat = 35.0, lng = 135.75))
+        val sunday = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))
+        fun place(id: String, lat: Double, status: PlaceStatus = PlaceStatus.IDEA, open: Boolean = true) {
+            seed(EntityType.PLACE, id, Place(id, name = "Ort $id", lat = lat, lng = 135.75, openingPeriods = if (open) sunday else listOf(OpeningPeriod(0, "13:00", 0, "18:00"))))
+            seed(EntityType.SAVED_PLACE, "sv-$id", SavedPlace("sv-$id", id, "r1", status = status))
         }
+        place("near", 35.01) // about 1,1 km
+        place("far", 35.2) // about 22 km, only an idea
+        place("farmarked", 35.3, PlaceStatus.SHORTLIST) // far, but marked
+        place("closed", 35.005, open = false)
         show("2027-05-09T12:00")
-        rule.onNodeWithText("Jetzt geöffnet", ignoreCase = true).assertExists()
+        rule.onNodeWithTag("open-now-sv-near").assertExists()
+        rule.onNodeWithTag("open-now-sv-farmarked").assertExists()
+        rule.onNodeWithTag("open-now-sv-far").assertDoesNotExist()
         rule.onNodeWithTag("open-now-sv-closed").assertDoesNotExist()
-        rule.onNodeWithTag("open-now-sv-open").assertExists()
+        rule.onNode(hasText("1,1 km · offen bis 18:00") and hasAnyAncestor(hasTestTag("open-now-sv-near")), useUnmergedTree = true).assertExists()
+        // No category repeated in every line any more.
+        rule.onNode(hasText("Sehenswürdigkeiten", substring = true) and hasAnyAncestor(hasTestTag("open-now-list")), useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun openNowAtMostFiveMarkedFirst() {
+        seedTrip()
+        seed(EntityType.PLACE, "hotel", Place("hotel", name = "Hotel Sakura", lat = 35.0, lng = 135.75))
+        val sunday = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))
+        for (i in 1..6) {
+            seed(EntityType.PLACE, "n$i", Place("n$i", name = "Nah $i", lat = 35.0 + i * 0.001, lng = 135.75, openingPeriods = sunday))
+            seed(EntityType.SAVED_PLACE, "sv-n$i", SavedPlace("sv-n$i", "n$i", "r1"))
+        }
+        seed(EntityType.PLACE, "m", Place("m", name = "Geplant weit", lat = 35.4, lng = 135.75, openingPeriods = sunday))
+        seed(EntityType.SAVED_PLACE, "sv-m", SavedPlace("sv-m", "m", "r1", status = PlaceStatus.PLANNED))
+        show("2027-05-09T12:00")
         rule.onNodeWithTag("open-now-list").onChildren().assertCountEquals(5)
+        rule.onNodeWithTag("open-now-sv-m").assertExists()
+    }
+
+    @Test fun noOpenNowWithoutNearbyOrMarkedPlaces() {
+        seedTrip()
+        seed(EntityType.PLACE, "hotel", Place("hotel", name = "Hotel Sakura", lat = 35.0, lng = 135.75))
+        seed(EntityType.PLACE, "far", Place("far", name = "Weit", lat = 35.5, lng = 135.75, openingPeriods = listOf(OpeningPeriod(0, "09:00", 0, "18:00"))))
+        seed(EntityType.SAVED_PLACE, "sv-far", SavedPlace("sv-far", "far", "r1"))
+        show("2027-05-09T12:00")
+        rule.onNodeWithTag("open-now").assertDoesNotExist()
     }
 
     @Test fun afterTripWelcomesBack() {

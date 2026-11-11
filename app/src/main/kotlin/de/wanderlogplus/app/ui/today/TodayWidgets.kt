@@ -234,7 +234,13 @@ internal fun NowNextWidget(
         Column {
             var moveIndex = 0
             val open = Modifier.clickable { onOpenDay(date) }
+            // What the card above shows (now and next) is not repeated in the list.
+            val inCard = setOfNotNull(focus, if (focus != null && focus === view.current) view.next else null)
             view.steps.forEach { s ->
+                if (s in inCard) {
+                    if (s is DayStep.Move) moveIndex++ // keep the tags of the other rides stable
+                    return@forEach
+                }
                 when (s) {
                     is DayStep.Move -> StepRow(s, dow, nowMin, open.testTag("movement-${moveIndex++}"))
                     is DayStep.Visit -> StepRow(s, dow, nowMin, open.testTag("today-item-${s.item.id}"))
@@ -344,9 +350,13 @@ private fun StepRow(s: DayStep, dow: Int, nowMin: Int, modifier: Modifier) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (s.state == StepState.CURRENT) scheme.primary else scheme.onSurfaceVariant)
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
+            // A note reads as a quiet remark to the plan, not as a stop of its own.
+            val note = s is DayStep.Note
             Text(
-                stepName(s), style = MaterialTheme.typography.bodyLarge, color = faded, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                fontWeight = if (s.state == StepState.CURRENT || s.state == StepState.NEXT) FontWeight.SemiBold else FontWeight.Normal,
+                stepName(s), style = if (note) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                color = if (note) scheme.onSurfaceVariant else faded, maxLines = if (note) 2 else 1, overflow = TextOverflow.Ellipsis,
+                fontWeight = if (!note && (s.state == StepState.CURRENT || s.state == StepState.NEXT)) FontWeight.SemiBold else FontWeight.Normal,
+                fontStyle = if (note) androidx.compose.ui.text.font.FontStyle.Italic else null,
             )
             val facts = when (s) {
                 is DayStep.Move -> listOf(s.movement.timesLine())
@@ -617,18 +627,44 @@ private fun DeadlineLine(r: DeadlineRow, onOpen: ((de.wanderlogplus.shared.query
     }
 }
 
-/** "Jetzt geöffnet": a few open suggestions of the day, one line each. */
+/** One line of "Jetzt geöffnet": the place and "1,2 km · offen bis 18:00". */
+internal data class OpenNowRow(val suggestion: Suggestion, val info: String)
+
+/** How far an open place may be to show up (planned or noted places show up at any distance). */
+internal const val OPEN_NOW_KM = 5.0
+
+/**
+ * The open places worth a detour now: within [OPEN_NOW_KM] of [anchor] (where you are: the current or next stop, else
+ * tonight's stay) or marked "Geplant"/"Vorgemerkt"; marked ones first, then by distance; at most [max].
+ */
+internal fun openNowRows(open: List<Suggestion>, anchor: de.wanderlogplus.shared.model.Place?, dow: Int, nowMin: Int, max: Int): List<OpenNowRow> {
+    fun km(s: Suggestion): Double? {
+        val p = s.place ?: return null
+        val a = anchor ?: return null
+        if ((p.lat == 0.0 && p.lng == 0.0) || (a.lat == 0.0 && a.lng == 0.0)) return null
+        return DayNow.km(p.lat, p.lng, a.lat, a.lng)
+    }
+    fun marked(s: Suggestion) = s.saved.status == de.wanderlogplus.shared.model.PlaceStatus.PLANNED || s.saved.status == de.wanderlogplus.shared.model.PlaceStatus.SHORTLIST
+    return open.map { it to km(it) }
+        .filter { (s, d) -> marked(s) || (d != null && d <= OPEN_NOW_KM) }
+        .sortedWith(compareBy({ !marked(it.first) }, { it.second ?: Double.MAX_VALUE }))
+        .take(max)
+        .map { (s, d) ->
+            val open = s.place?.let { DayNow.openText(it.openingPeriods, dow, nowMin) }?.takeIf { it.startsWith("offen") }
+            OpenNowRow(s, listOfNotNull(d?.let { kmText(it) }, open).joinToString(" · "))
+        }
+}
+
+/** "Jetzt geöffnet": open places nearby or marked, one line each with distance and closing time. */
 @Composable
-internal fun OpenNowWidget(open: List<Suggestion>, accent: Color, modifier: Modifier = Modifier) {
+internal fun OpenNowWidget(open: List<OpenNowRow>, accent: Color, modifier: Modifier = Modifier) {
     Widget("Jetzt geöffnet", "open-now", modifier, accent) {
         Column(Modifier.testTag("open-now-list")) {
-            open.forEach { s ->
+            open.forEach { r ->
+                val s = r.suggestion
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("open-now-${s.saved.id}"), verticalAlignment = Alignment.CenterVertically) {
                     Text(s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        listOfNotNull(categoryLabel(s.saved.category), s.place?.rating?.let { ratingLabel(it) }).joinToString(" · "),
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (r.info.isNotBlank()) Text(r.info, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
