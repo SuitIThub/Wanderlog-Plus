@@ -84,8 +84,24 @@ fun GuidesScreen(
     val world = remember(snapshot) { snapshot.guideWorld() }
     val suggestions = remember(snapshot) { GuideSuggestions.open(world, snapshot.tripDates(), snapshot.guidePrefs) }
     val chosen = remember(suggestions) { mutableStateListOf<String>().apply { addAll(suggestions) } }
+    var menu by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().testTag("guides")) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+            Box(Modifier.weight(1f))
+            if (actions != null && snapshot.guides.isNotEmpty()) {
+                Box {
+                    IconButton(onClick = { menu = true }, modifier = Modifier.testTag("guides-menu")) { Icon(Icons.Filled.MoreVert, contentDescription = "Mehr") }
+                    DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Links ergänzen") },
+                            onClick = { menu = false; actions.addLinks() },
+                            modifier = Modifier.testTag("guides-add-links"),
+                        )
+                    }
+                }
+            }
+        }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Guides", style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
             jobs.filter(GuideJobs::isActive).forEach { running ->
