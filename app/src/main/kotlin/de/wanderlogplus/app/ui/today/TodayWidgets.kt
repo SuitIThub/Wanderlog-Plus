@@ -666,7 +666,6 @@ internal fun TodayGuidesWidget(
                 )
             }
         }
-        de.wanderlogplus.app.ui.guides.GuideLinkChips(de.wanderlogplus.shared.guide.GuideLinks.union(dayGuides.filter { !it.done }.map { it.guide }))
         if (suggested > 0 && onSuggestions != null) {
             androidx.compose.material3.TextButton(onClick = onSuggestions, modifier = Modifier.testTag("today-guides-suggested")) {
                 Text(if (suggested == 1) "1 Guide vorgeschlagen" else "$suggested Guides vorgeschlagen")

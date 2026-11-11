@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.62.1
+
+- **Weniger Links:** Die Apps & Links eines Guides stehen nur noch im Guide selbst, nicht mehr an Orten, Unterkünften, Fahrten, Tagen und in „Für heute“ – dort waren es zu viele, die mit dem Ort nichts zu tun hatten.
+
 ## 0.62.0
 
 - **Bild-Posts und Galerien:** Der Reel-Import versteht jetzt auch geteilte Instagram-Posts mit einem Bild oder einer Bildergalerie (auch gemischt mit Videos). Text auf den Bildern wird mitgelesen.
