@@ -16,6 +16,14 @@
     <!-- MapLibre declares this; the app does not need Wi-Fi details. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
 
+    <!-- Guide links: see whether an app is installed to open it, else its Play Store page. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".WanderlogPlusApp"
         android:allowBackup="false"

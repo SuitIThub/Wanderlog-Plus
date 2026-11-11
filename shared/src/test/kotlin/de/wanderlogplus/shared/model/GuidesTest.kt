@@ -32,7 +32,27 @@ class GuidesTest {
         )
         val record = roundTrip(EntityType.GUIDE, g.id, EntityCodec.fields(g))
         assertEquals(g, EntityCodec.decode<Guide>(record))
+        val linked = g.copy(links = listOf(GuideLink("Japan Transit", GuideLinkKind.APP, androidPackage = "jp.co.jorudan.jtp", note = "Fahrplan")))
+        assertEquals(linked, EntityCodec.decode<Guide>(roundTrip(EntityType.GUIDE, g.id, EntityCodec.fields(linked))))
         val prefs = GuidePrefs(dismissedTopics = listOf("burg"))
         assertEquals(prefs, EntityCodec.decode<GuidePrefs>(roundTrip(EntityType.GUIDE_PREFS, prefs.id, EntityCodec.fields(prefs))))
+    }
+
+    @Test
+    fun `old guide json without links decodes`() {
+        val j = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val g = j.decodeFromString(Guide.serializer(), """{"id":"g1","title":"Onsen"}""")
+        assertEquals(emptyList(), g.links)
+    }
+
+    @Test
+    fun `old job and ask json without tips and additions decode`() {
+        val j = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val job = j.decodeFromString(de.wanderlogplus.shared.sync.AiJobInfo.serializer(), """{"id":"j","kind":"reel","createdAt":1,"status":"DONE"}""")
+        assertEquals(emptyList(), job.tips)
+        val ask = j.decodeFromString(de.wanderlogplus.shared.sync.GuideAsk.serializer(), """{"topic":"onsen"}""")
+        assertEquals(emptyList(), ask.additions)
+        val tip = de.wanderlogplus.shared.sync.ReelTip("Trinkgeld ist unüblich", verdict = de.wanderlogplus.shared.sync.TipVerdict.TRUE, guideId = "g1")
+        assertEquals(tip, j.decodeFromString(de.wanderlogplus.shared.sync.ReelTip.serializer(), j.encodeToString(de.wanderlogplus.shared.sync.ReelTip.serializer(), tip)))
     }
 }

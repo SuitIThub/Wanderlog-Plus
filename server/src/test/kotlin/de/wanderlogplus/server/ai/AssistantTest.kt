@@ -93,15 +93,23 @@ class AssistantTest {
         }
     }
 
-    private class FakeMedia(val fail: Boolean = false) : ReelMedia {
+    private class FakeMedia(val fail: Boolean = false, val imagesOnly: Boolean = false) : ReelMedia {
         var downloads = 0
+        var extracted: Downloaded? = null
         override fun download(url: String, dir: Path): Downloaded {
             downloads++
             if (fail) throw DownloadFailed()
+            if (imagesOnly) {
+                val i = dir.resolve("1.jpg"); Files.writeString(i, "x")
+                return Downloaded(emptyList(), listOf(i), "Tipps für Kyoto")
+            }
             val v = dir.resolve("video.mp4"); Files.writeString(v, "x")
-            return Downloaded(v, "Mein Kyoto-Abend #fushimi")
+            return Downloaded(listOf(v), emptyList(), "Mein Kyoto-Abend #fushimi")
         }
-        override fun extract(video: Path, dir: Path) = Media(listOf(byteArrayOf(1, 2), byteArrayOf(3)), byteArrayOf(9))
+        override fun extract(d: Downloaded, dir: Path): Media {
+            extracted = d
+            return Media(listOf(byteArrayOf(1, 2), byteArrayOf(3)), if (d.videos.isEmpty()) null else byteArrayOf(9))
+        }
     }
 
     private fun jobs(model: ChatModel? = FakeModel(), media: ReelMedia = FakeMedia(), sync: de.wanderlogplus.server.SyncService? = null) =
@@ -128,7 +136,7 @@ class AssistantTest {
             override fun find(query: String): GeoHit? { asked += query; return GeoHit(34.97, 135.77, query, "JP") }
         }
         val a = Assistant(model, geocoder)
-        val (_, found) = a.findPlaces("caption", Media(emptyList(), null), TripContext.from(store))
+        val (_, found) = a.analyze("caption", Media(emptyList(), null), TripContext.from(store)).let { it.summary to it.places }
         assertEquals(listOf(false, true), found.map { it.main })
         assertEquals("Fushimi", found.last().area)
         val candidates = a.researchAll(found, TripContext.from(store), de.wanderlogplus.shared.sync.AssessConfig())
@@ -196,6 +204,78 @@ class AssistantTest {
         j.drain()
         assertEquals("FAILED", j.get(id)!!.status)
         assertEquals("download_failed", j.get(id)!!.error)
+    }
+
+    private fun analyzeWith(answer: String): Analysis =
+        Assistant(ChatModel { _, _, _ -> answer }, FakeGeocoder()).analyze("caption", Media(emptyList(), null), TripContext.from(store))
+
+    @Test fun analyzeParsesTipsBesidePlaces() {
+        val a = analyzeWith(
+            """{"summary":"Tipps","locations":[{"name":"Fushimi Inari Taisha","city":"Kyoto","kind":"sight","role":"main"}],
+               "tips":[{"claim":"In Japan gibt man kein Trinkgeld.","topic":"Geld","evidence":"Folie 2"},{"claim":"Suica geht in Google Wallet.","topic":"IC-Karte"}]}""",
+        )
+        assertEquals(1, a.places.size)
+        assertEquals(listOf("In Japan gibt man kein Trinkgeld.", "Suica geht in Google Wallet."), a.tips.map { it.claim })
+        assertEquals("Folie 2", a.tips.first().evidence)
+        assertEquals("Tipps", a.summary)
+    }
+
+    @Test fun analyzeTipsOnly() {
+        val a = analyzeWith("""{"summary":"x","locations":[],"tips":[{"claim":"Rolltreppe: in Tokio links stehen.","topic":"Verkehr"}]}""")
+        assertTrue(a.places.isEmpty())
+        assertEquals(1, a.tips.size)
+    }
+
+    @Test fun analyzeCapsTipsAndDropsBlankClaims() {
+        val tips = (1..15).joinToString(",") { if (it == 3) """{"claim":"  "}""" else """{"claim":"Tipp $it"}""" }
+        val a = analyzeWith("""{"locations":[],"tips":[$tips]}""")
+        assertEquals(MAX_TIPS, a.tips.size)
+        assertFalse(a.tips.any { it.claim.isBlank() })
+    }
+
+    @Test fun reelJobWithTipsOnly() {
+        seedTrip()
+        val model = ChatModel { system, _, _ ->
+            when {
+                system.contains("Instagram-Reel") -> """{"summary":"Tipps","locations":[],"tips":[{"claim":"Kein Trinkgeld geben.","topic":"Geld"}]}"""
+                system.contains("gleichst") -> """{"tips":[{"i":0,"title":"Geld"}]}"""
+                else -> """{"verdict":"TRUE","text":"Kein Trinkgeld geben.","reason":"Belegt."}"""
+            }
+        }
+        val facts = FactSource { _, _ -> Facts(listOf(Fact("Unüblich.", listOf("https://a.jp"))), listOf("https://a.jp")) }
+        val j = AiJobs(
+            store, Assistant(model, FakeGeocoder()), FakeMedia(imagesOnly = true), tmp.resolve("work"), executor = Executors.newSingleThreadExecutor(),
+            tipCheck = TipCheck(facts, model),
+        )
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        val job = j.get(id)!!
+        assertEquals("DONE", job.status)
+        assertTrue(job.candidates.isEmpty())
+        assertEquals(de.wanderlogplus.shared.sync.TipVerdict.TRUE, job.tips.single().verdict)
+        assertEquals("Geld", job.tips.single().targetTitle)
+    }
+
+    @Test fun tipsWithoutTipCheckStayUnverified() {
+        seedTrip()
+        val model = ChatModel { _, _, _ -> """{"summary":"Tipps","locations":[],"tips":[{"claim":"Kein Trinkgeld geben.","topic":"Geld"}]}""" }
+        val j = jobs(model = model, media = FakeMedia(imagesOnly = true))
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        val tip = j.get(id)!!.tips.single()
+        assertEquals(de.wanderlogplus.shared.sync.TipVerdict.UNVERIFIED, tip.verdict)
+        assertEquals("Geld", tip.targetTitle)
+    }
+
+    @Test fun imagePostIsAnalyzed() {
+        seedTrip()
+        val media = FakeMedia(imagesOnly = true)
+        val j = jobs(media = media)
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        assertEquals("DONE", j.get(id)!!.status)
+        assertEquals(1, media.extracted!!.images.size)
+        assertTrue(j.get(id)!!.steps.any { it.text.contains("1 Bild") })
     }
 
     @Test fun uploadedVideoIsUsedAndDeleted() {
@@ -270,6 +350,9 @@ class AssistantTest {
         val job = client.get("/api/ai/jobs/$id") { authed() }.bodyAsText()
         assertTrue(job.contains("\"status\":\"DONE\""), job)
         assertTrue(client.get("/api/ai/jobs?kind=reel") { authed() }.bodyAsText().contains(id))
+        // Only guide jobs for the guide screens, not a reel that runs at the same time.
+        assertFalse(client.get("/api/ai/jobs?kind=guides") { authed() }.bodyAsText().contains(id))
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.post("/api/ai/guide-links") { authed(); contentType(ContentType.Application.Json); setBody("{}") }.status)
         assertEquals(HttpStatusCode.NotFound, client.get("/api/ai/jobs/nope") { authed() }.status)
         val assess = client.post("/api/ai/assess") { authed(); contentType(ContentType.Application.Json); setBody("{}") }
         assertEquals(HttpStatusCode.OK, assess.status)

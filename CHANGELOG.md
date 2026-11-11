@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.62.0
+
+- **Bild-Posts und Galerien:** Der Reel-Import versteht jetzt auch geteilte Instagram-Posts mit einem Bild oder einer Bildergalerie (auch gemischt mit Videos). Text auf den Bildern wird mitgelesen.
+- **Tipps aus Beiträgen:** Allgemeine Reisetipps im Reel oder Post werden erkannt und mit deinen Guides abgeglichen. Neue Tipps prüft der Server auf Wahrheit – stimmt, übertrieben (mit korrigierter Fassung), falsch oder nicht belegt, jeweils mit Begründung und Quellen. In der Auswertung wählst du sie aus und bestimmst den Guide; sie werden in einen bestehenden Guide eingearbeitet (ohne dass vorhandener Inhalt verloren geht) oder als neuer Guide geschrieben.
+- **Apps & Links in Guides:** Erwähnte Apps und Webseiten stehen als Chips im Guide und überall, wo der Guide auftaucht (Ort, Unterkunft, Fahrt, Flug, Tag, „Für heute“). Eine installierte App öffnet sich direkt, sonst der Play Store; Webseiten im Browser. Jeder Link ist vom Server geprüft. „Links ergänzen“ im Menü der Guide-Übersicht trägt sie für bestehende Guides nach.
+- Server neu bauen: Das Image enthält jetzt gallery-dl.
+
 ## 0.61.0
 
 - **„Trotzdem importieren“:** Ein im Reel als „bereits gespeichert“ erkannter Ort hat jetzt diesen Knopf – für den Fall, dass es doch ein anderer Ort ist. Er wird dann als eigener Ort übernommen und anschließend recherchiert (der Server wartet kurz, bis der Ort per Sync angekommen ist).

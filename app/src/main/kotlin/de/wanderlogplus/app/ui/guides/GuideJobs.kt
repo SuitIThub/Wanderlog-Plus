@@ -62,7 +62,9 @@ object GuideJobs {
         val mine = jobs.filter { guide.id in it.guideIds }.sortedByDescending { it.createdAt }
         mine.firstOrNull(::isActive)?.let { return GuideJobState.Running(it) }
         val last = mine.firstOrNull() ?: return null
-        val failed = failure(last) ?: return null
+        // The "Links ergänzen" job has one item per guide: only that guide's own item counts.
+        val own = last.items.firstOrNull { it.key == "link-${guide.id}" }
+        val failed = (if (own != null) own.takeIf { it.state == "FAILED" }?.let { it.detail.ifBlank { "fehlgeschlagen" } } else failure(last)) ?: return null
         if (guide.writtenAt >= last.createdAt || now - last.createdAt > FAILED_NOTE_MS) return null
         return GuideJobState.Failed(last, failed)
     }

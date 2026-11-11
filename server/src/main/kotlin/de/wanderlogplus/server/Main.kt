@@ -1,6 +1,7 @@
 package de.wanderlogplus.server
 
 import de.wanderlogplus.server.ai.AiJobs
+import de.wanderlogplus.server.ai.TipCheck
 import de.wanderlogplus.server.ai.ChatAgent
 import de.wanderlogplus.server.ai.ParallelWebSearch
 import de.wanderlogplus.server.ai.Assistant
@@ -68,7 +69,7 @@ fun main() {
             val researcher = PipelineResearcher(facts, text, google = { id -> googleDetails?.get(id)?.facts().orEmpty() })
             Assistant(model, photon, researcher, textModel = text, placeFinder = placeFinder, parallelism = config.researchParallelism)
         },
-        ToolReelMedia(cookies = config.instagramCookies),
+        ToolReelMedia(cookies = config.instagramCookies, galleryDl = config.galleryDl),
         config.dataDir.resolve("ai-work"),
         writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         stayResearch = openRouter?.let { media ->
@@ -82,8 +83,12 @@ fun main() {
             )
         },
         files = FileStore.forConfig(config),
+        tipCheck = openRouter?.let { model ->
+            val text = textModel ?: model
+            TipCheck(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, parallelism = 3)
+        },
         guideWriter = textModel?.let { text ->
-            GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
+            GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, de.wanderlogplus.server.ai.LinkCheck())
         },
     )
     // The chat saves guide pins and rules right away and writes guides through the guides job.

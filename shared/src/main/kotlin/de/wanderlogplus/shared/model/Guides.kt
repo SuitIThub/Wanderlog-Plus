@@ -31,6 +31,22 @@ data class Guide(
     val hiddenFrom: List<GuideTarget> = emptyList(),
     /** Epoch millis when the server last researched and wrote the text; 0 for unknown (older guides). */
     val writtenAt: Long = 0,
+    /** Apps and web pages the guide mentions, checked by the server (package exists, page answers). */
+    val links: List<GuideLink> = emptyList(),
+)
+
+enum class GuideLinkKind { APP, WEB }
+
+/** An app or web page a guide mentions; for an app [url] is its website (fallback, may be empty). */
+@Serializable
+data class GuideLink(
+    val name: String,
+    val kind: GuideLinkKind,
+    val url: String = "",
+    /** Android package id ("jp.co.jorudan.jtp"); empty when there is no Android app. */
+    val androidPackage: String = "",
+    /** What it is for, a few words. */
+    val note: String = "",
 )
 
 @Serializable

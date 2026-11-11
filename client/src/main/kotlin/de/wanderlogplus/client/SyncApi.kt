@@ -418,6 +418,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Finds and checks the apps and pages the guides mention ([guideIds], empty = all) as one guide job. */
+    suspend fun startGuideLinks(guideIds: List<String> = emptyList()): AiJobInfo = call {
+        client.post("$base/api/ai/guide-links") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.GuideLinksRequest(guideIds))
+        }
+    }
+
     suspend fun aiJob(id: String): AiJobInfo = call { client.get("$base/api/ai/jobs/${id.encodeURLPathPart()}") { auth() } }
 
     suspend fun aiJobs(kind: String? = null, limit: Int = 20): List<AiJobInfo> = call {

@@ -48,9 +48,10 @@ fun worthLabel(w: Worth): String = when (w) {
 /** Status line of an assistant job while it runs. */
 fun statusLabel(status: String): String = when (status) {
     "QUEUED" -> "Wartet …"
-    "DOWNLOADING" -> "Video wird geladen …"
+    "DOWNLOADING" -> "Beitrag wird geladen …"
     "ANALYZING" -> "KI schaut sich Bilder und Ton an …"
     "RESEARCHING" -> "Orte werden recherchiert …"
+    "CHECKING" -> "Tipps werden geprüft …"
     "ASSESSING" -> "Orte werden eingeschätzt …"
     "DONE" -> "Fertig"
     "FAILED" -> "Fehlgeschlagen"
@@ -103,6 +104,25 @@ fun reelNote(c: ReelCandidate, source: String?): String = buildString {
 /** The region a candidate goes into by default: the nearest within 50 km of its position, else none. */
 fun defaultRegion(snapshot: TripSnapshot, c: ReelCandidate): String? =
     if (c.lat != null && c.lng != null) nearestRegion(snapshot, c.lat!!, c.lng!!) else null
+
+/** A tip can go into a guide unless a guide says it already or it turned out false. */
+fun tipSelectable(t: de.wanderlogplus.shared.sync.ReelTip) = t.coveredBy == null && t.verdict != de.wanderlogplus.shared.sync.TipVerdict.FALSE
+
+/** Checked as true or (corrected) partly true: picked from the start. */
+fun tipPreselected(t: de.wanderlogplus.shared.sync.ReelTip) =
+    tipSelectable(t) && (t.verdict == de.wanderlogplus.shared.sync.TipVerdict.TRUE || t.verdict == de.wanderlogplus.shared.sync.TipVerdict.PARTLY)
+
+/** One guide job request per target (existing guide, catalog topic or new guide), with the tips' checked texts and sources. */
+fun tipAsks(picked: List<de.wanderlogplus.shared.sync.ReelTip>): List<de.wanderlogplus.shared.sync.GuideAsk> =
+    picked.groupBy { Triple(it.guideId, it.targetTopic, it.targetTitle) }.map { (target, tips) ->
+        de.wanderlogplus.shared.sync.GuideAsk(
+            topic = target.second,
+            title = if (target.first == null && target.second == null) target.third.orEmpty().ifBlank { "Reisetipps" } else "",
+            guideId = target.first,
+            // Within what the server's guide job accepts (1000 characters, 20 sources per addition).
+            additions = tips.take(20).map { de.wanderlogplus.shared.sync.GuideAddition(it.text.ifBlank { it.claim }.take(1000), it.sources.take(20)) },
+        )
+    }
 
 /** A candidate chosen for import and the region it goes into. */
 data class ReelPick(val candidate: ReelCandidate, val regionId: String?, val research: Boolean = false)

@@ -129,4 +129,11 @@ class GuideJobsTest {
         rule.onNodeWithTag("chat-guide-card").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals("g9", opened)
     }
+
+    @Test
+    fun aFailedLinkOnlyMarksItsOwnGuide() {
+        val j = job("l1", "DONE", 100, guideIds = listOf("g1", "g2"), items = listOf(JobItem("link-g1", "A", "FAILED", "KI nicht erreichbar"), JobItem("link-g2", "B", "DONE", "keine Links")))
+        org.junit.Assert.assertNull(GuideJobs.stateOf(Guide("g2", title = "B"), listOf(j), now = 200))
+        org.junit.Assert.assertTrue(GuideJobs.stateOf(Guide("g1", title = "A"), listOf(j), now = 200) is GuideJobState.Failed)
+    }
 }

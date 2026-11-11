@@ -98,4 +98,26 @@ class GuidesViewModelTest {
         vm.delete("g1")
         assertTrue(snapshot().guides.isEmpty())
     }
+
+    @Test
+    fun addLinksStartsJobAndFollowsIt() {
+        var started = 0
+        val running = AiJobInfo("l1", "guides", 5, "RESEARCHING")
+        val links = GuidesViewModel(
+            edit, CoroutineScope(Dispatchers.Unconfined),
+            startGuides = { null }, recentJobs = { listOf(running.copy(status = "DONE")) },
+            startGuideLinks = { started++; running }, pollMs = 0,
+        )
+        links.addLinks()
+        assertEquals(1, started)
+        assertTrue(links.jobs.value.any { it.id == "l1" })
+        assertEquals("Links werden ergänzt …", links.message.value)
+    }
+
+    @Test
+    fun addLinksWithoutServerSaysSo() {
+        val links = GuidesViewModel(edit, CoroutineScope(Dispatchers.Unconfined), startGuides = { null }, recentJobs = { null }, startGuideLinks = { null }, pollMs = 0)
+        links.addLinks()
+        assertEquals("Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?).", links.message.value)
+    }
 }

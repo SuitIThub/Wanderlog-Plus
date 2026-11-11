@@ -26,7 +26,7 @@ class ResearchLaneTest {
 
     private val noMedia = object : ReelMedia {
         override fun download(url: String, dir: Path): Downloaded = error("unused")
-        override fun extract(video: Path, dir: Path): Media = error("unused")
+        override fun extract(d: Downloaded, dir: Path): Media = error("unused")
     }
 
     private val pool = Recording()

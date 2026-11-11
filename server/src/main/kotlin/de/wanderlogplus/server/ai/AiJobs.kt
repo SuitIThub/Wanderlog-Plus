@@ -16,6 +16,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import de.wanderlogplus.shared.sync.JobItem
+import de.wanderlogplus.shared.sync.ReelTip
+import de.wanderlogplus.shared.sync.TipVerdict
 import de.wanderlogplus.shared.sync.JobStep
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -63,6 +65,8 @@ class AiJobs(
     private val files: de.wanderlogplus.server.FileStore? = null,
     /** How long a research waits for places it does not know yet (just added in the app, sync still on its way). */
     private val arrivalWaitMillis: Long = 60_000,
+    /** Matches and checks the travel tips of a reel; null: tips stay unchecked (UNVERIFIED). */
+    private val tipCheck: TipCheck? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -210,6 +214,56 @@ class AiJobs(
             t.done { it.copy(progress = it.total) }
         } catch (e: Exception) {
             log.error("Guide job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
+    /**
+     * Finds and checks the apps and pages the guides mention ([guideIds], empty = all) and writes only their links.
+     * A guide job (kind "guides") so the guide screens follow it like the others.
+     */
+    fun startGuideLinks(guideIds: List<String>): AiJobInfo {
+        val all = ChatTrip.from(store).guides
+        val targets = if (guideIds.isEmpty()) all else all.filter { it.id in guideIds }
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = targets.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, guideIds = targets.map { it.id },
+            ),
+        )
+        executor.execute { runGuideLinks(job, targets) }
+        return job
+    }
+
+    private fun runGuideLinks(start: AiJobInfo, guides: List<de.wanderlogplus.shared.model.Guide>) {
+        val t = Tracker(start)
+        val w = guideWriter ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            t.step("Links werden für ${guides.size} " + (if (guides.size == 1) "Guide" else "Guides") + " gesucht und geprüft")
+            t.items(guides.map { JobItem("link-${it.id}", it.title.ifBlank { "Guide" }) })
+            guides.forEachIndexed { i, g ->
+                val key = "link-${g.id}"
+                t.item(key, state = "RUNNING")
+                try {
+                    val found = w.extractLinks(g, t.sayFor(key, g.title))
+                    if (found.isNotEmpty() && found != g.links) {
+                        val field = EntityCodec.fields(g.copy(links = found)).getValue("links")
+                        writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, mapOf("links" to field))))
+                    }
+                    t.item(key, state = "DONE", detail = if (found.isEmpty()) "keine Links" else countText(found.size, "Link", "Links"))
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${g.title}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    log.error("Guide links failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide links job failed: {}", e.javaClass.simpleName)
             t.fail("internal")
         }
     }
@@ -402,35 +456,55 @@ class AiJobs(
         val dir = Files.createTempDirectory(workDir.also { Files.createDirectories(it) }, "reel-")
         try {
             t.status("DOWNLOADING")
-            val (video, caption) = when (input) {
+            val downloaded = when (input) {
                 is ReelInput.Link -> {
-                    t.step("Video wird heruntergeladen (yt-dlp) …")
-                    media.download(input.url, dir).let { it.video to it.caption }
+                    t.step("Beitrag wird heruntergeladen (yt-dlp, für Bilder gallery-dl) …")
+                    media.download(input.url, dir)
                 }
-                is ReelInput.Video -> input.video to input.caption
+                is ReelInput.Video -> Downloaded(listOf(input.video), emptyList(), input.caption)
             }
+            val caption = downloaded.caption
             t.step(
-                "Video bereit, " + (caption?.let { "Beschreibung mit ${it.length} Zeichen" } ?: "ohne Beschreibung") +
-                    ", " + sizeText(video),
+                "Beitrag bereit: " + countText(downloaded.images.size, "Bild", "Bilder") + ", " + countText(downloaded.videos.size, "Video", "Videos") +
+                    ", " + (caption?.let { "Beschreibung mit ${it.length} Zeichen" } ?: "ohne Beschreibung") +
+                    downloaded.videos.firstOrNull()?.let { ", " + sizeText(it) }.orEmpty(),
                 JobProgress.OK,
             )
             t.status("ANALYZING")
-            t.step("Bilder und Ton werden herausgelöst (ffmpeg) …")
-            val extracted = media.extract(video, dir)
-            t.step("${extracted.frames.size} Bilder" + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
+            t.step("Bilder und Ton werden aufbereitet (ffmpeg) …")
+            val extracted = media.extract(downloaded, dir)
+            t.step(countText(extracted.frames.size, "Bild", "Bilder") + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
             val context = TripContext.from(store)
-            t.step("KI erkennt Orte in Bild, Ton und Beschreibung …")
-            val (summary, found) = a.findPlaces(caption, extracted, context)
+            t.step("KI erkennt Orte und Tipps in Bild, Ton und Beschreibung …")
+            val analysis = a.analyze(caption, extracted, context)
+            val summary = analysis.summary
+            val found = analysis.places
             summary?.let { t.step("Inhalt: $it") }
             if (found.isEmpty()) {
-                t.step("Kein konkreter Ort erkannt", JobProgress.WARN)
+                t.step("Kein konkreter Ort erkannt", if (analysis.tips.isEmpty()) JobProgress.WARN else JobProgress.INFO)
             } else {
                 t.step("${found.size} " + (if (found.size == 1) "Ort" else "Orte") + " erkannt: " + found.joinToString(", ") { it.name }, JobProgress.OK)
             }
+            if (analysis.tips.isNotEmpty()) t.step(countText(analysis.tips.size, "allgemeiner Tipp", "allgemeine Tipps") + " erkannt", JobProgress.OK)
             t.update { it.copy(status = "RESEARCHING", summary = summary, total = found.size) }
             if (found.isNotEmpty()) t.step("Recherche startet, bis zu ${minOf(found.size, a.parallelism)} Orte gleichzeitig")
             val candidates = a.researchAll(found, context, config, t) { n -> t.update { it.copy(progress = n) } }
-            t.done { it.copy(candidates = candidates, progress = found.size) }
+            val tips = when {
+                analysis.tips.isEmpty() -> emptyList()
+                tipCheck == null -> analysis.tips.map {
+                    ReelTip(it.claim, it.topic, it.evidence, verdict = TipVerdict.UNVERIFIED, text = it.claim, reason = "Keine Prüfung eingerichtet", targetTitle = it.topic.ifBlank { "Reisetipps" })
+                }
+                else -> {
+                    t.status("CHECKING")
+                    t.step("Tipps werden mit den Guides abgeglichen und geprüft …")
+                    tipCheck.checkAll(analysis.tips, ChatTrip.from(store).guides, t).also { r ->
+                        val covered = r.count { it.coveredBy != null }
+                        val wrong = r.count { it.verdict == TipVerdict.FALSE }
+                        t.step("Tipps geprüft: ${r.size - covered - wrong} übernehmbar, $covered schon in Guides, $wrong falsch", JobProgress.OK)
+                    }
+                }
+            }
+            t.done { it.copy(candidates = candidates, tips = tips, progress = found.size) }
         } catch (e: DownloadFailed) {
             t.fail("download_failed")
         } catch (e: AiFailed) {
@@ -497,6 +571,8 @@ class AiJobs(
             t.fail("internal")
         }
     }
+
+    private fun countText(n: Int, one: String, many: String) = "$n " + if (n == 1) one else many
 
     private fun sizeText(video: Path): String = try {
         "%.1f MB".format(java.util.Locale.GERMAN, Files.size(video) / 1_048_576.0)

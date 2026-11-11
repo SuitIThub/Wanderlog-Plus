@@ -110,15 +110,23 @@ class ReelsViewModel(
         }
     }
 
-    /** Takes the picks over (once per job) as saved places. */
-    fun import(jobId: String, picks: List<ReelPick>, source: String?) {
-        if (imported.contains(jobId) || picks.isEmpty()) return
+    /**
+     * Takes the picks over (once per job) as saved places, and the picked [tips] into guides: one guide job on the
+     * server that merges them into existing guides or writes new ones.
+     */
+    fun import(jobId: String, picks: List<ReelPick>, tips: List<de.wanderlogplus.shared.sync.ReelTip>, source: String?) {
+        if (imported.contains(jobId) || (picks.isEmpty() && tips.isEmpty())) return
         writeScope.launch {
             try {
+                // Tips first: when the guide job cannot start, nothing is taken over and the user can try again.
+                if (tips.isNotEmpty() && !startTips(tips)) return@launch
                 var ids: List<String> = emptyList()
-                edit { e, _ -> ids = importPicks(e, picks, source); Unit }
+                if (picks.isNotEmpty()) edit { e, _ -> ids = importPicks(e, picks, source); Unit }
                 imported.add(jobId)
                 _importedNow.value = true
+                if (tips.isNotEmpty()) {
+                    _message.value = if (tips.size == 1) "Der Tipp wird in die Guides übernommen" else "${tips.size} Tipps werden in die Guides übernommen"
+                }
                 // "Trotzdem importieren": the place was skipped as a duplicate, so it is researched now (the server
                 // waits until the sync has brought it over).
                 val kept = picks.filter { importable(it.candidate) }
@@ -135,6 +143,24 @@ class ReelsViewModel(
         }
     }
 
+    /** Starts the guide job for [tips]; false (with a message) when that did not work. */
+    private suspend fun startTips(tips: List<de.wanderlogplus.shared.sync.ReelTip>): Boolean {
+        val a = api() ?: run { _message.value = "Die Tipps konnten nicht übernommen werden: kein Server eingerichtet"; return false }
+        return try {
+            a.startGuides(tipAsks(tips))
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _message.value = "Die Tipps konnten nicht übernommen werden: " + when ((e as? ApiException)?.kind) {
+                ApiErrorKind.NOT_CONFIGURED -> "Guides sind auf dem Server nicht eingerichtet"
+                ApiErrorKind.NETWORK -> "Server nicht erreichbar"
+                else -> "Anfrage fehlgeschlagen"
+            } + ". Bitte später noch einmal."
+            false
+        }
+    }
+
     private suspend fun call(block: suspend (SyncApi) -> Unit) {
         val a = api() ?: run { _message.value = "Kein Server eingerichtet"; return }
         try {
@@ -145,7 +171,7 @@ class ReelsViewModel(
             _message.value = when (e.kind) {
                 ApiErrorKind.NOT_CONFIGURED -> errorText("ai_not_configured")
                 ApiErrorKind.NETWORK -> "Server nicht erreichbar"
-                ApiErrorKind.BAD_REQUEST -> "Das ist kein unterstützter Reel-Link"
+                ApiErrorKind.BAD_REQUEST -> "Das ist kein unterstützter Reel- oder Post-Link"
                 else -> "Anfrage fehlgeschlagen"
             }
         }

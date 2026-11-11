@@ -29,6 +29,9 @@ interface GuideActions {
 
     /** Asks the server for the recent guide jobs (also the chat's) and follows running ones. */
     fun refreshJobs() {}
+
+    /** Lets the server find and check the apps and pages all guides mention. */
+    fun addLinks() {}
 }
 
 /** The guide actions for detail screens and the today card; null hides hiding/pinning there. */
@@ -50,6 +53,8 @@ class GuidesViewModel(
     /** Fetches the trip now (a finished job's guides arrive with it). */
     private val syncNow: () -> Unit = {},
     private val pollMs: Long = POLL_MS,
+    /** Starts the "Links ergänzen" job for all guides; null when no server is set up. */
+    private val startGuideLinks: suspend () -> AiJobInfo? = { null },
 ) : ViewModel(), GuideActions {
     private val _jobs = MutableStateFlow<List<AiJobInfo>>(emptyList())
 
@@ -88,6 +93,25 @@ class GuidesViewModel(
                 _message.value = "Guides lassen sich gerade nicht erstellen (Server nicht erreichbar?)."
                 return@launch
             }
+            _jobs.value = listOf(started) + _jobs.value.filter { it.id != started.id }
+            refreshJobs()
+        }
+    }
+
+    override fun addLinks() {
+        scope.launch {
+            val started = try {
+                startGuideLinks()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (started == null) {
+                _message.value = "Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?)."
+                return@launch
+            }
+            _message.value = "Links werden ergänzt …"
             _jobs.value = listOf(started) + _jobs.value.filter { it.id != started.id }
             refreshJobs()
         }

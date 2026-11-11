@@ -37,6 +37,15 @@ data class FoundPlace(
     val main: Boolean = true,
 )
 
+/** A general travel tip the model found in a reel or post (not tied to one place), before checking. */
+data class FoundTip(val claim: String, val topic: String, val evidence: String)
+
+/** What a reel or post is about: a sentence, the places it shows and the general tips it gives. */
+data class Analysis(val summary: String?, val places: List<FoundPlace>, val tips: List<FoundTip>)
+
+/** Tips taken from one post at most. */
+const val MAX_TIPS = 12
+
 /** How far from the trip a reel's place may be to count as "on the route", in km (as for regions). */
 const val ON_ROUTE_KM = 50.0
 
@@ -87,26 +96,31 @@ class Assistant(
     val parallelism: Int = DEFAULT_RESEARCH_PARALLELISM,
 ) {
 
-    /** Places named or shown in the reel; empty when there are none. */
-    fun findPlaces(caption: String?, media: Media, context: TripContext): Pair<String?, List<FoundPlace>> {
+    /** Places named or shown in the reel or post and the general travel tips it gives; both may be empty. */
+    fun analyze(caption: String?, media: Media, context: TripContext): Analysis {
         val system = """
-            Du analysierst ein kurzes Reise-Video (Instagram-Reel) für eine Japanreise.
-            Finde die konkreten Orte, die im Video gezeigt, gesagt oder in der Beschreibung erwähnt werden:
+            Du analysierst einen Instagram-Reel oder -Post (Video, Bild oder Bildergalerie) für eine Japanreise.
+            Text auf den Bildern und Folien ist oft der eigentliche Inhalt: lies ihn genau.
+            1. Finde die konkreten Orte, die gezeigt, gesagt oder in der Beschreibung erwähnt werden:
             Sehenswürdigkeiten, Restaurants, Cafés, Läden, Bars, Aussichtspunkte, Onsen. Keine ganzen Länder oder Präfekturen.
             Nutze Schilder und Texte in den Bildern, das Gesprochene und die Beschreibung (oft steht der Ort nach 📍).
-            Unterscheide: role "main" = ein Ort, um den es im Reel geht (meist einer, bei Listen-Reels mehrere);
+            Unterscheide: role "main" = ein Ort, um den es im Beitrag geht (meist einer, bei Listen mehrere);
             role "reference" = nur zur Orientierung genannt oder im Hintergrund zu sehen (Bahnhof „2 min from …“, Stadtviertel,
             ein Wahrzeichen in der Kulisse). Stadtviertel nur als area angeben, nicht als eigenen Ort.
-            Antworte nur mit JSON: {"summary": "1 Satz auf Deutsch, worum es im Reel geht",
+            2. Finde allgemeine Reisetipps (Guides, „Tipps und Tricks“): Etikette, Verkehr, Geld und Bezahlen, Apps, Buchen,
+            Sparen, Hacks. Jeder Tipp als eigenständige, überprüfbare Aussage auf Deutsch, so wie der Beitrag sie behauptet.
+            Tipps zu einem einzelnen Ort (Öffnungszeit, bestes Gericht dort) sind keine allgemeinen Tipps.
+            Antworte nur mit JSON: {"summary": "1 Satz auf Deutsch, worum es im Beitrag geht",
             "locations": [{"name": "üblicher Name in lateinischer Schrift", "localName": "japanischer Name oder null",
             "area": "Stadtteil/Viertel oder null", "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
-            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst"}]}
+            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst"}],
+            "tips": [{"claim": "die Aussage", "topic": "Thema in 1–3 Wörtern", "evidence": "woher (Folie 3, gesprochen, Beschreibung)"}]}
             Die Orte mit role "main" zuerst.
-            Wenn kein konkreter Ort erkennbar ist: "locations": [].
+            Wenn kein konkreter Ort erkennbar ist: "locations": []. Ohne allgemeine Tipps: "tips": [].
         """.trimIndent()
         val parts = buildList {
             add(AiPart.Text("Orte der Reise (zur Orientierung): " + context.regionNames.joinToString(", ").ifBlank { "unbekannt" }))
-            add(AiPart.Text("Beschreibung des Reels:\n" + (caption?.take(4000) ?: "(keine)")))
+            add(AiPart.Text("Beschreibung des Beitrags:\n" + (caption?.take(4000) ?: "(keine)")))
             media.frames.forEach { add(AiPart.Image(it)) }
             media.audio?.let { add(AiPart.Audio(it)) }
         }
@@ -119,7 +133,11 @@ class Assistant(
                 area = l.str("area"), main = l.str("role")?.lowercase() != "reference",
             )
         }.distinctBy { (it.name + "|" + it.city).lowercase() }.take(MAX_PLACES)
-        return o.str("summary") to found
+        val tips = (o["tips"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val t = e as? JsonObject ?: return@mapNotNull null
+            FoundTip(t.str("claim")?.trim() ?: return@mapNotNull null, t.str("topic").orEmpty().trim(), t.str("evidence").orEmpty().trim())
+        }.distinctBy { it.claim.lowercase() }.take(MAX_TIPS)
+        return Analysis(o.str("summary"), found, tips)
     }
 
     /** Coordinates, distance to the trip and the full research for one place found in a reel. */
