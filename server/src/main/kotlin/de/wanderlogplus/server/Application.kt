@@ -401,10 +401,16 @@ fun Application.module(services: Services) {
                 if (req.asks.any { a -> a.additions.size > 20 || a.additions.any { it.text.length > 1000 || it.sources.size > 20 } }) throw BadInput()
                 call.respond(services.ai.startGuides(req.asks))
             }
+            post("/api/ai/guide-links") {
+                if (!services.ai.guidesConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.GuideLinksRequest>()
+                if (req.guideIds.size > 200) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startGuideLinks(req.guideIds.distinct()) })
+            }
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()
-                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research") }
+                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research", "guides", "stay") }
                 call.respond(withContext(Dispatchers.IO) { services.ai.list(kind, limit) })
             }
             get("/api/ai/jobs/{id}") {

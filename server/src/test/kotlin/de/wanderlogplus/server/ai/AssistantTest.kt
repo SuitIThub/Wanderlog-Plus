@@ -350,6 +350,9 @@ class AssistantTest {
         val job = client.get("/api/ai/jobs/$id") { authed() }.bodyAsText()
         assertTrue(job.contains("\"status\":\"DONE\""), job)
         assertTrue(client.get("/api/ai/jobs?kind=reel") { authed() }.bodyAsText().contains(id))
+        // Only guide jobs for the guide screens, not a reel that runs at the same time.
+        assertFalse(client.get("/api/ai/jobs?kind=guides") { authed() }.bodyAsText().contains(id))
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.post("/api/ai/guide-links") { authed(); contentType(ContentType.Application.Json); setBody("{}") }.status)
         assertEquals(HttpStatusCode.NotFound, client.get("/api/ai/jobs/nope") { authed() }.status)
         val assess = client.post("/api/ai/assess") { authed(); contentType(ContentType.Application.Json); setBody("{}") }
         assertEquals(HttpStatusCode.OK, assess.status)

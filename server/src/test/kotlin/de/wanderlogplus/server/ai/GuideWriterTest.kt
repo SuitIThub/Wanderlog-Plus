@@ -191,6 +191,37 @@ class GuideWriterTest {
     }
 
     @Test
+    fun `the links job writes only links`() {
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g1", EntityCodec.fields(existing), create = true)))
+        val other = Guide("g2", title = "Rolltreppen", summary = "Links stehen.", sections = listOf(de.wanderlogplus.shared.model.GuideSection("Tokio", "Links stehen.")))
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g2", EntityCodec.fields(other), create = true)))
+        val model = Scripted { user ->
+            if ("Rolltreppen" in user) """{"links":[]}"""
+            else """{"links":[{"name":"Japan Transit","kind":"app","androidPackage":"jp.co.jorudan.jtp"}]}"""
+        }
+        val j = AiJobs(
+            store, null, object : ReelMedia {
+                override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
+                override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
+            },
+            tmp.resolve("work-l"), executor = Executors.newSingleThreadExecutor(),
+            writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+            guideWriter = GuideWriter(facts, model, LinkCheck(probe)),
+        )
+        val started = j.startGuideLinks(emptyList())
+        assertEquals("guides", started.kind)
+        assertEquals(setOf("g1", "g2"), started.guideIds.toSet())
+        j.drain()
+        val job = j.get(started.id)!!
+        assertEquals("DONE", job.status)
+        assertEquals(setOf("1 Link", "keine Links"), job.items.map { it.detail }.toSet())
+        val g1 = storedGuides().single { it.id == "g1" }
+        assertEquals(listOf("Japan Transit"), g1.links.map { it.name })
+        assertEquals(existing.copy(links = g1.links), g1)
+        assertEquals(other, storedGuides().single { it.id == "g2" })
+    }
+
+    @Test
     fun `a tip for a topic with a guide merges into that guide`() {
         val j = jobs(Scripted { answer("Onsen & Sentō") })
         j.startGuides(listOf(GuideAsk(topic = "onsen"))); j.drain()

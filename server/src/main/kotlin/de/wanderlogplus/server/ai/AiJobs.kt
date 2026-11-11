@@ -218,6 +218,56 @@ class AiJobs(
         }
     }
 
+    /**
+     * Finds and checks the apps and pages the guides mention ([guideIds], empty = all) and writes only their links.
+     * A guide job (kind "guides") so the guide screens follow it like the others.
+     */
+    fun startGuideLinks(guideIds: List<String>): AiJobInfo {
+        val all = ChatTrip.from(store).guides
+        val targets = if (guideIds.isEmpty()) all else all.filter { it.id in guideIds }
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = targets.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, guideIds = targets.map { it.id },
+            ),
+        )
+        executor.execute { runGuideLinks(job, targets) }
+        return job
+    }
+
+    private fun runGuideLinks(start: AiJobInfo, guides: List<de.wanderlogplus.shared.model.Guide>) {
+        val t = Tracker(start)
+        val w = guideWriter ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            t.step("Links werden für ${guides.size} " + (if (guides.size == 1) "Guide" else "Guides") + " gesucht und geprüft")
+            t.items(guides.map { JobItem("link-${it.id}", it.title.ifBlank { "Guide" }) })
+            guides.forEachIndexed { i, g ->
+                val key = "link-${g.id}"
+                t.item(key, state = "RUNNING")
+                try {
+                    val found = w.extractLinks(g, t.sayFor(key, g.title))
+                    if (found.isNotEmpty() && found != g.links) {
+                        val field = EntityCodec.fields(g.copy(links = found)).getValue("links")
+                        writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, mapOf("links" to field))))
+                    }
+                    t.item(key, state = "DONE", detail = if (found.isEmpty()) "keine Links" else countText(found.size, "Link", "Links"))
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${g.title}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    log.error("Guide links failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide links job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
     fun get(id: String): AiJobInfo? = store.aiJob(id)?.let { json.decodeFromString(AiJobInfo.serializer(), it) }
 
     fun list(kind: String?, limit: Int): List<AiJobInfo> = store.aiJobs(kind, limit).map { json.decodeFromString(AiJobInfo.serializer(), it) }
