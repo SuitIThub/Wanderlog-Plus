@@ -30,6 +30,7 @@ import de.wanderlogplus.app.ui.design.Badge
 import de.wanderlogplus.app.ui.design.BadgeSpec
 import de.wanderlogplus.app.ui.design.BadgeTone
 import de.wanderlogplus.app.ui.design.IconTile
+import de.wanderlogplus.app.ui.design.SectionLabel
 import de.wanderlogplus.app.ui.design.SurfaceCard
 
 const val NOTES_ROUTE = "mehr/notizen"
@@ -46,31 +47,35 @@ fun MoreScreen(
     vaultScan: Boolean = false,
 ) {
     Column(modifier.fillMaxWidth().padding(16.dp).testTag("more-list"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Three small groups instead of one long list: the trip, the assistant, and administration.
+        SectionLabel("Reise")
         SurfaceCard {
             MoreRow("Guides", Icons.AutoMirrored.Filled.MenuBook) { onOpen(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Notizen", Icons.AutoMirrored.Filled.Notes) { onOpen(NOTES_ROUTE) }
-            HorizontalDivider(Modifier.padding(start = 68.dp))
-            MoreRow("Import", Icons.Filled.CloudDownload) { onOpen(IMPORT_ROUTE) }
-            HorizontalDivider(Modifier.padding(start = 68.dp))
-            MoreRow("Reels auswerten (KI)", Icons.Filled.Movie) { onOpen(de.wanderlogplus.app.ui.reels.REELS_ROUTE) }
-            HorizontalDivider(Modifier.padding(start = 68.dp))
-            MoreRow("KI-Kriterien", Icons.Filled.Tune) { onOpen(AI_SETTINGS_ROUTE) }
+        }
+        SectionLabel("KI")
+        SurfaceCard {
+            MoreRow("Reels auswerten", Icons.Filled.Movie) { onOpen(de.wanderlogplus.app.ui.reels.REELS_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("KI-Aufträge", Icons.Filled.History) { onOpen(de.wanderlogplus.app.ui.reels.JOBS_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
-            MoreRow("Guthaben & Limits", Icons.Filled.AccountBalanceWallet) { onOpen(BALANCES_ROUTE) }
+            MoreRow("KI-Kriterien", Icons.Filled.Tune) { onOpen(AI_SETTINGS_ROUTE) }
+        }
+        SectionLabel("Verwaltung")
+        SurfaceCard {
+            MoreRow("Import", Icons.Filled.CloudDownload) { onOpen(IMPORT_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Konflikte", Icons.Filled.SyncProblem, badge = if (conflictCount > 0) BadgeSpec("$conflictCount", BadgeTone.Warning) else null) {
                 onOpen(CONFLICTS_ROUTE)
             }
-        }
-        if (vaultScan) {
-            SurfaceCard {
+            HorizontalDivider(Modifier.padding(start = 68.dp))
+            MoreRow("Guthaben & Limits", Icons.Filled.AccountBalanceWallet) { onOpen(BALANCES_ROUTE) }
+            if (vaultScan) {
+                HorizontalDivider(Modifier.padding(start = 68.dp))
                 MoreRow("Bilder-Upload", Icons.Filled.ImageSearch) { onOpen(de.wanderlogplus.app.ui.vault.VAULT_ROUTE) }
             }
-        }
-        SurfaceCard {
+            HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Einstellungen", Icons.Filled.Settings) { onOpen(SETTINGS_ROUTE) }
         }
     }

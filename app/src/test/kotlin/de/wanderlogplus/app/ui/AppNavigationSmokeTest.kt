@@ -253,7 +253,7 @@ class AppNavigationSmokeTest {
     @Test fun reelScreensOpenFromMehr() {
         launch()
         tab("mehr")
-        rule.onNodeWithText("Reels auswerten (KI)").tap()
+        rule.onNodeWithText("Reels auswerten").tap()
         rule.waitForIdle()
         shows("reels-screen")
         shows("reel-link")

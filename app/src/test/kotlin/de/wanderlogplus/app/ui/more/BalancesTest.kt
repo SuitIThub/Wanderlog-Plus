@@ -109,4 +109,12 @@ class BalancesTest {
         rule.onNodeWithText("Aktualisieren fehlgeschlagen", substring = true).assertExists()
         rule.onNodeWithText("15,01 $ übrig von 50,00 $").assertExists()
     }
+
+    @Test fun moreMenuIsGroupedIntoTripAiAndAdmin() {
+        rule.setContent { WanderlogPlusTheme { MoreScreen(conflictCount = 0, onOpen = {}) } }
+        fun top(text: String) = rule.onNodeWithText(text, ignoreCase = true).fetchSemanticsNode().boundsInRoot.top
+        val order = listOf("Reise", "Guides", "Notizen", "KI", "Reels auswerten", "KI-Aufträge", "KI-Kriterien", "Verwaltung", "Import", "Konflikte", "Guthaben & Limits", "Einstellungen")
+        val tops = order.map(::top)
+        assertEquals(tops.sorted(), tops)
+    }
 }
