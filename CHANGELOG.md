@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.65.1
+
+- **„In Tabelog öffnen“ öffnet jetzt das Restaurant** in der mehrsprachigen Tabelog-App statt nur deren Startseite. Die App versteht keine Webadressen, sondern ihren eigenen Link (`tabelog-tourists://rstdtl/<id>/top/`, wie ihn Tabelogs englische Seiten im App-Knopf verwenden). Ohne App öffnet sich wie bisher die englische Seite im Browser.
+
 ## 0.65.0
 
 - **Bewertungszeile:** Unter jedem Ort in der Regionsliste und in den Tagesvorschlägen steht jetzt eine schmale Zeile mit kleinen grauen Symbolen – Stern für die Google-Bewertung (mit Anzahl), Besteck für den Tabelog-Score, Funkeln für die KI-Einschätzung (Muss, Lohnt, Wenn Zeit, Auslassen). Es erscheint nur, was bekannt ist. Das bisherige Tabelog-Badge „★ 3,7“ entfällt, der Stern steht jetzt nur noch für Google.

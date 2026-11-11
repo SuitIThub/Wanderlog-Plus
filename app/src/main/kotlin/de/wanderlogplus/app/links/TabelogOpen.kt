@@ -10,7 +10,7 @@ const val TABELOG_APP = "com.kakaku.tabelog.tourists"
 
 /** How a Tabelog page is opened, tried in order. */
 sealed interface TabelogTarget {
-    /** The page handed to the multilingual app (works when the app takes Tabelog links). */
+    /** The restaurant opened in the multilingual app through its own deep link. */
     data class AppUrl(val url: String) : TabelogTarget
 
     /** The multilingual app's start screen. */
@@ -19,10 +19,11 @@ sealed interface TabelogTarget {
     data class Browser(val url: String) : TabelogTarget
 }
 
-/** With the app installed: the page in the app, else the app itself, else the browser; without it: the browser. */
+/** With the app installed: the restaurant in the app, else the app itself, else the browser; without it: the browser. */
 fun tabelogTargets(url: String, installed: Boolean): List<TabelogTarget> {
     if (url.isBlank()) return emptyList()
-    return if (installed) listOf(TabelogTarget.AppUrl(url), TabelogTarget.AppStart, TabelogTarget.Browser(url)) else listOf(TabelogTarget.Browser(url))
+    if (!installed) return listOf(TabelogTarget.Browser(url))
+    return listOfNotNull(tabelogAppLink(url)?.let { TabelogTarget.AppUrl(it) }, TabelogTarget.AppStart, TabelogTarget.Browser(url))
 }
 
 /** Opens [url] (best the English page) the first way that works; false when nothing could. */
@@ -44,3 +45,10 @@ fun openTabelog(context: Context, url: String): Boolean {
     }
     return false
 }
+
+/**
+ * The tourist app's own link to a restaurant ("tabelog-tourists://rstdtl/26032368/top/"), as Tabelog's English pages
+ * use it in their "Get the Tabelog app" button; null when [url] is no restaurant page. The app does not take web addresses.
+ */
+fun tabelogAppLink(url: String): String? =
+    de.wanderlogplus.shared.model.canonicalTabelogUrl(url)?.trimEnd('/')?.substringAfterLast('/')?.let { "tabelog-tourists://rstdtl/$it/top/" }

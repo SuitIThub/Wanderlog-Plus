@@ -91,10 +91,22 @@ class ExternalLinksTest {
     }
 
     @Test fun tabelogTargetsPreferTheMultilingualApp() {
-        val info = de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.FOUND, "https://tabelog.com/kyoto/A2601/A260201/26032368/")
         val en = "https://tabelog.com/en/kyoto/A2601/A260201/26032368/"
-        assertEquals(listOf(TabelogTarget.AppUrl(en), TabelogTarget.AppStart, TabelogTarget.Browser(en)), tabelogTargets(info.englishUrl(), installed = true))
-        assertEquals(listOf(TabelogTarget.Browser(en)), tabelogTargets(info.englishUrl(), installed = false))
+        // The tourist app takes its own deep link (from the "Get the Tabelog app" button of the English page), not the web address.
+        assertEquals(
+            listOf(TabelogTarget.AppUrl("tabelog-tourists://rstdtl/26032368/top/"), TabelogTarget.AppStart, TabelogTarget.Browser(en)),
+            tabelogTargets(en, installed = true),
+        )
+        assertEquals(listOf(TabelogTarget.Browser(en)), tabelogTargets(en, installed = false))
         assertEquals(emptyList<TabelogTarget>(), tabelogTargets("", installed = true))
+        // Without a restaurant id (a search page) the app is only started.
+        val search = "https://tabelog.com/rstLst/?vs=1&sw=ramen"
+        assertEquals(listOf(TabelogTarget.AppStart, TabelogTarget.Browser(search)), tabelogTargets(search, installed = true))
+    }
+
+    @Test fun touristAppLinks() {
+        assertEquals("tabelog-tourists://rstdtl/26032368/top/", tabelogAppLink("https://tabelog.com/kyoto/A2601/A260201/26032368/"))
+        assertEquals("tabelog-tourists://rstdtl/13001762/top/", tabelogAppLink("https://s.tabelog.com/en/tokyo/A1303/A130301/13001762/dtlrvwlst/"))
+        assertEquals(null, tabelogAppLink("https://tabelog.com/rstLst/?sw=x"))
     }
 }
