@@ -77,6 +77,13 @@ class ReelsViewModel(
         }
     }
 
+    /** "Texte auf Deutsch übersetzen": starts the server's translate job and puts it on top of the list. */
+    fun startTranslate() {
+        viewModelScope.launch {
+            call { a -> a.startTranslate().let { _jobs.value = listOf(it) + _jobs.value } }
+        }
+    }
+
     /** Starts a reel from a link; [onStarted] gets the job id. */
     fun start(url: String, onStarted: (String) -> Unit) {
         viewModelScope.launch {

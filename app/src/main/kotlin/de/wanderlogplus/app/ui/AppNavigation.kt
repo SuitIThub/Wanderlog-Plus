@@ -1084,7 +1084,7 @@ fun AppNavigation(
                             }
                         }
                         SyncedScreen(syncStatus, onRefresh, scrollable = false) {
-                            de.wanderlogplus.app.ui.reels.AiJobsScreen(jobs, onOpen = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(it)) }, onBack = { nav.popBackStack() })
+                            de.wanderlogplus.app.ui.reels.AiJobsScreen(jobs, onOpen = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(it)) }, onBack = { nav.popBackStack() }, onTranslate = vm::startTranslate)
                         }
                     }
                 }

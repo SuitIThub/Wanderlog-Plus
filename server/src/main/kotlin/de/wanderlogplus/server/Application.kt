@@ -419,6 +419,10 @@ fun Application.module(services: Services) {
                 t.kick()
                 call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
             }
+            post("/api/ai/translate") {
+                if (!services.ai.translateConfigured) throw AiNotConfigured()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startTranslate() })
+            }
             post("/api/ai/guide-links") {
                 if (!services.ai.guidesConfigured) throw AiNotConfigured()
                 val req = call.receive<de.wanderlogplus.shared.sync.GuideLinksRequest>()
@@ -428,7 +432,7 @@ fun Application.module(services: Services) {
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()
-                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research", "guides", "stay") }
+                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research", "guides", "stay", "translate") }
                 call.respond(withContext(Dispatchers.IO) { services.ai.list(kind, limit) })
             }
             get("/api/ai/jobs/{id}") {
