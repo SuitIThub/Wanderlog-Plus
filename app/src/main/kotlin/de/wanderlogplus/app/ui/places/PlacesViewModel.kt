@@ -353,6 +353,31 @@ class PlacesViewModel(
     fun setCategory(savedPlaceId: String, category: PlaceCategory) =
         write { e, _ -> e.set(EntityType.SAVED_PLACE, savedPlaceId, mapOf("category" to JsonPrimitive(category.name))) }
 
+    /**
+     * Asks the server to (re)load Tabelog for [placeId]: marks it REQUESTED, with [url] as the entry set by hand (null
+     * keeps the known one), then syncs and nudges the server so it does not wait for its next sweep.
+     */
+    fun tabelogRequest(placeId: String, url: String?) {
+        val written = write { e, s ->
+            val before = s.places[placeId] ?: return@write
+            val old = before.tabelog
+            val next = (old ?: de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.REQUESTED))
+                .copy(status = de.wanderlogplus.shared.model.TabelogStatus.REQUESTED, url = url ?: old?.url.orEmpty())
+            e.set(EntityType.PLACE, placeId, mapOf("tabelog" to de.wanderlogplus.shared.model.EntityCodec.fields(before.copy(tabelog = next)).getValue("tabelog")))
+        }
+        writeScope.launch {
+            written.join()
+            syncNow()
+            try {
+                api?.invoke()?.tabelogRefresh()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The next sweep takes it anyway.
+            }
+        }
+    }
+
     /** Links the place to a Google entry ([hit] null: unlinks); see [googleLinkEdits]. */
     fun linkGoogle(placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) =
         write { e, s -> googleLinkEdits(placeId, hit, takePosition)(e, s) }

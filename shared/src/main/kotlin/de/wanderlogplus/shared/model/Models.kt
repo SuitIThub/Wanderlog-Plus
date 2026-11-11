@@ -58,6 +58,8 @@ data class Place(
     val openingPeriods: List<OpeningPeriod> = emptyList(),
     val imageKeys: List<String> = emptyList(),
     val googleMapsUrl: String? = null,
+    /** Tabelog data for restaurants, written by the server's Tabelog sweep. */
+    val tabelog: TabelogInfo? = null,
 )
 
 enum class PlaceCategory { SIGHT, FOOD, SHOPPING, NIGHTLIFE, OTHER }

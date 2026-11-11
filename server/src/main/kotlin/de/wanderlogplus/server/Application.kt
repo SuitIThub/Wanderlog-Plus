@@ -101,7 +101,12 @@ class Services(
     val trainLive: TrainLiveService = TrainLiveService(store, null),
     /** Fills hours, rating and contact of places with a Google id after each push; null without a Places key. */
     val placeEnricher: PlaceEnricher? = null,
+    /** Tabelog data for restaurants (Apify); null without an Apify token. */
+    val tabelog: de.wanderlogplus.server.tabelog.TabelogSweeper? = null,
 )
+
+/** No Apify token, so no Tabelog lookups (`/api/tabelog/refresh` answers `tabelog_not_configured`). */
+class TabelogNotConfigured : RuntimeException("tabelog_not_configured")
 
 @Serializable
 private data class Health(val status: String, val protocol: Int, val epoch: String, val serverTime: Long)
@@ -171,6 +176,7 @@ fun Application.module(services: Services) {
         exception<PartConflict> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("part_conflict")) }
         exception<SessionGone> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("not_found")) }
         exception<CursorAhead> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("cursor_ahead")) }
+        exception<TabelogNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("tabelog_not_configured")) }
         exception<RoutesNotConfigured> { call, _ -> call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("routes_not_configured")) }
         exception<NoRoute> { call, _ -> call.respond(HttpStatusCode.NotFound, ErrorResponse("no_route")) }
         exception<TokenNameTaken> { call, _ -> call.respond(HttpStatusCode.Conflict, ErrorResponse("token_name_taken")) }
@@ -400,6 +406,11 @@ fun Application.module(services: Services) {
                 if (req.asks.isEmpty() || req.asks.size > 30) throw BadInput()
                 if (req.asks.any { a -> a.additions.size > 20 || a.additions.any { it.text.length > 1000 || it.sources.size > 20 } }) throw BadInput()
                 call.respond(services.ai.startGuides(req.asks))
+            }
+            post("/api/tabelog/refresh") {
+                val t = services.tabelog ?: throw TabelogNotConfigured()
+                t.kick()
+                call.respond(HttpStatusCode.Accepted, mapOf("status" to "queued"))
             }
             post("/api/ai/guide-links") {
                 if (!services.ai.guidesConfigured) throw AiNotConfigured()

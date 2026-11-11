@@ -427,6 +427,11 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Asks the server to look up Tabelog for restaurants marked REQUESTED right away (instead of the next sweep). */
+    suspend fun tabelogRefresh() {
+        call<kotlinx.serialization.json.JsonObject> { client.post("$base/api/tabelog/refresh") { auth() } }
+    }
+
     suspend fun aiJob(id: String): AiJobInfo = call { client.get("$base/api/ai/jobs/${id.encodeURLPathPart()}") { auth() } }
 
     suspend fun aiJobs(kind: String? = null, limit: Int = 20): List<AiJobInfo> = call {

@@ -3,6 +3,14 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.63.0
+
+- **Tabelog für Restaurants und Bars:** Der Server holt für jeden gespeicherten Ort der Kategorie Essen oder Nachtleben die Tabelog-Daten – einmal für alle, danach automatisch für neue (höchstens 20 je Viertelstunde, über Apify, etwa 1,5–2 Cent pro Restaurant). Ein Eintrag zählt nur, wenn er höchstens 300 m entfernt liegt und der Name passt.
+- **Tabelog-Karte am Ort:** Score und Anzahl Bewertungen, Budget mittags/abends, Genre, Reservierung, Öffnungszeiten und eine deutsche Zusammenfassung der neuesten Bewertungen. „In Tabelog öffnen“ versucht zuerst die mehrsprachige Tabelog-App, sonst die englische Seite. „Aktualisieren“ und „Tabelog-Link setzen“ (für falsche oder fehlende Treffer) im Menü.
+- **Score in der Regionsliste:** Restaurants mit Tabelog-Eintrag tragen einen Chip „★ 3,7“ (ab 3,5 hervorgehoben – bei Tabelog ist das schon sehr gut).
+- Der Tabelog-Link unter den Ortslinks führt jetzt direkt zum Eintrag statt zur Suche.
+- Server: neue Einstellung `WLP_APIFY_TABELOG_ACTOR`; nutzt `WLP_APIFY_TOKEN` und für japanische Namen `WLP_GOOGLE_PLACES_KEY`.
+
 ## 0.62.1
 
 - **Weniger Links:** Die Apps & Links eines Guides stehen nur noch im Guide selbst, nicht mehr an Orten, Unterkünften, Fahrten, Tagen und in „Für heute“ – dort waren es zu viele, die mit dem Ort nichts zu tun hatten.

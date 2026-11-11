@@ -405,6 +405,7 @@ fun AppNavigation(
                 onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
+                onTabelogRequest = vm::tabelogRequest,
                 onOpenSibling = onOpenSibling,
             )
         }

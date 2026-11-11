@@ -24,6 +24,7 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_ADMIN_TOKEN` | – | Optional; Admin-Token (mind. 16 Zeichen, nicht gleich einem Sync-Token) für die Zugangsverwaltung (`/api/admin/tokens`). Er gilt nur dort, nie für den Sync. Ohne ihn: `admin_not_configured`. |
 | `WLP_APIFY_TOKEN` | – | Optional; Apify-Token für ÖPNV-Verbindungen in Japan (`POST /api/transit`, Actor „Japan Train Route & Fare Finder“, Daten von Yahoo! 乗換案内). Ohne Token: `transit_not_configured`, die App fällt auf Google zurück. |
 | `WLP_APIFY_TRANSIT_ACTOR` | `FjxdTwrnBwvjDSBe0` | Optional; anderer Apify-Actor mit derselben Ein- und Ausgabe. |
+| `WLP_APIFY_TABELOG_ACTOR` | `huggable_quote~tabelog-scraper` | Optional; Apify-Actor für Tabelog-Daten der Restaurants (mit `WLP_APIFY_TOKEN`; japanische Namen kommen über `WLP_GOOGLE_PLACES_KEY`, ohne ihn findet die Suche kaum etwas). Etwa 1,5–2 Cent pro Restaurant. |
 | `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei für yt-dlp, falls Instagram Reels nur angemeldet zeigt. Die Datei enthält eine Anmeldung, also wie ein Passwort behandeln. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
 | `WLP_HOST_PORT` | `8080` | Nur Compose: Port auf dem Host (`127.0.0.1:<port>`), falls 8080 belegt ist. |

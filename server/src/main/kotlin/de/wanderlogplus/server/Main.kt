@@ -112,6 +112,17 @@ fun main() {
         photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
         placesSearch = GooglePlacesSearch(config.googlePlacesKey?.let { de.wanderlogplus.server.ai.HttpPlacesSearchTransport(it, SEARCH_FIELD_MASK) }, store),
         placeEnricher = googleDetails?.let { PlaceEnricher(store, sync, it) },
+        // Tabelog for restaurants: Japanese names from Google (Tabelog's search only understands Japanese).
+        tabelog = config.apifyToken?.let { token ->
+            de.wanderlogplus.server.tabelog.TabelogSweeper(
+                store,
+                de.wanderlogplus.server.tabelog.ApifyTabelogSource(token, config.apifyTabelogActor),
+                config.googlePlacesKey?.let { de.wanderlogplus.server.tabelog.GoogleJaNames(de.wanderlogplus.server.tabelog.HttpGoogleJaTransport(it)) }
+                    ?: de.wanderlogplus.server.tabelog.LatinNames,
+                (textModel ?: openRouter)?.let { de.wanderlogplus.server.tabelog.TabelogSummary(it) },
+                write = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+            )
+        },
         chats = ChatService(
             store,
             textModel?.let { model ->
@@ -128,6 +139,7 @@ fun main() {
     )
     services.ai.resumeInterrupted()
     services.placeEnricher?.schedule()
+    services.tabelog?.start(java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "tabelog").apply { isDaemon = true } })
     services.chats.resumeInterrupted()
     embeddedServer(Netty, port = config.port) { module(services) }.start(wait = true)
 }
