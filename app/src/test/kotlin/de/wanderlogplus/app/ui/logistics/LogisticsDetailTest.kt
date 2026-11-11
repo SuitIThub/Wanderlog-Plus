@@ -12,6 +12,7 @@ import de.wanderlogplus.app.ui.attachments.AttachmentActions
 import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.sync.EntityType
 import org.junit.Assert.assertEquals
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,10 +40,13 @@ class LogisticsDetailTest {
         val snap = LogisticsFixture.snapshot()
         rule.setContent { WanderlogPlusTheme { LogisticsDetailScreen(snap, EntityType.STAY, "s1", onBack = {}) } }
         rule.onNodeWithText("Hotel Kyoto").assertIsDisplayed()
-        rule.onNodeWithText("STAY42").assertIsDisplayed()
-        rule.onNodeWithText("Max Muster").assertIsDisplayed()
-        rule.onNodeWithText("Sa, 01.05.").assertIsDisplayed()
-        rule.onNodeWithText("Kostenlos bis 1. Mai").assertIsDisplayed()
+        // Booking number and travellers are folded under "Buchung".
+        rule.onNodeWithText("STAY42").assertDoesNotExist()
+        rule.onNodeWithTag("stay-booking").performScrollTo().performClick()
+        rule.onNodeWithText("STAY42").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Max Muster").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Kostenlos bis 1. Mai").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Kostenlos stornierbar bis Sa, 01.05.", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun detailShowsAttachmentsAndLinks() {

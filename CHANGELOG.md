@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.68.0
+
+- **„Heute“ ohne Doppelungen:** Was die Jetzt-Karte zeigt (aktueller und nächster Programmpunkt), steht nicht mehr noch einmal in der Liste darunter. Notizen im Programm erscheinen leise (klein, kursiv) als Anmerkung.
+- **„Jetzt geöffnet“ mit Bezug:** nur geöffnete Orte im Umkreis von 5 km um den aktuellen bzw. nächsten Programmpunkt (sonst die Unterkunft) – oder Orte, die „Geplant“ oder „Vorgemerkt“ sind. Markierte zuerst, dann nach Entfernung, höchstens 5; statt der Kategorie „1,2 km · offen bis 18:00“. Ohne passende Orte entfällt die Karte.
+- **Unterkunft, Übersicht:** Name nur noch im Titelbild, der Google-Eintrag als eine Zeile mit Adresse, Check-in und Check-out als zwei Kacheln nebeneinander. Die Stornofrist steht auf Deutsch („Kostenlos stornierbar bis Fr, 07.05., 23:59“ bzw. „Stornofrist abgelaufen“). Bestätigungsnummer, Reisende und Stornobedingungen sind unter „Buchung“ eingeklappt (Nummer markier- und kopierbar).
+- Flüge und Fahrten: Der Titel steht ebenfalls nur noch im Titelbild (bis zu zwei Zeilen).
+
 ## 0.67.0
 
 - **Ortsseite aufgeräumt:** Der Name steht nur noch im Titelbild (dort bis zu zwei Zeilen). Statt fünf Status-Knöpfen ein einzelner Chip („● Idee ▾“) mit Auswahlmenü, daneben Kategorie und Bewertungszeile. Tabelog, Karte, Guides, Kosten und der Google-Eintrag (jetzt eine schlanke Zeile) stehen im Reiter „Info“ – die Reiter rücken in die obere Bildhälfte.

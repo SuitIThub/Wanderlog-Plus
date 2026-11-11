@@ -135,7 +135,6 @@ fun LogisticsDetailScreen(
     }
 
     // The one-line hero cuts long names (stays); the full name then opens the page body.
-    var titleCut by remember(type, id) { mutableStateOf(false) }
     var choosingImage by remember(type, id) { mutableStateOf(false) }
     // Stays: 0 Übersicht, 1 Zimmer & Ausstattung, 2 Fotos.
     var stayTab by remember(type, id) { mutableStateOf(0) }
@@ -174,10 +173,8 @@ fun LogisticsDetailScreen(
             kicker = view.kicker,
             imageUrl = view.imageUrl,
             accent = view.accent,
-            height = 140.dp,
             onBack = onBack,
-            titleMaxLines = 1,
-            onTitleOverflow = { titleCut = it },
+            titleMaxLines = 2,
             onChangeImage = if (stay != null && onSetHeaderImage != null) ({ choosingImage = true }) else null,
         )
         RouteMap(view.route, view.accent, height = 160.dp)
@@ -215,14 +212,6 @@ fun LogisticsDetailScreen(
         }
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
-            if (titleCut) {
-                Text(
-                    view.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 12.dp).testTag("logistics-full-title"),
-                )
-            }
             if (stay == null || stayTab == 0) {
             if (stay != null && stayPhotosAll.isNotEmpty()) {
                 // Room photos first, then the rest.
@@ -240,18 +229,22 @@ fun LogisticsDetailScreen(
                     googleSearch.takeIf { onLinkGoogle != null },
                     onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
                     Modifier.padding(top = 12.dp),
+                    compact = true,
+                    showAddress = true,
                 )
             }
+            if (stay != null) StayTimes(stay)
             SectionLabel("Details", color = view.accent)
             if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id }?.let { t ->
                 t.walkFrom?.let { WalkEndRow(snapshot, it, t.depart, before = true, tag = "walk-from", modifier = Modifier.padding(bottom = 6.dp)) }
                 t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to", modifier = Modifier.padding(bottom = 6.dp)) }
             }
-            InfoCard {
+            if (view.details.isNotEmpty()) InfoCard {
                 view.details.forEach { (label, value) -> DetailRow(label, value) }
                 if (view.liveStatus && type == EntityType.FLIGHT) FlightLiveCard(id)
                 if (type == EntityType.TRAIN) TrainLiveCard(id)
             }
+            if (stay != null) StayBooking(stay)
             if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id }?.transit?.routes?.firstOrNull()?.let { TrainStops(it) }
 
             val train = if (type == EntityType.TRAIN) snapshot.trains.firstOrNull { it.id == id } else null
@@ -426,22 +419,17 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
                 s.adults?.let { if (it == 1) "1 Erwachsener" else "$it Erwachsene" },
                 s.rooms?.let { if (it == 1) "1 Zimmer" else "$it Zimmer" },
             ).joinToString(" · ")
-            val deadline = s.cancellationDeadline?.takeIf { it.isNotBlank() }?.let {
-                dayLabel(it) + if (today != null && !cancellationOpen(s, today)) " (abgelaufen)" else ""
-            }
+            val deadline = s.cancellationDeadline?.takeIf { it.isNotBlank() }?.let { cancellationText(it, today) }
             BookingView(
                 title = stayName(snapshot, s),
                 kicker = stayPeriod(s),
                 imageUrl = de.wanderlogplus.app.ui.design.HeaderImages.url(s.headerImage) ?: place?.heroImageUrl(),
                 accent = region?.let { regionColor(it.color) } ?: primary,
                 route = null,
+                // Check-in/out stand as tiles above, booking number, travellers and conditions folded under "Buchung".
                 details = listOfNotNull(
-                    "Check-in" to stayTimeText(s.checkIn, s.checkInTime, checkIn = true),
-                    "Check-out" to stayTimeText(s.checkOut, s.checkOutTime, checkIn = false),
                     guests.takeIf { it.isNotEmpty() }?.let { "Gäste" to it },
-                ) + booking(s.confirmationNumber, s.travelerNames) + listOfNotNull(
-                    deadline?.let { "Stornofrist" to it },
-                    s.cancellationPolicy?.takeIf { it.isNotBlank() }?.let { "Stornobedingungen" to it },
+                    deadline?.let { "Stornierung" to it },
                     s.reservation?.let { "Reservierung" to reservationText(it, estimated = false) },
                 ),
                 note = s.note,
@@ -648,6 +636,54 @@ internal fun TrainStops(route: de.wanderlogplus.shared.sync.TransitRoute) {
                 )
             }
             Text("${leg.arrival} ${name(leg.to)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/** "Kostenlos stornierbar bis Fr, 07.05., 23:59", or "Stornofrist abgelaufen (…)" once [today] is past it. */
+fun cancellationText(deadline: String, today: String?): String {
+    val date = deadline.take(10)
+    // "2027-05-07T23:59" or, as imported from Wanderlog, "2027-05-07 23:59".
+    val time = deadline.drop(10).trim().removePrefix("T").take(5).takeIf { it.matches(Regex("""\d{1,2}:\d{2}""")) }
+    val text = dayLabel(date) + (time?.let { ", $it" } ?: "")
+    val past = today != null && today > date
+    return if (past) "Stornofrist abgelaufen ($text)" else "Kostenlos stornierbar bis $text"
+}
+
+/** Check-in and check-out of a stay as two tiles side by side (tags `stay-checkin`, `stay-checkout`). */
+@Composable
+private fun StayTimes(stay: de.wanderlogplus.shared.model.Stay) {
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(
+            Triple("Check-in", stayTimeText(stay.checkIn, stay.checkInTime, checkIn = true), "stay-checkin"),
+            Triple("Check-out", stayTimeText(stay.checkOut, stay.checkOutTime, checkIn = false), "stay-checkout"),
+        ).forEach { (label, value, tag) ->
+            Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.weight(1f).testTag(tag)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Booking number (selectable to copy), travellers and conditions of a stay, folded under "Buchung": not on show when
+ * the phone is passed around. Nothing without such data. Tag `stay-booking`.
+ */
+@Composable
+private fun StayBooking(stay: de.wanderlogplus.shared.model.Stay) {
+    val rows = booking(stay.confirmationNumber, stay.travelerNames) +
+        listOfNotNull(stay.cancellationPolicy?.takeIf { it.isNotBlank() }?.let { "Stornobedingungen" to it })
+    if (rows.isEmpty()) return
+    var open by remember(stay.id) { mutableStateOf(false) }
+    TextButton(onClick = { open = !open }, modifier = Modifier.padding(top = 4.dp).testTag("stay-booking")) {
+        Text(if (open) "Buchung ausblenden" else "Buchung (Bestätigungsnummer, Reisende, Bedingungen)")
+    }
+    if (open) InfoCard {
+        androidx.compose.foundation.text.selection.SelectionContainer {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { rows.forEach { (label, value) -> DetailRow(label, value) } }
         }
     }
 }
