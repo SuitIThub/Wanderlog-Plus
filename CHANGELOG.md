@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.65.0
+
+- **Bewertungszeile:** Unter jedem Ort in der Regionsliste und in den Tagesvorschlägen steht jetzt eine schmale Zeile mit kleinen grauen Symbolen – Stern für die Google-Bewertung (mit Anzahl), Besteck für den Tabelog-Score, Funkeln für die KI-Einschätzung (Muss, Lohnt, Wenn Zeit, Auslassen). Es erscheint nur, was bekannt ist. Das bisherige Tabelog-Badge „★ 3,7“ entfällt, der Stern steht jetzt nur noch für Google.
+
 ## 0.64.0
 
 - **Guthaben & Limits** (Mehr): zeigt, was die bezahlten Dienste noch hergeben – OpenRouter (Guthaben, verbraucht, übrig, Verbrauch heute/Woche/Monat), Apify (Monatsbudget des Plans und wann es neu beginnt), AirLabs (Abfragen im Monat und wann der Key abläuft). Parallel und Google haben dafür keine Abfrage: Parallel verlinkt aufs Dashboard, für Google zählt der Server seine eigenen Aufrufe pro Monat (Details, Textsuche, Umgebungssuche, Fotos, Routen) und verlinkt die Cloud Console. Markiert wird eine Karte ab 80 % Verbrauch (OpenRouter: unter 5 $ übrig, weil es Gesamtsummen meldet) oder 14 Tage vor Ablauf.

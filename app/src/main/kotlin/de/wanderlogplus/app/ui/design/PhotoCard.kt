@@ -45,13 +45,15 @@ fun PhotoCard(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     modifier: Modifier = Modifier,
+    /** An extra line under the subtitle (e.g. the rating line of a place); null: none. */
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     val elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     val body: @Composable () -> Unit = {
         when (style) {
-            PhotoCardStyle.Compact -> CompactBody(title, subtitle, imageUrl, placeholderSymbol, accent, badges, trailing)
-            PhotoCardStyle.Large -> LargeBody(title, subtitle, imageUrl, placeholderSymbol, accent, badges, trailing)
+            PhotoCardStyle.Compact -> CompactBody(title, subtitle, imageUrl, placeholderSymbol, accent, badges, trailing, extra)
+            PhotoCardStyle.Large -> LargeBody(title, subtitle, imageUrl, placeholderSymbol, accent, badges, trailing, extra)
         }
     }
     val m = modifier.fillMaxWidth()
@@ -71,11 +73,12 @@ private fun CompactBody(
     accent: Color,
     badges: List<BadgeSpec>,
     trailing: (@Composable () -> Unit)?,
+    extra: (@Composable () -> Unit)?,
 ) {
     Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         PhotoOrGradient(imageUrl, accent, "photo-fallback", Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)), symbol, 24.sp)
         Spacer(Modifier.size(12.dp))
-        TextBlock(title, subtitle, badges, Modifier.weight(1f))
+        TextBlock(title, subtitle, badges, extra, Modifier.weight(1f))
         if (trailing != null) {
             Spacer(Modifier.size(4.dp))
             trailing()
@@ -92,11 +95,12 @@ private fun LargeBody(
     accent: Color,
     badges: List<BadgeSpec>,
     trailing: (@Composable () -> Unit)?,
+    extra: (@Composable () -> Unit)?,
 ) {
     Column {
         PhotoOrGradient(imageUrl, accent, "photo-fallback", Modifier.fillMaxWidth().height(140.dp), symbol, 40.sp)
         Row(Modifier.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextBlock(title, subtitle, badges, Modifier.weight(1f))
+            TextBlock(title, subtitle, badges, extra, Modifier.weight(1f))
             if (trailing != null) trailing()
         }
     }
@@ -104,7 +108,7 @@ private fun LargeBody(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TextBlock(title: String, subtitle: String?, badges: List<BadgeSpec>, modifier: Modifier) {
+private fun TextBlock(title: String, subtitle: String?, badges: List<BadgeSpec>, extra: (@Composable () -> Unit)?, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             title,
@@ -123,6 +127,7 @@ private fun TextBlock(title: String, subtitle: String?, badges: List<BadgeSpec>,
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        extra?.invoke()
         if (badges.isNotEmpty()) {
             FlowRow(
                 Modifier.padding(top = 4.dp),

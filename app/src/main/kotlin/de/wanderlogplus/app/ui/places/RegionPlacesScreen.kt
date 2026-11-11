@@ -240,12 +240,13 @@ private fun PlaceCard(s: Suggestion, accent: Color, votes: List<de.wanderlogplus
     val score = votes.filter { it.savedPlaceId == s.saved.id && it.value != 0 }.takeIf { it.isNotEmpty() }?.sumOf { it.value }
     PhotoCard(
         title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
-        subtitle = s.place?.let(::ratingText),
+        subtitle = null,
         imageUrl = s.saved.heroImage(s.place),
         placeholderSymbol = categorySymbol(s.saved.category),
         accent = accent,
         style = PhotoCardStyle.Compact,
-        badges = listOfNotNull(tabelogChip(s.place)) + s.saved.tags.map(::tagBadge),
+        badges = s.saved.tags.map(::tagBadge),
+        extra = { RatingStrip(s.place, s.saved) },
         onClick = onClick,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {

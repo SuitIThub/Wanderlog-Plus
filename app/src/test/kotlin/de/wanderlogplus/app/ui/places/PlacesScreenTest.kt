@@ -154,7 +154,9 @@ class PlacesScreenTest {
         seedData()
         rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
         rule.onNodeWithTag("status-dot-sv-b", useUnmergedTree = true).assertExists()
-        rule.onNode(hasText("★ 4,9", substring = true) and hasTestTag("place-sv-b")).assertExists()
+        // The Google rating sits in the rating line: star icon (described) plus the number.
+        rule.onNode(hasText("4,9", substring = true) and hasTestTag("place-sv-b")).assertExists()
+        rule.onNode(androidx.compose.ui.test.hasContentDescription("Google-Bewertung") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("place-sv-b")), useUnmergedTree = true).assertExists()
     }
 
     @Test fun toggleAlwaysShownAndMapUnavailableInTests() {

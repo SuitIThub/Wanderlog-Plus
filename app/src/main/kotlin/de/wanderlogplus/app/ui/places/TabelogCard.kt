@@ -32,7 +32,6 @@ import de.wanderlogplus.app.ui.design.Badge
 import de.wanderlogplus.app.ui.design.BadgeSpec
 import de.wanderlogplus.app.ui.design.BadgeTone
 import de.wanderlogplus.app.ui.design.SurfaceCard
-import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.TabelogInfo
 import de.wanderlogplus.shared.model.TabelogStatus
 import de.wanderlogplus.shared.model.canonicalTabelogUrl
@@ -43,14 +42,6 @@ internal fun tabelogScoreText(t: TabelogInfo): String? {
     val s = t.score ?: return null
     val count = t.reviewCount?.let { " · " + String.format(Locale.GERMAN, "%,d", it) + " Bewertungen" }.orEmpty()
     return String.format(Locale.GERMAN, "%.2f", s) + count
-}
-
-/** The "★ 3,7" chip of a restaurant in lists; null unless Tabelog found it with a score. */
-fun tabelogChip(place: Place?): BadgeSpec? {
-    val t = place?.tabelog?.takeIf { it.status == TabelogStatus.FOUND } ?: return null
-    val s = t.score ?: return null
-    // Tabelog's scale is tight: 3.5 is already very good.
-    return BadgeSpec("★ " + String.format(Locale.GERMAN, "%.1f", s), if (s >= 3.5) BadgeTone.Positive else BadgeTone.Neutral)
 }
 
 /**
