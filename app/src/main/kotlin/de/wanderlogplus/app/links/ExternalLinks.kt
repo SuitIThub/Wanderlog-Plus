@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
+import de.wanderlogplus.shared.model.englishUrl
 import java.net.URLEncoder
 
 enum class LinkKind { NAVIGATE, TRANSIT, WEBSITE, PHONE, TABELOG, CUSTOM }
@@ -43,14 +44,20 @@ object GoogleExternalLinks : ExternalLinkProvider {
             ?.let { add(ExternalLink(LinkKind.WEBSITE, "Website", it)) }
         place.phone?.filter { it == '+' || it in '0'..'9' }?.takeIf { p -> p.count { it in '0'..'9' } >= 3 }
             ?.let { add(ExternalLink(LinkKind.PHONE, "Anrufen", "tel:$it")) }
-        if (category == PlaceCategory.FOOD && place.name.isNotBlank()) {
-            add(ExternalLink(LinkKind.TABELOG, "Tabelog", "https://tabelog.com/rstLst/?vs=1&sw=${enc(place.name)}"))
+        if (category == PlaceCategory.FOOD || category == PlaceCategory.NIGHTLIFE) {
+            // The entry itself once the server found it, else Tabelog's search for the name.
+            val entry = place.tabelog?.takeIf { it.status == de.wanderlogplus.shared.model.TabelogStatus.FOUND }?.englishUrl()?.takeIf { it.isNotBlank() }
+            when {
+                entry != null -> add(ExternalLink(LinkKind.TABELOG, "Tabelog", entry))
+                place.name.isNotBlank() -> add(ExternalLink(LinkKind.TABELOG, "Tabelog", "https://tabelog.com/rstLst/?vs=1&sw=${enc(place.name)}"))
+            }
         }
     }
 }
 
 /** ACTION_DIAL for tel:, ACTION_VIEW otherwise; false when no app handles it. */
 fun openExternalLink(context: Context, link: ExternalLink): Boolean {
+    if (link.kind == LinkKind.TABELOG) return openTabelog(context, link.uri)
     val action = if (link.uri.startsWith("tel:")) Intent.ACTION_DIAL else Intent.ACTION_VIEW
     val intent = Intent(action, Uri.parse(link.uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return try {

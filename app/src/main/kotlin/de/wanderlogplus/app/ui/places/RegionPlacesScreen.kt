@@ -245,7 +245,7 @@ private fun PlaceCard(s: Suggestion, accent: Color, votes: List<de.wanderlogplus
         placeholderSymbol = categorySymbol(s.saved.category),
         accent = accent,
         style = PhotoCardStyle.Compact,
-        badges = s.saved.tags.map(::tagBadge),
+        badges = listOfNotNull(tabelogChip(s.place)) + s.saved.tags.map(::tagBadge),
         onClick = onClick,
         trailing = {
             Row(verticalAlignment = Alignment.CenterVertically) {

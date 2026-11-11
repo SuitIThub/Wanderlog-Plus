@@ -77,6 +77,7 @@ import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.PlaceCategory
 import de.wanderlogplus.shared.model.PlaceStatus
 import de.wanderlogplus.shared.model.SavedPlace
+import de.wanderlogplus.shared.model.englishUrl
 import de.wanderlogplus.shared.sync.EntityType
 import java.util.Locale
 
@@ -177,6 +178,8 @@ fun PlaceDetailScreen(
     onLinkGoogle: ((placeId: String, hit: de.wanderlogplus.client.GeoPlace?, takePosition: Boolean) -> Unit)? = null,
     /** Opens another place of the same region (swipe across the header); null disables swiping. */
     onOpenSibling: ((savedPlaceId: String) -> Unit)? = null,
+    /** Asks the server to (re)load Tabelog, with a link set by hand or null; null hides "Aktualisieren"/"Link setzen". */
+    onTabelogRequest: ((placeId: String, url: String?) -> Unit)? = null,
 ) {
     val saved = snapshot.savedPlaces.firstOrNull { it.id == savedPlaceId }
     val place = saved?.let { snapshot.places[it.placeId] }
@@ -287,6 +290,18 @@ fun PlaceDetailScreen(
                 p, listOfNotNull(p.name.ifBlank { null }, region?.name).joinToString(" "), googleSearch.takeIf { onLinkGoogle != null },
                 onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
                 Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+
+        if (place != null && de.wanderlogplus.shared.model.isRestaurant(saved, place)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            TabelogCard(
+                info = place.tabelog,
+                onOpen = { de.wanderlogplus.app.links.openTabelog(context, place.tabelog?.englishUrl().orEmpty()) },
+                onRefresh = onTabelogRequest?.let { r -> { r(place.id, null) } },
+                onSetLink = onTabelogRequest?.let { r -> { url: String -> r(place.id, url) } },
+                onSearch = { builtIn.firstOrNull { it.kind == LinkKind.TABELOG }?.let { onOpenLink?.invoke(it) } },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
 

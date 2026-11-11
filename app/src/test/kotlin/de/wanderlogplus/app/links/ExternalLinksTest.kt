@@ -5,6 +5,7 @@ import de.wanderlogplus.shared.model.PlaceCategory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import de.wanderlogplus.shared.model.englishUrl
 import java.util.Locale
 
 class ExternalLinksTest {
@@ -73,5 +74,21 @@ class ExternalLinksTest {
             uri(p, LinkKind.NAVIGATE),
         )
         assertNull(uri(Place("q"), LinkKind.NAVIGATE))
+    }
+
+    @Test fun tabelogGoesStraightToTheEntryWhenKnown() {
+        val found = base.copy(tabelog = de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.FOUND, "https://tabelog.com/kyoto/A2601/A260201/26032368/"))
+        assertEquals("https://tabelog.com/en/kyoto/A2601/A260201/26032368/", uri(found, LinkKind.TABELOG, PlaceCategory.FOOD))
+        val missing = base.copy(tabelog = de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.NOT_FOUND))
+        assertEquals(true, uri(missing, LinkKind.TABELOG, PlaceCategory.FOOD)!!.startsWith("https://tabelog.com/rstLst/"))
+        assertEquals(true, uri(found, LinkKind.TABELOG, PlaceCategory.NIGHTLIFE) != null)
+    }
+
+    @Test fun tabelogTargetsPreferTheMultilingualApp() {
+        val info = de.wanderlogplus.shared.model.TabelogInfo(de.wanderlogplus.shared.model.TabelogStatus.FOUND, "https://tabelog.com/kyoto/A2601/A260201/26032368/")
+        val en = "https://tabelog.com/en/kyoto/A2601/A260201/26032368/"
+        assertEquals(listOf(TabelogTarget.AppUrl(en), TabelogTarget.AppStart, TabelogTarget.Browser(en)), tabelogTargets(info.englishUrl(), installed = true))
+        assertEquals(listOf(TabelogTarget.Browser(en)), tabelogTargets(info.englishUrl(), installed = false))
+        assertEquals(emptyList<TabelogTarget>(), tabelogTargets("", installed = true))
     }
 }
