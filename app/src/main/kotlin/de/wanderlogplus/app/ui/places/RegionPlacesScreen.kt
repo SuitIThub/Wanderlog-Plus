@@ -89,6 +89,8 @@ fun RegionPlacesScreen(
     researchStatus: String? = null,
     /** Opens the running research's "Ablauf"; null hides the link. */
     onShowProgress: (() -> Unit)? = null,
+    /** Moves a place to another region (null: none); null hides the check for places far outside. */
+    onSetRegion: ((savedPlaceId: String, regionId: String?) -> Unit)? = null,
 ) {
     val region = remember(snapshot, regionKey) { snapshot.regions.firstOrNull { it.id == regionKey } }
     val title = if (regionKey == NO_REGION) "Ohne Region" else region?.name.orEmpty()
@@ -150,6 +152,9 @@ fun RegionPlacesScreen(
                     modifier = Modifier.testTag("filter-category-${c?.name ?: "ALL"}"),
                 )
             }
+        }
+        if (onSetRegion != null && regionKey != NO_REGION) {
+            RegionOutliersBanner(snapshot, regionKey, title, onSetRegion, Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
         }
         researchStatus?.let {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
