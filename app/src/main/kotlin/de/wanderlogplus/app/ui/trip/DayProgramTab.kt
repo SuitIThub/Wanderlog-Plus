@@ -30,6 +30,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,8 +66,11 @@ internal fun DayProgramTab(
     /** Mode of a way: its key is the program item it leads to, or a way to a departure or to the night's stay. */
     onLegMode: (key: String, mode: TravelMode) -> Unit = { _, _ -> },
     onOpenLink: ((ExternalLink) -> Unit)? = null,
-    /** Opens "Hinzufügen" for a position between items; null hides the ＋ elements. */
+    /** Opens "Hinzufügen" for a position between items; null hides the ＋ elements and "Bearbeiten". */
     onInsert: ((ItemPosition) -> Unit)? = null,
+    /** Edit mode: only then the ＋ elements appear (also at the very start and end); kept by the day page across tabs. */
+    editing: Boolean = false,
+    onEditing: (Boolean) -> Unit = {},
     /** Opens the full map of the day's route; null hides the button. */
     onOpenMap: (() -> Unit)? = null,
     /** Opens "Verbindung abfragen" for a way (by its key); null hides the button. */
@@ -100,7 +106,7 @@ internal fun DayProgramTab(
         val legsSwitch = onShowLegs != null && flow.legs.isNotEmpty()
         val mapButton = onOpenMap != null && places >= 1
         val historyButton = onRestoreVersion != null && history.isNotEmpty()
-        if (legsSwitch || mapButton || historyButton) {
+        if (legsSwitch || mapButton || historyButton || onInsert != null) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -122,6 +128,12 @@ internal fun DayProgramTab(
                     Text("Wege", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(end = 8.dp))
                     Switch(checked = showLegs, onCheckedChange = onShowLegs, modifier = Modifier.testTag("legs-toggle"))
                 }
+                if (onInsert != null) {
+                    androidx.compose.material3.TextButton(onClick = { onEditing(!editing) }, modifier = Modifier.padding(start = 4.dp).testTag("program-edit")) {
+                        Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text(if (editing) "Fertig" else "Bearbeiten")
+                    }
+                }
             }
         }
         DayTimeline(
@@ -139,9 +151,15 @@ internal fun DayProgramTab(
                 ItemMenu(item.id, first = i <= 0, last = i == items.lastIndex, onMove, onRemove)
             },
             emptyProgram = {
-                EmptyHint("Noch nichts geplant – füge Orte aus den Vorschlägen hinzu.", Modifier.testTag("program-empty"))
+                Column {
+                    EmptyHint(
+                        if (editing || onInsert == null) "Noch nichts geplant – füge Orte aus den Vorschlägen hinzu." else "Noch nichts geplant – „Bearbeiten“ fügt Orte und Notizen ein.",
+                        Modifier.testTag("program-empty"),
+                    )
+                    if (editing && onInsert != null) InsertButton(ItemPosition.End.encode(), onClick = { onInsert(ItemPosition.End) })
+                }
             },
-            insertSlot = onInsert?.let { insert -> { pos -> InsertButton(pos.encode(), onClick = { insert(pos) }) } },
+            insertSlot = onInsert?.takeIf { editing }?.let { insert -> { pos -> InsertButton(pos.encode(), onClick = { insert(pos) }) } },
             legs = if (!showLegs) null else { leg ->
                 val way = remember(snapshot, date, flow, leg) { dayWay(snapshot, date, flow, leg) }
                 LegRow(

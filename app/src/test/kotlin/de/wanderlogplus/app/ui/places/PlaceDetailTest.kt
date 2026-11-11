@@ -25,6 +25,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import androidx.compose.ui.test.assertCountEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,20 +82,35 @@ class PlaceDetailTest {
     private fun outboxValue(field: String): JsonElement? =
         outbox.peek(100).map { it.change }.lastOrNull { it.field == field }?.value
 
-    // Native graphics: only real text measurement tells that the one-line hero title is cut.
+    // The name stands once, in the hero (two lines there), never repeated below it.
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Test fun longNameIsShownInFullBelowHero() {
+    @Test fun longNameIsShownOnceInTheHero() {
         val long = "Hotel Gion Shinmonzen Kyoto Higashiyama Annex am Shirakawa-Kanal"
         seedPlace(Place("p1", name = long))
         show()
-        rule.onNode(hasTestTag("place-full-name") and hasText(long)).assertIsDisplayed()
+        rule.onAllNodes(hasText(long)).assertCountEquals(1)
+        rule.onNodeWithTag("place-full-name").assertDoesNotExist()
     }
 
-    @Test fun shortNameIsNotRepeated() {
+    @Test fun statusIsOneChipWithAMenu() {
         seedPlace()
         show()
-        rule.onNodeWithText("Schrein Alpha").assertExists()
-        rule.onNodeWithTag("place-full-name").assertDoesNotExist()
+        rule.onNodeWithTag("status-chips").assertDoesNotExist()
+        rule.onNode(hasTestTag("status-chip") and hasText("Idee", substring = true)).assertExists()
+        rule.onNodeWithTag("status-chip").performClick()
+        rule.onNodeWithTag("status-option-VISITED").performClick()
+        assertEquals("VISITED", (outboxValue("status") as JsonPrimitive).content)
+        rule.onNode(hasTestTag("status-chip") and hasText("Besucht", substring = true)).assertExists()
+    }
+
+    @Test fun mapGuidesCostsAndGoogleSitInTheInfoTab() {
+        seedPlace()
+        show()
+        rule.onNodeWithTag("google-link").assertExists()
+        rule.onNodeWithTag("tab-research").performClick()
+        rule.onNodeWithTag("google-link").assertDoesNotExist()
+        rule.onNodeWithTag("tab-info").performClick()
+        rule.onNodeWithTag("google-link").assertExists()
     }
 
     @Test fun editNoteSavesAndShowsNewText() {
@@ -140,7 +156,8 @@ class PlaceDetailTest {
     @Test fun statusVisitedWritesEnumName() {
         seedPlace()
         show()
-        rule.onNodeWithText("Besucht").performClick()
+        rule.onNodeWithTag("status-chip").performClick()
+        rule.onNodeWithTag("status-option-VISITED").performClick()
         assertEquals(JsonPrimitive("VISITED"), outboxValue("status"))
     }
 
@@ -160,7 +177,7 @@ class PlaceDetailTest {
             ),
         )
         show()
-        rule.onNodeWithText("★ 4,5 (1.234)").assertIsDisplayed()
+        rule.onNodeWithText("4,5 (1.234)", useUnmergedTree = true).assertIsDisplayed()
         rule.onNodeWithText("60–90 Min.", substring = true).assertIsDisplayed()
         rule.onNodeWithText("Gion 1").assertIsDisplayed()
         rule.onNodeWithText("Alter Schrein").assertIsDisplayed()
@@ -222,8 +239,8 @@ class PlaceDetailTest {
         rule.onNodeWithTag("attachment-at1").assertExists()
         rule.onNodeWithTag("attachment-add").assertExists()
         rule.onNodeWithTag("place-note").assertDoesNotExist()
-        // Status chips stay above the tabs.
-        rule.onNodeWithText("Besucht").assertIsDisplayed()
+        // The status chip stays above the tabs.
+        rule.onNodeWithTag("status-chip").assertIsDisplayed()
     }
 
     @Test fun todayHighlightedInHours() {

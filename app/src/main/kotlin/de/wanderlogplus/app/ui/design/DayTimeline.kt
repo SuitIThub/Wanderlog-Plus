@@ -117,9 +117,9 @@ fun DayTimeline(
                 }
                 is FlowEntry.Item -> {
                     val item = entry.item
-                    // Numbered as shown: the flow may put a program item on the other side of a ride.
                     val i = shown.indexOf(item.id)
-                    item((i + 1).toString(), key = "item-${item.id}") {
+                    // The time stands at the dot (as on "Heute"); without one the entry has no marker.
+                    item(item.time?.takeIf { it.isNotBlank() }.orEmpty(), key = "item-${item.id}") {
                         Column {
                             if (i == 0) insertSlot?.invoke(ItemPosition.Start)
                             val tag = Modifier.testTag(itemTagPrefix + item.id)
@@ -134,15 +134,15 @@ fun DayTimeline(
                                     PhotoCard(
                                         title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
                                         subtitle = listOfNotNull(
-                                            item.time?.takeIf { it.isNotBlank() },
                                             if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
                                             entry.checkIn?.let { checkInText(it, item.time) },
-                                            place?.rating?.let { ratingLabel(it) },
+                                            place?.rating?.takeIf { saved == null }?.let { ratingLabel(it) },
                                         ).joinToString(" · "),
                                         imageUrl = place?.heroImageUrl(),
                                         placeholderSymbol = if (isStay) "🏨" else categorySymbol(saved?.category),
                                         accent = accent,
-                                        style = PhotoCardStyle.Large,
+                                        style = PhotoCardStyle.Compact,
+                                        extra = saved?.let { s -> { de.wanderlogplus.app.ui.places.RatingStrip(place, s) } },
                                         badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
                                         onClick = onOpenItem?.let { open -> { open(item) } },
                                         trailing = actions,

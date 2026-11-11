@@ -88,6 +88,8 @@ fun GoogleLinkRow(
     search: GoogleSearch?,
     onLink: ((hit: GeoPlace?, takePosition: Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
+    /** One line ("verknüpft") instead of name and address, where the address already stands elsewhere. */
+    compact: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
     val linked = place.googlePlaceId.isNotBlank()
@@ -105,7 +107,9 @@ fun GoogleLinkRow(
                 ),
             ) {
                 Text("Google-Eintrag", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (linked) {
+                if (linked && compact) {
+                    Text("verknüpft – in Google Maps öffnen", style = MaterialTheme.typography.bodyMedium)
+                } else if (linked) {
                     Text(place.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text(place.address?.takeIf { it.isNotBlank() } ?: "Verknüpft", style = MaterialTheme.typography.bodySmall)
                 } else {
