@@ -66,4 +66,54 @@ class StayTabsTest {
         rule.onNodeWithTag("stay-tab-photos").performClick()
         rule.onNodeWithTag("photo-gallery").assertExists()
     }
+
+    @Test
+    fun photosOpenDirectlyAndRoomPhotosArePickedTogether() {
+        val base = Fixtures.trip()
+        val stay = base.stays.first().copy(info = info)
+        val p0 = Attachment("ph1", EntityType.STAY, stay.id, "abc", "zimmer.jpg", "image/jpeg", 10, kind = "photo", label = Attachment.LABEL_ROOM)
+        val p1 = Attachment("ph2", EntityType.STAY, stay.id, "def", "lobby.jpg", "image/jpeg", 10, kind = "photo")
+        val p2 = Attachment("ph3", EntityType.STAY, stay.id, "ghi", "bad.jpg", "image/jpeg", 10, kind = "photo")
+        val snapshot = base.copy(stays = listOf(stay) + base.stays.drop(1), attachments = listOf(p0, p1, p2))
+        var opened: Int? = null
+        val labels = mutableListOf<Pair<String, String?>>()
+        val actions = de.wanderlogplus.app.ui.attachments.AttachmentActions({ true }, { _, _ -> }, {}, {}, {})
+        rule.setContent {
+            WanderlogPlusTheme {
+                LogisticsDetailScreen(
+                    snapshot, EntityType.STAY, stay.id, onBack = {}, attachments = actions,
+                    onOpenPhoto = { opened = it }, onSetPhotoLabel = { id, l -> labels += id to l },
+                )
+            }
+        }
+        rule.onNodeWithTag("stay-tab-photos").performClick()
+        // A tap only opens the photo.
+        rule.onNodeWithTag("photo-1").performClick()
+        assertEquals(1, opened)
+        rule.onNodeWithTag("photo-room-toggle").assertDoesNotExist()
+        // "Zimmerfotos wählen": tick the lobby, untick the old room photo, save.
+        rule.onNodeWithTag("room-photos-pick").performClick()
+        rule.onNodeWithTag("photo-0").performClick()
+        rule.onNodeWithTag("photo-2").performClick()
+        rule.onNodeWithTag("room-photos-done").performClick()
+        assertEquals(listOf("ph1" to null, "ph3" to Attachment.LABEL_ROOM), labels)
+        assertEquals(1, opened)
+        rule.onNodeWithTag("room-photos-done").assertDoesNotExist()
+    }
+
+    @Test
+    fun roomPhotosInTheRoomCardOpen() {
+        val base = Fixtures.trip()
+        val stay = base.stays.first().copy(info = info)
+        val p0 = Attachment("ph1", EntityType.STAY, stay.id, "abc", "zimmer.jpg", "image/jpeg", 10, kind = "photo")
+        val p1 = Attachment("ph2", EntityType.STAY, stay.id, "def", "zimmer2.jpg", "image/jpeg", 10, kind = "photo", label = Attachment.LABEL_ROOM)
+        val snapshot = base.copy(stays = listOf(stay) + base.stays.drop(1), attachments = listOf(p0, p1))
+        var opened: Int? = null
+        rule.setContent { WanderlogPlusTheme { LogisticsDetailScreen(snapshot, EntityType.STAY, stay.id, onBack = {}, onOpenPhoto = { opened = it }) } }
+        rule.onNodeWithTag("stay-tab-room").performClick()
+        rule.onNodeWithTag("stay-room").performScrollTo()
+        rule.onNodeWithTag("photo-0", useUnmergedTree = true).performClick()
+        // The index is the stay gallery's (the room photo is the second photo there).
+        assertEquals(1, opened)
+    }
 }

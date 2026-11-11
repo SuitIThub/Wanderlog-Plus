@@ -19,6 +19,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Bed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -305,7 +308,11 @@ fun LogisticsDetailScreen(
                 StayInfoCards(
                     modifier = Modifier.padding(top = 12.dp),
                     stay = stay,
-                    roomPhotos = snapshot.photosFor(EntityType.STAY, id).filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
+                    roomPhotos = stayPhotosAll.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
+                    // Room photos open at their place in the stay's whole gallery.
+                    onOpenPhoto = { i ->
+                        stayPhotosAll.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM }.getOrNull(i)?.let { onOpenPhoto?.invoke(stayPhotosAll.indexOf(it)) }
+                    },
                     files = attachments?.files,
                     onResearch = onStayResearch?.let { r -> { links: List<String>, fresh: Boolean -> r(id, links, fresh) } },
                     onEdit = onEdit?.let { e -> { e(EntityType.STAY, id) } },
@@ -313,36 +320,46 @@ fun LogisticsDetailScreen(
                 )
             }
 
+            if (stay != null && stayTab == 2) {
+                // Google's photos of the stay, as on a place's page.
+                de.wanderlogplus.app.ui.places.PlacePhotosRow(snapshot.places[stay.placeId], Modifier.padding(top = 12.dp))
+            }
+
             if (stay != null && stayTab == 2 && attachments != null) {
                 val stayPhotos = stayPhotosAll
-                var labelling by remember(id) { mutableStateOf<de.wanderlogplus.shared.model.Attachment?>(null) }
+                // "Zimmerfotos wählen": tick all room photos at once instead of a dialog per photo.
+                var picking by remember(id) { mutableStateOf<Set<String>?>(null) }
+                val chosen = picking
+                if (onSetPhotoLabel != null && stayPhotos.isNotEmpty()) {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (chosen == null) {
+                            Box(Modifier.weight(1f))
+                            androidx.compose.material3.TextButton(
+                                onClick = { picking = stayPhotos.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM }.map { it.id }.toSet() },
+                                modifier = Modifier.testTag("room-photos-pick"),
+                            ) {
+                                Icon(androidx.compose.material.icons.Icons.Filled.Bed, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                                Text("Zimmerfotos wählen")
+                            }
+                        } else {
+                            Text("Tippe die Fotos eures Zimmers an", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            androidx.compose.material3.TextButton(onClick = { picking = null }, modifier = Modifier.testTag("room-photos-cancel")) { Text("Abbrechen") }
+                            androidx.compose.material3.TextButton(
+                                onClick = { roomLabelChanges(stayPhotos, chosen).forEach { (pid, label) -> onSetPhotoLabel(pid, label) }; picking = null },
+                                modifier = Modifier.testTag("room-photos-done"),
+                            ) { Text("Fertig") }
+                        }
+                    }
+                }
                 de.wanderlogplus.app.ui.attachments.PhotoGrid(
                     stayPhotos, attachments.files,
-                    onAdd = attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
-                    onOpen = { i -> if (onSetPhotoLabel != null) labelling = stayPhotos.getOrNull(i) },
+                    onAdd = if (chosen == null) attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } } else null,
+                    onOpen = { i ->
+                        val p = stayPhotos.getOrNull(i)
+                        if (chosen != null && p != null) picking = if (p.id in chosen) chosen - p.id else chosen + p.id else onOpenPhoto?.invoke(i)
+                    },
+                    selected = chosen,
                 )
-                labelling?.let { a ->
-                    val room = a.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { labelling = null },
-                        title = { Text("Foto") },
-                        text = { Text(if (room) "Dieses Foto ist als Zimmerfoto markiert." else "Zeigt dieses Foto euer Zimmer?") },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(
-                                onClick = { onSetPhotoLabel?.invoke(a.id, toggledRoomLabel(a)); labelling = null },
-                                modifier = Modifier.testTag("photo-room-toggle"),
-                            ) { Text(if (room) "Markierung entfernen" else "Als Zimmerfoto markieren") }
-                        },
-                        dismissButton = {
-                            Row {
-                                if (onOpenPhoto != null) {
-                                    androidx.compose.material3.TextButton(onClick = { onOpenPhoto(stayPhotos.indexOf(a)); labelling = null }) { Text("Groß ansehen") }
-                                }
-                                androidx.compose.material3.TextButton(onClick = { labelling = null }) { Text("Abbrechen") }
-                            }
-                        },
-                    )
-                }
             }
 
             if (stay == null || stayTab == 0) {

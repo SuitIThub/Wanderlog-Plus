@@ -37,9 +37,14 @@ class StayEditInfoTest {
     }
 
     @Test
-    fun aPhotoIsMarkedAsRoomPhotoAndBack() {
-        val a = Attachment("a", EntityType.STAY, "st", kind = "photo")
-        assertEquals(Attachment.LABEL_ROOM, toggledRoomLabel(a))
-        assertEquals(null, toggledRoomLabel(a.copy(label = Attachment.LABEL_ROOM)))
+    fun onlyChangedRoomMarksAreSaved() {
+        val a = Attachment("a", EntityType.STAY, "st", kind = "photo", label = Attachment.LABEL_ROOM)
+        val b = Attachment("b", EntityType.STAY, "st", kind = "photo")
+        val c = Attachment("c", EntityType.STAY, "st", kind = "photo")
+        // a stays a room photo, b becomes one, c stays none.
+        assertEquals(listOf("b" to Attachment.LABEL_ROOM), roomLabelChanges(listOf(a, b, c), setOf("a", "b")))
+        // a is unmarked.
+        assertEquals(listOf("a" to null), roomLabelChanges(listOf(a, b, c), emptySet()))
+        assertEquals(emptyList<Pair<String, String?>>(), roomLabelChanges(listOf(a, b, c), setOf("a")))
     }
 }

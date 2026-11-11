@@ -31,8 +31,17 @@ import de.wanderlogplus.shared.model.StayInfoMerge
 fun stayInfoEdit(old: StayInfo?, field: String, update: (StayInfo) -> StayInfo): StayInfo =
     StayInfoMerge.edited(update(old ?: StayInfo()), field)
 
-/** The label a photo gets from "Zimmerfoto" in its menu: marked, or unmarked again. */
-fun toggledRoomLabel(a: Attachment): String? = if (a.label == Attachment.LABEL_ROOM) null else Attachment.LABEL_ROOM
+/** After "Zimmerfotos wählen": the photos whose room mark changes (id → new label, null = unmarked), in gallery order. */
+fun roomLabelChanges(photos: List<Attachment>, selected: Set<String>): List<Pair<String, String?>> =
+    photos.mapNotNull { a ->
+        val isRoom = a.label == Attachment.LABEL_ROOM
+        val wantRoom = a.id in selected
+        when {
+            isRoom == wantRoom -> null
+            wantRoom -> a.id to Attachment.LABEL_ROOM
+            else -> a.id to null
+        }
+    }
 
 /** The amenity groups offered for new entries. */
 val AMENITY_GROUPS = listOf("Bad", "Schlafen", "Technik", "Essen & Trinken", "Onsen & Spa", "Service", "Sonstiges")
