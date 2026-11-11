@@ -68,7 +68,7 @@ fun main() {
             val researcher = PipelineResearcher(facts, text, google = { id -> googleDetails?.get(id)?.facts().orEmpty() })
             Assistant(model, photon, researcher, textModel = text, placeFinder = placeFinder, parallelism = config.researchParallelism)
         },
-        ToolReelMedia(cookies = config.instagramCookies),
+        ToolReelMedia(cookies = config.instagramCookies, galleryDl = config.galleryDl),
         config.dataDir.resolve("ai-work"),
         writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
         stayResearch = openRouter?.let { media ->

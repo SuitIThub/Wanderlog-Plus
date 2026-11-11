@@ -93,15 +93,23 @@ class AssistantTest {
         }
     }
 
-    private class FakeMedia(val fail: Boolean = false) : ReelMedia {
+    private class FakeMedia(val fail: Boolean = false, val imagesOnly: Boolean = false) : ReelMedia {
         var downloads = 0
+        var extracted: Downloaded? = null
         override fun download(url: String, dir: Path): Downloaded {
             downloads++
             if (fail) throw DownloadFailed()
+            if (imagesOnly) {
+                val i = dir.resolve("1.jpg"); Files.writeString(i, "x")
+                return Downloaded(emptyList(), listOf(i), "Tipps für Kyoto")
+            }
             val v = dir.resolve("video.mp4"); Files.writeString(v, "x")
-            return Downloaded(v, "Mein Kyoto-Abend #fushimi")
+            return Downloaded(listOf(v), emptyList(), "Mein Kyoto-Abend #fushimi")
         }
-        override fun extract(video: Path, dir: Path) = Media(listOf(byteArrayOf(1, 2), byteArrayOf(3)), byteArrayOf(9))
+        override fun extract(d: Downloaded, dir: Path): Media {
+            extracted = d
+            return Media(listOf(byteArrayOf(1, 2), byteArrayOf(3)), if (d.videos.isEmpty()) null else byteArrayOf(9))
+        }
     }
 
     private fun jobs(model: ChatModel? = FakeModel(), media: ReelMedia = FakeMedia(), sync: de.wanderlogplus.server.SyncService? = null) =
@@ -196,6 +204,17 @@ class AssistantTest {
         j.drain()
         assertEquals("FAILED", j.get(id)!!.status)
         assertEquals("download_failed", j.get(id)!!.error)
+    }
+
+    @Test fun imagePostIsAnalyzed() {
+        seedTrip()
+        val media = FakeMedia(imagesOnly = true)
+        val j = jobs(media = media)
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        assertEquals("DONE", j.get(id)!!.status)
+        assertEquals(1, media.extracted!!.images.size)
+        assertTrue(j.get(id)!!.steps.any { it.text.contains("1 Bild") })
     }
 
     @Test fun uploadedVideoIsUsedAndDeleted() {

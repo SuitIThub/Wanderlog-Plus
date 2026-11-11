@@ -132,7 +132,7 @@ class StayResearchTest {
     private fun jobs(photos: RoomPhotoSource? = null) = AiJobs(
         store, null, object : ReelMedia {
             override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
-            override fun extract(video: java.nio.file.Path, dir: java.nio.file.Path) = throw DownloadFailed()
+            override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
         },
         tmp.resolve("work"), executor = Executors.newSingleThreadExecutor(),
         writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },

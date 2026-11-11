@@ -28,6 +28,8 @@ data class ServerConfig(
     val parallelProcessor: String = "base",
     /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
     val instagramCookies: Path? = null,
+    /** gallery-dl for picture posts and galleries (WLP_GALLERY_DL, default "gallery-dl" on the PATH). */
+    val galleryDl: String = "gallery-dl",
     /** Manages the access tokens (the /api/admin endpoints); never a sync token. Null: no administration. */
     val adminToken: String? = null,
     /** Apify token for public-transport connections in Japan; without it `/api/transit` answers `transit_not_configured`. */
@@ -86,6 +88,7 @@ data class ServerConfig(
                     ?: de.wanderlogplus.server.ai.DEFAULT_RESEARCH_PARALLELISM,
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
+                galleryDl = env["WLP_GALLERY_DL"]?.takeIf { it.isNotBlank() } ?: "gallery-dl",
                 adminToken = env["WLP_ADMIN_TOKEN"]?.trim()?.takeIf { it.isNotBlank() }?.also { admin ->
                     require(admin.length >= MIN_TOKEN_LENGTH) { "WLP_ADMIN_TOKEN must be at least $MIN_TOKEN_LENGTH characters" }
                     require(admin !in tokens.values) { "WLP_ADMIN_TOKEN must differ from every WLP_TOKENS token" }

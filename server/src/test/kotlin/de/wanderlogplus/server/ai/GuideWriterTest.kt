@@ -77,7 +77,7 @@ class GuideWriterTest {
     private fun jobs(model: ChatModel) = AiJobs(
         store, null, object : ReelMedia {
             override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
-            override fun extract(video: java.nio.file.Path, dir: java.nio.file.Path) = throw DownloadFailed()
+            override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
         },
         tmp.resolve("work"), executor = Executors.newSingleThreadExecutor(),
         writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
@@ -106,7 +106,7 @@ class GuideWriterTest {
         val j = AiJobs(
             store, null, object : ReelMedia {
                 override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
-                override fun extract(video: java.nio.file.Path, dir: java.nio.file.Path) = throw DownloadFailed()
+                override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
             },
             tmp.resolve("work-x"), executor = Executors.newSingleThreadExecutor(),
             writeResults = { edits -> if (calls++ == 0) error("disk full") else sync.writeAsServer(ASSISTANT_AUTHOR, edits) },

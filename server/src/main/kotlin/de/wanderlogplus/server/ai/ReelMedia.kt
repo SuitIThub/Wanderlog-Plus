@@ -14,29 +14,71 @@ import kotlin.io.path.name
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 
-/** The reel could not be downloaded (private, login wall, Instagram changed, no network). */
+/** The reel or post could not be downloaded (private, login wall, Instagram changed, no network). */
 class DownloadFailed : RuntimeException("download_failed")
 
-/** A downloaded video and the text that came with it (caption/title), if any. */
-data class Downloaded(val video: Path, val caption: String?)
+/**
+ * What came down for a reel or post: its videos and pictures in gallery order and the text that came with it
+ * (caption/title), if any. A reel is one video; a picture post one or more images; a gallery may mix both.
+ */
+data class Downloaded(val videos: List<Path>, val images: List<Path>, val caption: String?)
 
-/** What the model gets from a video: a few still frames and the sound track. */
+/** What the model gets from a post: pictures (gallery images first, then video stills) and the sound track. */
 data class Media(val frames: List<ByteArray>, val audio: ByteArray?)
 
-/** Download and decomposition of videos; replaced by fakes in tests. */
+/** Download and decomposition of posts; replaced by fakes in tests. */
 interface ReelMedia {
     fun download(url: String, dir: Path): Downloaded
-    fun extract(video: Path, dir: Path): Media
+    fun extract(d: Downloaded, dir: Path): Media
+}
+
+/** Pictures the model gets from one post at most. */
+const val MAX_POST_IMAGES = 20
+
+/** Video stills per video at most. */
+private const val MAX_FRAMES_PER_VIDEO = 12
+
+private val IMAGE_EXT = setOf("jpg", "jpeg", "png", "webp", "heic")
+private val VIDEO_EXT = setOf("mp4", "mov", "webm", "m4v")
+
+/** Videos and images below [dir] (any depth), each sorted by file name, which is the gallery order of gallery-dl. */
+internal fun collectGallery(dir: Path): Pair<List<Path>, List<Path>> {
+    val files = Files.walk(dir).use { s -> s.filter { it.isRegularFile() }.toList() }.sortedBy { it.name }
+    fun ext(p: Path) = p.name.substringAfterLast('.', "").lowercase()
+    return files.filter { ext(it) in VIDEO_EXT } to files.filter { ext(it) in IMAGE_EXT }
+}
+
+/** The post's text from gallery-dl's metadata files (`description` or `caption`); null without one. */
+internal fun galleryCaption(dir: Path): String? {
+    val json = Json { ignoreUnknownKeys = true }
+    val files = Files.walk(dir).use { s -> s.filter { it.isRegularFile() && it.name.endsWith(".json") }.toList() }.sortedBy { it.name }
+    return files.firstNotNullOfOrNull { f ->
+        try {
+            val o = json.parseToJsonElement(f.readText()).jsonObject
+            o.str("description") ?: o.str("caption")
+        } catch (e: Exception) {
+            null
+        }
+    }
+}
+
+/** Stills per video: what [images] leave of [MAX_POST_IMAGES], shared out evenly (first videos get the rest), at most 12 each. */
+internal fun frameBudget(images: Int, videos: Int): List<Int> {
+    if (videos <= 0) return emptyList()
+    val budget = (MAX_POST_IMAGES - images).coerceAtLeast(0)
+    return List(videos) { i -> (budget / videos + if (i < budget % videos) 1 else 0).coerceAtMost(MAX_FRAMES_PER_VIDEO) }
 }
 
 /**
- * yt-dlp for the download (with the caption from its info JSON) and ffmpeg for frames and audio. [cookies] is an
- * optional Netscape cookies file for yt-dlp, for reels Instagram shows only to logged-in users.
+ * yt-dlp for videos (with the caption from its info JSON), gallery-dl for picture posts and galleries, ffmpeg for
+ * frames, scaled pictures and audio. [cookies] is an optional Netscape cookies file for both downloaders, for posts
+ * Instagram shows only to logged-in users.
  */
 class ToolReelMedia(
     private val ytDlp: String = "yt-dlp",
     private val ffmpeg: String = "ffmpeg",
     private val cookies: Path? = null,
+    private val galleryDl: String = "gallery-dl",
 ) : ReelMedia {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -50,11 +92,22 @@ class ToolReelMedia(
         )
         cookies?.let { args += listOf("--cookies", it.toString()) }
         args += url
-        if (!run(args, 180)) throw DownloadFailed()
-        val video = dir.listDirectoryEntries("video.*").firstOrNull { it.isRegularFile() && !it.name.endsWith(".json") } ?: throw DownloadFailed()
-        val info = dir.listDirectoryEntries("*.info.json").firstOrNull()
-        val caption = info?.let { captionOf(it.readText()) }
-        return Downloaded(video, caption)
+        if (run(args, 180)) {
+            val video = dir.listDirectoryEntries("video.*").firstOrNull { it.isRegularFile() && !it.name.endsWith(".json") }
+            if (video != null) {
+                val info = dir.listDirectoryEntries("*.info.json").firstOrNull()
+                return Downloaded(listOf(video), emptyList(), info?.let { captionOf(it.readText()) })
+            }
+        }
+        // No video: a picture post or a gallery.
+        val gallery = Files.createDirectories(dir.resolve("gallery"))
+        val g = mutableListOf(galleryDl, "--quiet", "--write-metadata", "-D", gallery.toString())
+        cookies?.let { g += listOf("--cookies", it.toString()) }
+        g += url
+        run(g, 180)
+        val (videos, images) = collectGallery(gallery)
+        if (videos.isEmpty() && images.isEmpty()) throw DownloadFailed()
+        return Downloaded(videos, images, galleryCaption(gallery))
     }
 
     internal fun captionOf(infoJson: String): String? = try {
@@ -64,14 +117,34 @@ class ToolReelMedia(
         null
     }
 
-    override fun extract(video: Path, dir: Path): Media {
-        // One frame every 3 s, at most 12, scaled to 512 px width: enough to read signs, small enough for the model.
-        run(listOf(ffmpeg, "-y", "-loglevel", "error", "-i", video.toString(), "-vf", "fps=1/3,scale=512:-2", "-frames:v", "12", "-q:v", "5", dir.resolve("frame_%02d.jpg").toString()), 120)
-        val frames = dir.listDirectoryEntries("frame_*.jpg").sortedBy { it.name }.map { it.readBytes() }
-        val audioPath = dir.resolve("audio.mp3")
-        val hasAudio = run(listOf(ffmpeg, "-y", "-loglevel", "error", "-i", video.toString(), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", "-t", "180", audioPath.toString()), 120) &&
-            audioPath.exists() && Files.size(audioPath) > 1000
-        return Media(frames, if (hasAudio) audioPath.readBytes() else null)
+    override fun extract(d: Downloaded, dir: Path): Media {
+        val pictures = mutableListOf<ByteArray>()
+        // Gallery pictures at up to 1024 px: text on tip slides must stay readable.
+        d.images.take(MAX_POST_IMAGES).forEachIndexed { i, img ->
+            val out = dir.resolve("img_%02d.jpg".format(i))
+            if (run(listOf(ffmpeg, "-y", "-loglevel", "error", "-i", img.toString(), "-vf", "scale='min(1024,iw)':-2", "-q:v", "4", out.toString()), 60) && out.exists()) {
+                pictures += out.readBytes()
+            }
+        }
+        val budget = frameBudget(pictures.size, d.videos.size)
+        d.videos.forEachIndexed { v, video ->
+            val n = budget[v]
+            if (n == 0) return@forEachIndexed
+            // One frame every 3 s, scaled to 512 px width: enough to read signs, small enough for the model.
+            run(listOf(ffmpeg, "-y", "-loglevel", "error", "-i", video.toString(), "-vf", "fps=1/3,scale=512:-2", "-frames:v", "$n", "-q:v", "5", dir.resolve("frame_${v}_%02d.jpg").toString()), 120)
+            pictures += dir.listDirectoryEntries("frame_${v}_*.jpg").sortedBy { it.name }.map { it.readBytes() }
+        }
+        var audio: ByteArray? = null
+        for ((v, video) in d.videos.withIndex()) {
+            val audioPath = dir.resolve("audio_$v.mp3")
+            if (run(listOf(ffmpeg, "-y", "-loglevel", "error", "-i", video.toString(), "-vn", "-ac", "1", "-ar", "16000", "-b:a", "48k", "-t", "180", audioPath.toString()), 120) &&
+                audioPath.exists() && Files.size(audioPath) > 1000
+            ) {
+                audio = audioPath.readBytes()
+                break
+            }
+        }
+        return Media(pictures.take(MAX_POST_IMAGES), audio)
     }
 
     /** Runs a tool without a shell; true on exit code 0 within [timeoutSeconds]. Output is discarded (may contain URLs). */

@@ -402,22 +402,24 @@ class AiJobs(
         val dir = Files.createTempDirectory(workDir.also { Files.createDirectories(it) }, "reel-")
         try {
             t.status("DOWNLOADING")
-            val (video, caption) = when (input) {
+            val downloaded = when (input) {
                 is ReelInput.Link -> {
-                    t.step("Video wird heruntergeladen (yt-dlp) …")
-                    media.download(input.url, dir).let { it.video to it.caption }
+                    t.step("Beitrag wird heruntergeladen (yt-dlp, für Bilder gallery-dl) …")
+                    media.download(input.url, dir)
                 }
-                is ReelInput.Video -> input.video to input.caption
+                is ReelInput.Video -> Downloaded(listOf(input.video), emptyList(), input.caption)
             }
+            val caption = downloaded.caption
             t.step(
-                "Video bereit, " + (caption?.let { "Beschreibung mit ${it.length} Zeichen" } ?: "ohne Beschreibung") +
-                    ", " + sizeText(video),
+                "Beitrag bereit: " + countText(downloaded.images.size, "Bild", "Bilder") + ", " + countText(downloaded.videos.size, "Video", "Videos") +
+                    ", " + (caption?.let { "Beschreibung mit ${it.length} Zeichen" } ?: "ohne Beschreibung") +
+                    downloaded.videos.firstOrNull()?.let { ", " + sizeText(it) }.orEmpty(),
                 JobProgress.OK,
             )
             t.status("ANALYZING")
-            t.step("Bilder und Ton werden herausgelöst (ffmpeg) …")
-            val extracted = media.extract(video, dir)
-            t.step("${extracted.frames.size} Bilder" + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
+            t.step("Bilder und Ton werden aufbereitet (ffmpeg) …")
+            val extracted = media.extract(downloaded, dir)
+            t.step(countText(extracted.frames.size, "Bild", "Bilder") + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
             val context = TripContext.from(store)
             t.step("KI erkennt Orte in Bild, Ton und Beschreibung …")
             val (summary, found) = a.findPlaces(caption, extracted, context)
@@ -497,6 +499,8 @@ class AiJobs(
             t.fail("internal")
         }
     }
+
+    private fun countText(n: Int, one: String, many: String) = "$n " + if (n == 1) one else many
 
     private fun sizeText(video: Path): String = try {
         "%.1f MB".format(java.util.Locale.GERMAN, Files.size(video) / 1_048_576.0)
