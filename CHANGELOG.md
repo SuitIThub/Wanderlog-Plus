@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.64.0
+
+- **Guthaben & Limits** (Mehr): zeigt, was die bezahlten Dienste noch hergeben – OpenRouter (Guthaben, verbraucht, übrig, Verbrauch heute/Woche/Monat), Apify (Monatsbudget des Plans und wann es neu beginnt), AirLabs (Abfragen im Monat und wann der Key abläuft). Parallel und Google haben dafür keine Abfrage: Parallel verlinkt aufs Dashboard, für Google zählt der Server seine eigenen Aufrufe pro Monat (Details, Textsuche, Umgebungssuche, Fotos, Routen) und verlinkt die Cloud Console. Ab 80 % Verbrauch oder 14 Tage vor Ablauf ist eine Karte markiert.
+
 ## 0.63.0
 
 - **Tabelog für Restaurants und Bars:** Der Server holt für jeden gespeicherten Ort der Kategorie Essen oder Nachtleben die Tabelog-Daten – einmal für alle, danach automatisch für neue (höchstens 20 je Viertelstunde, über Apify, etwa 1,5–2 Cent pro Restaurant). Ein Eintrag zählt nur, wenn er höchstens 300 m entfernt liegt und der Name passt.

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -57,6 +58,8 @@ fun MoreScreen(
             MoreRow("KI-Kriterien", Icons.Filled.Tune) { onOpen(AI_SETTINGS_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("KI-Aufträge", Icons.Filled.History) { onOpen(de.wanderlogplus.app.ui.reels.JOBS_ROUTE) }
+            HorizontalDivider(Modifier.padding(start = 68.dp))
+            MoreRow("Guthaben & Limits", Icons.Filled.AccountBalanceWallet) { onOpen(BALANCES_ROUTE) }
             HorizontalDivider(Modifier.padding(start = 68.dp))
             MoreRow("Konflikte", Icons.Filled.SyncProblem, badge = if (conflictCount > 0) BadgeSpec("$conflictCount", BadgeTone.Warning) else null) {
                 onOpen(CONFLICTS_ROUTE)

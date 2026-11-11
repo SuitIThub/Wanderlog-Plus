@@ -427,6 +427,11 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Credit and quotas of the paid services; [fresh] skips the server's five-minute cache. */
+    suspend fun balances(fresh: Boolean = false): de.wanderlogplus.shared.sync.BalanceReport = call {
+        client.get("$base/api/balances" + if (fresh) "?fresh=1" else "") { auth() }
+    }
+
     /** Asks the server to look up Tabelog for restaurants marked REQUESTED right away (instead of the next sweep). */
     suspend fun tabelogRefresh() {
         call<kotlinx.serialization.json.JsonObject> { client.post("$base/api/tabelog/refresh") { auth() } }
