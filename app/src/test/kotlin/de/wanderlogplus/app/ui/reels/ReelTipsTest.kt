@@ -109,4 +109,30 @@ class ReelTipsTest {
         assertEquals(2, req.asks.size)
         assertTrue("j2" in imported)
     }
+
+    @Test fun asksStayWithinServerLimits() {
+        val big = ReelTip("x", verdict = TipVerdict.TRUE, text = "y".repeat(1500), sources = (1..30).map { "https://s$it.jp" }, targetTitle = "T")
+        val a = tipAsks(listOf(big)).single().additions.single()
+        assertEquals(1000, a.text.length)
+        assertEquals(20, a.sources.size)
+    }
+
+    @Test fun failedGuideStartKeepsTheJobOpen() {
+        val json = headersOf(HttpHeaders.ContentType, "application/json")
+        val api = SyncApi(HttpClient(MockEngine { respond("""{"error":"ai_not_configured"}""", HttpStatusCode.ServiceUnavailable, json) }), "https://s", "tok")
+        var edits = 0
+        val edit: EditFn = { _ -> edits++ }
+        val imported = mutableSetOf<String>()
+        val vm = ReelsViewModel({ MutableStateFlow<TripSnapshot?>(Fixtures.trip()) }, edit, { api }, object : ImportedJobs {
+            override fun contains(id: String) = id in imported
+            override fun add(id: String) { imported += id }
+        }, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+        val pick = ReelPick(de.wanderlogplus.shared.sync.ReelCandidate("Ort", lat = 35.0, lng = 135.0), null)
+        vm.import("j3", listOf(pick), listOf(trueTip), null)
+        val deadline = System.currentTimeMillis() + 5_000
+        while (vm.message.value == null && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertFalse("j3" in imported)
+        assertEquals(0, edits)
+        assertTrue(vm.message.value!!.startsWith("Die Tipps konnten nicht übernommen werden"))
+    }
 }

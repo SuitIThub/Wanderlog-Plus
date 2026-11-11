@@ -79,10 +79,23 @@ class ToolReelMedia(
     private val ffmpeg: String = "ffmpeg",
     private val cookies: Path? = null,
     private val galleryDl: String = "gallery-dl",
+    /** Runs a tool (arguments, timeout in seconds), true on success; replaced in tests. */
+    runner: ((List<String>, Long) -> Boolean)? = null,
 ) : ReelMedia {
     private val json = Json { ignoreUnknownKeys = true }
+    private val runTool: (List<String>, Long) -> Boolean = runner ?: ::run
 
+    /**
+     * Instagram posts (`/p/`) may be galleries mixing pictures and videos, where yt-dlp would bring only a video:
+     * gallery-dl goes first there. Reels and other video links go to yt-dlp first. Each falls back to the other.
+     */
     override fun download(url: String, dir: Path): Downloaded {
+        val post = isInstagramPost(url)
+        val first = if (post) gallery(url, dir) else video(url, dir)
+        return first ?: (if (post) video(url, dir) else gallery(url, dir)) ?: throw DownloadFailed()
+    }
+
+    private fun video(url: String, dir: Path): Downloaded? {
         val args = mutableListOf(
             ytDlp, "--no-playlist", "--no-progress", "--no-warnings",
             "-f", "mp4/best[height<=720]/best",
@@ -92,21 +105,24 @@ class ToolReelMedia(
         )
         cookies?.let { args += listOf("--cookies", it.toString()) }
         args += url
-        if (run(args, 180)) {
-            val video = dir.listDirectoryEntries("video.*").firstOrNull { it.isRegularFile() && !it.name.endsWith(".json") }
-            if (video != null) {
-                val info = dir.listDirectoryEntries("*.info.json").firstOrNull()
-                return Downloaded(listOf(video), emptyList(), info?.let { captionOf(it.readText()) })
-            }
-        }
-        // No video: a picture post or a gallery.
+        if (!runTool(args, 180)) return null
+        val video = dir.listDirectoryEntries("video.*").firstOrNull { it.isRegularFile() && !it.name.endsWith(".json") } ?: return null
+        val info = dir.listDirectoryEntries("*.info.json").firstOrNull()
+        return Downloaded(listOf(video), emptyList(), info?.let { captionOf(it.readText()) })
+    }
+
+    private fun gallery(url: String, dir: Path): Downloaded? {
         val gallery = Files.createDirectories(dir.resolve("gallery"))
-        val g = mutableListOf(galleryDl, "--quiet", "--write-metadata", "-D", gallery.toString())
+        // At most the first 20 items and 200 MB each; {num} keeps the gallery order in the file names.
+        val g = mutableListOf(
+            galleryDl, "--quiet", "--write-metadata", "--range", "1-$MAX_POST_IMAGES", "--filesize-max", "200M",
+            "-f", "{num:>03}.{extension}", "-D", gallery.toString(),
+        )
         cookies?.let { g += listOf("--cookies", it.toString()) }
         g += url
-        run(g, 180)
+        runTool(g, 180)
         val (videos, images) = collectGallery(gallery)
-        if (videos.isEmpty() && images.isEmpty()) throw DownloadFailed()
+        if (videos.isEmpty() && images.isEmpty()) return null
         return Downloaded(videos, images, galleryCaption(gallery))
     }
 
@@ -168,6 +184,13 @@ fun isSupportedVideoUrl(url: String): Boolean {
     if (!u.startsWith("https://")) return false
     val host = u.removePrefix("https://").substringBefore('/').removePrefix("www.").removePrefix("m.")
     return host in setOf("instagram.com", "youtube.com", "youtu.be", "tiktok.com", "vm.tiktok.com")
+}
+
+/** An Instagram post (picture, gallery or video post) rather than a reel: `instagram.com/p/…` or `/<user>/p/…`. */
+internal fun isInstagramPost(url: String): Boolean {
+    val u = url.trim().lowercase()
+    val host = u.substringAfter("://").substringBefore('/').removePrefix("www.").removePrefix("m.")
+    return host == "instagram.com" && Regex("""^/([^/]+/)?p/""").containsMatchIn(u.substringAfter("://").removePrefix(u.substringAfter("://").substringBefore('/')))
 }
 
 /** The first http(s) link in shared text ("Schau dir das an https://www.instagram.com/reel/…"). */

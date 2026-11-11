@@ -16,6 +16,12 @@ import java.util.concurrent.Executors
 /** Title of a new guide for a tip without a topic. */
 private const val DEFAULT_TIP_GUIDE = "Reisetipps"
 
+/** Sources kept per checked tip (the guide job takes at most 20 per addition). */
+const val MAX_TIP_SOURCES = 8
+
+/** Characters of a tip's guide text at most (the guide job takes at most 1000). */
+const val MAX_TIP_TEXT = 1000
+
 /** Characters of one guide in the digest at most. */
 private const val DIGEST_PER_GUIDE = 1500
 
@@ -73,7 +79,7 @@ class TipCheck(private val facts: FactSource, private val model: ChatModel, priv
                 hints = listOf("Belege dafür", "Belege dagegen", "Ausnahmen und Einschränkungen"),
             ),
             say,
-        )
+        ) ?: return tip.copy(verdict = TipVerdict.UNVERIFIED, text = tip.claim.take(MAX_TIP_TEXT), reason = "Keine Belege gefunden")
         say("Tipp wird beurteilt …")
         val system = """
             Du prüfst einen Reisetipp aus einem Instagram-Beitrag für Japan-Reisende. Auf Instagram wird oft übertrieben oder Unsinn erzählt:
@@ -83,12 +89,17 @@ class TipCheck(private val facts: FactSource, private val model: ChatModel, priv
             reason: ein bis zwei Sätze, warum.
             Antworte nur mit JSON: {"verdict":"TRUE|PARTLY|FALSE|UNVERIFIED","text":"…","reason":"…"}
         """.trimIndent()
-        val user = "Tipp: ${tip.claim}\n\nRecherchierte Fakten:\n" + (found?.let { factLines(it) } ?: "(keine gefunden)")
+        val user = "Tipp: ${tip.claim}\n\nRecherchierte Fakten:\n" + factLines(found)
         val o = completeJson(model, system, user, GERMAN_PLEASE) { it.text("verdict") != null }
         val verdict = TipVerdict.entries.firstOrNull { it.name == o.text("verdict")?.uppercase() } ?: TipVerdict.UNVERIFIED
-        tip.copy(verdict = verdict, text = o.text("text") ?: tip.claim, reason = o.text("reason").orEmpty(), sources = found?.sources.orEmpty())
+        tip.copy(
+            verdict = verdict,
+            text = (o.text("text") ?: tip.claim).take(MAX_TIP_TEXT),
+            reason = o.text("reason").orEmpty(),
+            sources = found.sources.take(MAX_TIP_SOURCES),
+        )
     } catch (e: Exception) {
-        tip.copy(verdict = TipVerdict.UNVERIFIED, text = tip.claim, reason = "Prüfung fehlgeschlagen")
+        tip.copy(verdict = TipVerdict.UNVERIFIED, text = tip.claim.take(MAX_TIP_TEXT), reason = "Prüfung fehlgeschlagen")
     }
 
     /** [match], then [verify] for every tip not covered yet, [parallelism] at a time, keeping the order. */

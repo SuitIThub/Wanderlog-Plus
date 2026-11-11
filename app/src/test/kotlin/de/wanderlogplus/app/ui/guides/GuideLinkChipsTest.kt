@@ -75,4 +75,10 @@ class GuideLinkChipsTest {
         rule.onNodeWithText("Japan Transit").assertExists()
         rule.onNodeWithText("japan-guide").assertDoesNotExist()
     }
+
+    @Test
+    fun notesShowWhenAsked() {
+        rule.setContent { WanderlogPlusTheme { GuideLinkChips(listOf(transit.copy(note = "Fahrplan")), showNotes = true) } }
+        rule.onNodeWithText("Fahrplan", substring = true).assertExists()
+    }
 }

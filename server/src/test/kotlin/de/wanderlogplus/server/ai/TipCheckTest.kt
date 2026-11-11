@@ -115,4 +115,21 @@ class TipCheckTest {
         assertTrue(d.length <= 1600)
         assertTrue(d.contains("g3"))
     }
+
+    @Test
+    fun `no research means unverified without asking the model`() {
+        val m = model(verify = """{"verdict":"TRUE","text":"x","reason":"y"}""")
+        val r = TipCheck(FactSource { _, _ -> null }, m).verify(ReelTip(tip.claim))
+        assertEquals(TipVerdict.UNVERIFIED, r.verdict)
+        assertEquals("Keine Belege gefunden", r.reason)
+        assertTrue(m.systems.isEmpty())
+    }
+
+    @Test
+    fun `sources and text are capped`() {
+        val many = FactSource { _, _ -> Facts(listOf(Fact("a")), (1..30).map { "https://s$it.jp" }) }
+        val r = TipCheck(many, model(verify = """{"verdict":"TRUE","text":"${"x".repeat(1500)}","reason":"y"}""")).verify(ReelTip(tip.claim))
+        assertEquals(MAX_TIP_SOURCES, r.sources.size)
+        assertEquals(1000, r.text.length)
+    }
 }

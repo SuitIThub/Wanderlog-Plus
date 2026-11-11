@@ -119,7 +119,8 @@ fun tipAsks(picked: List<de.wanderlogplus.shared.sync.ReelTip>): List<de.wanderl
             topic = target.second,
             title = if (target.first == null && target.second == null) target.third.orEmpty().ifBlank { "Reisetipps" } else "",
             guideId = target.first,
-            additions = tips.map { de.wanderlogplus.shared.sync.GuideAddition(it.text.ifBlank { it.claim }, it.sources) },
+            // Within what the server's guide job accepts (1000 characters, 20 sources per addition).
+            additions = tips.take(20).map { de.wanderlogplus.shared.sync.GuideAddition(it.text.ifBlank { it.claim }.take(1000), it.sources.take(20)) },
         )
     }
 

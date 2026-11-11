@@ -118,13 +118,14 @@ class ReelsViewModel(
         if (imported.contains(jobId) || (picks.isEmpty() && tips.isEmpty())) return
         writeScope.launch {
             try {
+                // Tips first: when the guide job cannot start, nothing is taken over and the user can try again.
+                if (tips.isNotEmpty() && !startTips(tips)) return@launch
                 var ids: List<String> = emptyList()
                 if (picks.isNotEmpty()) edit { e, _ -> ids = importPicks(e, picks, source); Unit }
                 imported.add(jobId)
                 _importedNow.value = true
                 if (tips.isNotEmpty()) {
-                    call { a -> a.startGuides(tipAsks(tips)) }
-                    if (_message.value == null) _message.value = if (tips.size == 1) "Der Tipp wird in die Guides übernommen" else "${tips.size} Tipps werden in die Guides übernommen"
+                    _message.value = if (tips.size == 1) "Der Tipp wird in die Guides übernommen" else "${tips.size} Tipps werden in die Guides übernommen"
                 }
                 // "Trotzdem importieren": the place was skipped as a duplicate, so it is researched now (the server
                 // waits until the sync has brought it over).
@@ -139,6 +140,24 @@ class ReelsViewModel(
             } catch (e: Exception) {
                 _message.value = "Übernehmen fehlgeschlagen"
             }
+        }
+    }
+
+    /** Starts the guide job for [tips]; false (with a message) when that did not work. */
+    private suspend fun startTips(tips: List<de.wanderlogplus.shared.sync.ReelTip>): Boolean {
+        val a = api() ?: run { _message.value = "Die Tipps konnten nicht übernommen werden: kein Server eingerichtet"; return false }
+        return try {
+            a.startGuides(tipAsks(tips))
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _message.value = "Die Tipps konnten nicht übernommen werden: " + when ((e as? ApiException)?.kind) {
+                ApiErrorKind.NOT_CONFIGURED -> "Guides sind auf dem Server nicht eingerichtet"
+                ApiErrorKind.NETWORK -> "Server nicht erreichbar"
+                else -> "Anfrage fehlgeschlagen"
+            } + ". Bitte später noch einmal."
+            false
         }
     }
 

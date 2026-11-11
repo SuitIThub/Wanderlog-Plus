@@ -23,14 +23,23 @@ import de.wanderlogplus.shared.model.GuideLinkKind
 /** The apps and pages of guides as chips (app or globe icon); a tap opens them. Nothing for an empty list. Tag `guide-links`. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GuideLinkChips(links: List<GuideLink>, modifier: Modifier = Modifier) {
+fun GuideLinkChips(links: List<GuideLink>, modifier: Modifier = Modifier, showNotes: Boolean = false) {
     if (links.isEmpty()) return
     val context = LocalContext.current
     FlowRow(modifier.testTag("guide-links"), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         links.forEach { l ->
             AssistChip(
                 onClick = { if (!openGuideLink(context, l)) Toast.makeText(context, "Lässt sich nicht öffnen", Toast.LENGTH_SHORT).show() },
-                label = { Text(l.name) },
+                label = {
+                    if (showNotes && l.note.isNotBlank()) {
+                        androidx.compose.foundation.layout.Column(Modifier.padding(vertical = 4.dp)) {
+                            Text(l.name)
+                            Text(l.note, style = androidx.compose.material3.MaterialTheme.typography.bodySmall)
+                        }
+                    } else {
+                        Text(l.name)
+                    }
+                },
                 leadingIcon = { Icon(if (l.kind == GuideLinkKind.APP) Icons.Filled.Apps else Icons.Filled.Language, contentDescription = null) },
                 modifier = Modifier.padding(vertical = 2.dp).testTag("guide-link"),
             )

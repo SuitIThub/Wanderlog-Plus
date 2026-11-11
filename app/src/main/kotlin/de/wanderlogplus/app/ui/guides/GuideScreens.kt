@@ -218,7 +218,7 @@ fun GuideScreen(
             if (g.summary.isNotBlank()) SurfaceCard { Text(g.summary, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
             if (g.links.isNotEmpty()) {
                 Text("Apps & Links", fontWeight = FontWeight.SemiBold)
-                GuideLinkChips(g.links)
+                GuideLinkChips(g.links, showNotes = true)
             }
             g.sections.forEach { s ->
                 SurfaceCard {
