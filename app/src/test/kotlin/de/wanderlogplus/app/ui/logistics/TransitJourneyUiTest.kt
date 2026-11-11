@@ -110,6 +110,7 @@ class TransitJourneyUiTest {
     fun menuOffersTransitSearch() {
         var opened = 0
         rule.setContent { WanderlogPlusTheme { LogisticsScreen(Fixtures.trip(), onOpen = {}, onAdd = {}, onAddTransit = { opened++ }) } }
+        rule.onNodeWithTag("logistics-edit").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("logistics-add").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("logistics-add-transit").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, opened)

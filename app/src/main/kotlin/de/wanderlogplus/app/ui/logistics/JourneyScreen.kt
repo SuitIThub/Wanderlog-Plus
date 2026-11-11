@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Flight
@@ -73,6 +75,26 @@ const val JOURNEY_SEGMENT = "journey"
 /** Detail route of a journey (shares [LOGISTICS_DETAIL_ROUTE] with the type segment "journey"). */
 fun journeyRoute(journeyId: String) = "logistik/$JOURNEY_SEGMENT/${android.net.Uri.encode(journeyId)}"
 
+/**
+ * Route and title ("Frankfurt → Itami") for the full-screen map of a journey or a single train or flight ([kind]:
+ * "journey", "train", "flight"); null when it is gone or has no coordinates.
+ */
+fun routeMapOf(snapshot: TripSnapshot, kind: String, id: String): Pair<de.wanderlogplus.app.maps.RouteGeometry, String>? {
+    fun name(e: de.wanderlogplus.shared.model.Endpoint) = e.name.ifBlank { e.code ?: "?" }
+    return when (kind) {
+        JOURNEY_SEGMENT -> journeys(snapshot).firstOrNull { it.id == id }?.let { j ->
+            de.wanderlogplus.app.maps.routeFor(j, snapshot)?.let { it to "${name(j.first.depart)} → ${name(j.last.arrive)}" }
+        }
+        "train" -> snapshot.trains.firstOrNull { it.id == id }?.let { t ->
+            de.wanderlogplus.app.maps.routeFor(t, snapshot)?.let { it to "${name(t.depart)} → ${name(t.arrive)}" }
+        }
+        "flight" -> snapshot.flights.firstOrNull { it.id == id }?.let { f ->
+            de.wanderlogplus.app.maps.routeFor(f, snapshot)?.let { it to "${name(f.depart)} → ${name(f.arrive)}" }
+        }
+        else -> null
+    }
+}
+
 /** "Flug NH 23" / "Zug Nozomi 21". */
 fun legTitle(l: JourneyLeg): String = when (val m = l.movement) {
     is Movement.FlightMove -> flightCardTitle(m.flight)
@@ -112,6 +134,8 @@ fun JourneyScreen(
     onReplaceRide: ((trainId: String) -> Unit)? = null,
     /** "Verbindung ändern" for the whole journey (trains only); null hides it. */
     onChangeJourney: (() -> Unit)? = null,
+    /** Opens the route map full screen; null: the map is only a picture. */
+    onOpenMap: (() -> Unit)? = null,
 ) {
     val journey = remember(snapshot, journeyId) { journeys(snapshot).firstOrNull { it.id == journeyId } }
     val accent = MaterialTheme.colorScheme.primary
@@ -125,6 +149,8 @@ fun JourneyScreen(
     var adding by remember { mutableStateOf<Int?>(null) } // insert position: 0 = before the first leg
     var picking by remember { mutableStateOf(false) }
     var confirmDissolve by remember { mutableStateOf(false) }
+    // Like the day program: inserting, moving, removing and dissolving only in "Bearbeiten".
+    var editing by androidx.compose.runtime.saveable.rememberSaveable(journeyId) { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("journey-screen")) {
         HeroHeader(
@@ -136,31 +162,39 @@ fun JourneyScreen(
             ).joinToString(" · "),
             imageUrl = null, accent = accent, height = 120.dp, onBack = onBack, titleMaxLines = 1,
         )
-        de.wanderlogplus.app.maps.RouteMap(remember(snapshot, journey) { de.wanderlogplus.app.maps.routeFor(journey, snapshot) }, accent, height = 160.dp)
+        de.wanderlogplus.app.maps.RouteMap(remember(snapshot, journey) { de.wanderlogplus.app.maps.routeFor(journey, snapshot) }, accent, height = 160.dp, onClick = onOpenMap)
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Teilstrecken", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                TextButton(onClick = { editing = !editing }, modifier = Modifier.testTag("journey-edit")) {
+                    Icon(if (editing) Icons.Filled.Check else Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (editing) "Fertig" else "Bearbeiten")
+                }
+            }
             ((journey.legs.first().movement as? Movement.TrainMove)?.train)?.let { t ->
                 t.walkFrom?.let { WalkEndRow(snapshot, it, t.depart, before = true, tag = "walk-from") }
             }
-            InsertSlot(0) { adding = 0 }
+            if (editing) InsertSlot(0) { adding = 0 }
             journey.legs.forEachIndexed { i, leg ->
                 LegCard(
-                    snapshot, leg, i, journey.legs.size, onOpen = { onOpenLeg(leg.type, leg.id) }, onLeave = { onLeave(leg.type, leg.id) },
-                    onOpenAttachment = onOpenAttachment, onMove = onMoveLeg?.let { move -> { up: Boolean -> move(i, up) } },
+                    snapshot, leg, i, journey.legs.size, onOpen = { onOpenLeg(leg.type, leg.id) }, onLeave = { onLeave(leg.type, leg.id) }.takeIf { editing },
+                    onOpenAttachment = onOpenAttachment, onMove = onMoveLeg?.takeIf { editing }?.let { move -> { up: Boolean -> move(i, up) } },
                     onReplace = onReplaceRide?.let { r -> { r(leg.id) } },
                 )
                 if (i < journey.legs.lastIndex) {
                     TransferBlock(snapshot, leg, journey.legs[i + 1], i)
-                    InsertSlot(i + 1) { adding = i + 1 }
+                    if (editing) InsertSlot(i + 1) { adding = i + 1 }
                 }
             }
             ((journey.legs.last().movement as? Movement.TrainMove)?.train)?.let { t ->
                 t.walkTo?.let { WalkEndRow(snapshot, it, t.arrive, before = false, tag = "walk-to") }
             }
-            InsertSlot(journey.legs.size) { adding = journey.legs.size }
+            if (editing) InsertSlot(journey.legs.size) { adding = journey.legs.size }
             if (onChangeJourney != null && de.wanderlogplus.app.ui.transit.canChangeJourney(journey)) {
                 OutlinedButton(onClick = onChangeJourney, modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("journey-change")) { Text("Verbindung ändern") }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            if (editing) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 OutlinedButton(onClick = { picking = true }, modifier = Modifier.testTag("journey-add-existing")) { Text("Vorhandene Fahrt hinzufügen") }
                 TextButton(onClick = { confirmDissolve = true }, modifier = Modifier.testTag("journey-dissolve")) { Text("Reise auflösen") }
             }
@@ -223,7 +257,7 @@ private fun LegCard(
     index: Int,
     count: Int,
     onOpen: () -> Unit,
-    onLeave: () -> Unit,
+    onLeave: (() -> Unit)?,
     onOpenAttachment: (Attachment) -> Unit,
     onMove: ((up: Boolean) -> Unit)?,
     onReplace: (() -> Unit)? = null,
@@ -276,7 +310,7 @@ private fun LegCard(
                 if (onReplace != null && leg.movement is Movement.TrainMove) {
                     TextButton(onClick = onReplace, modifier = Modifier.testTag("journey-replace-${leg.id}")) { Text("Andere Fahrt") }
                 }
-                TextButton(onClick = onLeave, modifier = Modifier.testTag("journey-leg-$index-leave")) { Text("Aus Reise entfernen") }
+                if (onLeave != null) TextButton(onClick = onLeave, modifier = Modifier.testTag("journey-leg-$index-leave")) { Text("Aus Reise entfernen") }
             }
         }
     }

@@ -5,8 +5,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.onRoot
 import de.wanderlogplus.app.testing.recordScreenshot
@@ -51,6 +55,16 @@ class JourneyUiTest {
         assertEquals("J", opened)
     }
 
+    @Test fun editModeAddsAtTheTopAndTheEnd() {
+        rule.setContent { WanderlogPlusTheme { LogisticsScreen(snapshot, onAdd = {}) } }
+        rule.onNode(hasTestTag("logistics-add")).assertDoesNotExist()
+        tap("logistics-edit")
+        rule.onNodeWithTag("logistics-add").assertExists()
+        rule.onNodeWithTag("logistics-list").performScrollToNode(hasTestTag("logistics-add-end"))
+        rule.onNodeWithTag("logistics-add-end").assertExists()
+        rule.onNodeWithText("Fertig").assertExists()
+    }
+
     @Test fun journeyTimelineInsertsLeavesAndDissolves() {
         val added = mutableListOf<Triple<EntityType, Pair<EntityType, String>?, Pair<EntityType, String>?>>()
         val left = mutableListOf<String>()
@@ -68,6 +82,13 @@ class JourneyUiTest {
         rule.onNode(hasText("1/2"), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Umstieg 45 Min. – knapp"), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("gleicher Flughafen"), useUnmergedTree = true).assertExists()
+
+        // Without the edit mode only the legs and transfers show.
+        rule.onNode(hasTestTag("journey-insert-2")).assertDoesNotExist()
+        rule.onNode(hasTestTag("journey-leg-0-leave")).assertDoesNotExist()
+        rule.onNode(hasTestTag("journey-dissolve")).assertDoesNotExist()
+        rule.onNode(hasTestTag("journey-add-existing")).assertDoesNotExist()
+        rule.onNodeWithTag("journey-edit").performScrollTo().performClick()
 
         rule.onNodeWithTag("journey-insert-2").performScrollTo().performClick()
         tap("journey-add-train")
@@ -144,10 +165,38 @@ class JourneyUiTest {
             }
         }
         rule.onNode(hasTestTag("route-fallback"), useUnmergedTree = true).assertExists() // route preview under the header
+        rule.onNode(hasTestTag("journey-leg-1-up")).assertDoesNotExist()
+        rule.onNodeWithTag("journey-edit").performScrollTo().performClick()
         rule.onNodeWithTag("journey-leg-1-up").performScrollTo().performClick()
         rule.onNodeWithTag("journey-leg-0-down").performScrollTo().performClick()
         assertEquals(listOf(1 to true, 0 to false), moves)
         rule.onNode(hasTestTag("journey-leg-0-up")).assertExists()
+    }
+
+    @Test fun tappingTheMapOpensItFullScreen() {
+        var journeyMap = 0
+        var legMap = 0
+        rule.setContent {
+            WanderlogPlusTheme {
+                androidx.compose.foundation.layout.Column {
+                    JourneyScreen(snapshot, "J", onBack = {}, onOpenLeg = { _, _ -> }, onAddLeg = { _, _, _ -> }, onJoin = {}, onLeave = { _, _ -> }, onDissolve = {}, onOpenMap = { journeyMap++ }, modifier = androidx.compose.ui.Modifier.weight(1f))
+                    LogisticsDetailScreen(snapshot, EntityType.FLIGHT, "f2", onBack = {}, onOpenMap = { legMap++ }, modifier = androidx.compose.ui.Modifier.weight(1f))
+                }
+            }
+        }
+        rule.onAllNodesWithTag("route-map-open")[0].performSemanticsAction(SemanticsActions.OnClick)
+        rule.onAllNodesWithTag("route-map-open")[1].performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1 to 1, journeyMap to legMap)
+    }
+
+    @Test fun mapScreenShowsTheRouteAndGoesBack() {
+        var back = 0
+        val geo = de.wanderlogplus.app.maps.routeFor(de.wanderlogplus.client.journeys(snapshot).single(), snapshot)!!
+        rule.setContent { WanderlogPlusTheme { de.wanderlogplus.app.maps.RouteMapScreen(geo, "Frankfurt → Itami", onBack = { back++ }) } }
+        rule.onNodeWithText("Frankfurt → Itami").assertExists()
+        rule.onNode(hasTestTag("route-fallback"), useUnmergedTree = true).assertExists() // without maps (tests, offline)
+        rule.onNodeWithContentDescription("Zurück").performClick()
+        assertEquals(1, back)
     }
 
     @Test fun journeyCardHasTheRoutePreview() {

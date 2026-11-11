@@ -2,6 +2,7 @@ package de.wanderlogplus.app.maps
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,9 +54,14 @@ fun RouteMap(
     height: Dp = 120.dp,
     renderer: RouteMapRenderer? = LocalRouteMapRenderer.current,
     modifier: Modifier = Modifier,
+    /** Opens the full-screen map; off while offline (the map needs tiles). Tag `route-map-open`. */
+    onClick: (() -> Unit)? = null,
 ) {
     if (route == null) return
-    BoxWithConstraints(modifier.fillMaxWidth().height(height)) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val tap = onClick?.takeIf { renderer == null || hasValidatedInternet(context.applicationContext) }
+    val tappable = if (tap != null) Modifier.clickable(onClickLabel = "Karte öffnen", onClick = tap).testTag("route-map-open") else Modifier
+    BoxWithConstraints(modifier.fillMaxWidth().height(height).then(tappable)) {
         val density = LocalDensity.current
         val widthPx = constraints.maxWidth.takeIf { constraints.hasBoundedWidth } ?: with(density) { 360.dp.roundToPx() }
         val heightPx = with(density) { height.roundToPx() }
