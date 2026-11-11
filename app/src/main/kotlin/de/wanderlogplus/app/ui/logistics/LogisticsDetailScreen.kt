@@ -209,7 +209,7 @@ fun LogisticsDetailScreen(
             MoveActions(snapshot, type, id, onEdit, null, onDelete)
             androidx.compose.material3.PrimaryTabRow(selectedTabIndex = stayTab) {
                 de.wanderlogplus.app.ui.design.ScreenTab("Übersicht", stayTab == 0, "stay-tab-overview") { stayTab = 0 }
-                de.wanderlogplus.app.ui.design.ScreenTab("Zimmer & Ausstattung", stayTab == 1, "stay-tab-room", maxLines = 2) { stayTab = 1 }
+                de.wanderlogplus.app.ui.design.ScreenTab("Zimmer", stayTab == 1, "stay-tab-room", maxLines = 1) { stayTab = 1 }
                 de.wanderlogplus.app.ui.design.ScreenTab(if (stayPhotosAll.isEmpty()) "Fotos" else "Fotos (${stayPhotosAll.size})", stayTab == 2, "stay-tab-photos") { stayTab = 2 }
             }
         }

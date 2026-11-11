@@ -26,6 +26,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import de.wanderlogplus.app.testing.Fixtures
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -199,12 +201,13 @@ class DayDetailTest {
         show("2027-05-09")
         rule.onNodeWithTag("tab-program").assertIsSelected()
         rule.onNodeWithTag("program-list").assertExists()
-        rule.onNodeWithTag("day-add").assertExists()
-        rule.onNodeWithText("Vorschläge (2)").assertExists()
+        rule.onNodeWithTag("program-edit").assertExists()
+        rule.onNodeWithTag("day-add").assertDoesNotExist()
+        rule.onNodeWithText("Vorschläge 2").assertExists()
 
         tab("tab-suggestions")
         rule.onNodeWithTag("program-list").assertDoesNotExist()
-        rule.onNodeWithTag("day-add").assertDoesNotExist()
+        rule.onNodeWithTag("program-edit").assertDoesNotExist()
         rule.onNodeWithTag("suggestion-list").assertExists()
 
         tab("tab-notes")
@@ -227,10 +230,11 @@ class DayDetailTest {
         rule.onNodeWithTag("program-list").assertDoesNotExist()
     }
 
-    @Test fun fabOffersPlaceAndNote() {
+    @Test fun editModeOffersPlaceAndNote() {
         seedTrip()
         show("2027-05-09")
-        rule.onNodeWithTag("day-add").performClick()
+        rule.onNodeWithTag("program-edit").performClick()
+        rule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("insert") { n -> n.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith("insert-") == true })[0].performClick()
         rule.onNodeWithTag("add-from-suggestions").assertExists()
         rule.onNodeWithTag("add-note-open").assertExists()
         rule.onNodeWithTag("add-from-suggestions").performSemanticsAction(SemanticsActions.OnClick) // touch does not reach sheets under Robolectric
@@ -238,7 +242,7 @@ class DayDetailTest {
         rule.onNodeWithTag("suggestion-list").assertExists()
 
         tab("tab-program")
-        rule.onNodeWithTag("day-add").performClick()
+        rule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("insert") { n -> n.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith("insert-") == true })[0].performClick()
         rule.onNodeWithTag("add-note-open").performSemanticsAction(SemanticsActions.OnClick) // touch does not reach sheets under Robolectric
         rule.onNodeWithTag("add-note-field").assertExists()
         rule.onNodeWithTag("add-note-confirm").assertExists()
@@ -247,7 +251,7 @@ class DayDetailTest {
     @Test fun emptyProgramHint() {
         seedTrip(withStay = false)
         show("2027-05-10")
-        rule.onNodeWithText("Noch nichts geplant – füge Orte aus den Vorschlägen hinzu.").assertIsDisplayed()
+        rule.onNodeWithText("Noch nichts geplant – „Bearbeiten“ fügt Orte und Notizen ein.").assertIsDisplayed()
     }
 
     @Test fun tripListShowsDaysRegionPlannedCountAndTravelDay() {
@@ -289,5 +293,39 @@ class DayDetailTest {
         rule.onNode(hasText("🚄", substring = true) and hasTestTag("day-2027-05-10")).assertExists()
         rule.onNode(hasText("Heute") and hasTestTag("day-2027-05-09")).assertExists()
         rule.onNode(hasText("Heute") and hasTestTag("day-2027-05-10")).assertDoesNotExist()
+    }
+
+    @Test fun insertButtonsOnlyWhileEditingAlsoAtStartAndEnd() {
+        rule.setContent {
+            WanderlogPlusTheme {
+                DayDetailScreen(Fixtures.trip(), "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {})
+            }
+        }
+        rule.onNodeWithTag("insert-start").assertDoesNotExist()
+        rule.onNodeWithTag("day-add").assertDoesNotExist()
+        rule.onNodeWithTag("program-edit").performClick()
+        rule.onNodeWithTag("insert-start").assertExists()
+        rule.onNodeWithTag("insert-after:i-2").performScrollTo().assertExists()
+        rule.onNodeWithTag("program-edit").performScrollTo().performClick()
+        rule.onNodeWithTag("insert-start").assertDoesNotExist()
+    }
+
+    @Test fun anEmptyDayOffersInsertWhileEditing() {
+        seedTrip(withStay = false)
+        show("2027-05-10")
+        rule.onNodeWithTag("insert-end").assertDoesNotExist()
+        rule.onNodeWithTag("program-edit").performClick()
+        rule.onNodeWithTag("insert-end").performClick()
+        rule.onNodeWithTag("add-note-open").assertExists()
+    }
+
+    @Test fun timelineShowsTimesNotNumbers() {
+        rule.setContent {
+            WanderlogPlusTheme {
+                DayDetailScreen(Fixtures.trip(), "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {})
+            }
+        }
+        rule.onNodeWithTag("timeline-label-09:00", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("timeline-label-1", useUnmergedTree = true).assertDoesNotExist()
     }
 }

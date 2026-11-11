@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,16 +69,20 @@ fun Timeline(
                     },
                 ) {
                     Spacer(Modifier.width(RailWidth))
-                    Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 14.dp)) {
-                        Text(
-                            e.marker,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp,
-                            color = markerColor,
-                            maxLines = 1,
-                        )
-                        Spacer(Modifier.height(4.dp))
+                    Column(Modifier.weight(1f).padding(bottom = if (last) 0.dp else 10.dp)) {
+                        // An entry without marker (a program item without time) starts right at its dot.
+                        if (e.marker.isNotEmpty()) {
+                            Text(
+                                e.marker,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.6.sp,
+                                color = markerColor,
+                                maxLines = 1,
+                                modifier = Modifier.testTag("timeline-label-" + e.marker),
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        }
                         e.content()
                     }
                 }

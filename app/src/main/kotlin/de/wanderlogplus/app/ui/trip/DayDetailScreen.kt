@@ -21,7 +21,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -136,6 +136,8 @@ fun DayDetailScreen(
     var addingStay by rememberSaveable(date) { mutableStateOf(false) }
     // Where "Hinzufügen" puts new items (encoded ItemPosition); a suggestion picked after "Ort aus Vorschlägen" goes there too.
     var insertAt by rememberSaveable(date) { mutableStateOf(ItemPosition.End.encode()) }
+    // The program's edit mode survives a trip to the suggestions ("Ort aus Vorschlägen") and back.
+    var programEditing by rememberSaveable(date) { mutableStateOf(false) }
     var suggestionAt by rememberSaveable(date) { mutableStateOf<String?>(null) }
 
     // Shown right after saving, until the snapshot carries the new value (or a save failed).
@@ -171,14 +173,14 @@ fun DayDetailScreen(
             onEdit = { editingDay = true },
             titleMaxLines = 1,
         )
-        PrimaryTabRow(selectedTabIndex = tab) {
-            ScreenTab("Programm", tab == TAB_PROGRAM, "tab-program", maxLines = 2) { tab = TAB_PROGRAM }
-            ScreenTab(if (hasSuggestions) "Vorschläge (${shown.size})" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions", maxLines = 2) {
+        PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+            ScreenTab("Programm", tab == TAB_PROGRAM, "tab-program", maxLines = 1) { tab = TAB_PROGRAM }
+            ScreenTab(if (hasSuggestions) "Vorschläge ${shown.size}" else "Vorschläge", tab == TAB_SUGGESTIONS, "tab-suggestions", maxLines = 1) {
                 tab = TAB_SUGGESTIONS
             }
-            ScreenTab("Notizen & Anhänge", tab == TAB_NOTES, "tab-notes", maxLines = 2) { tab = TAB_NOTES }
+            ScreenTab("Notizen", tab == TAB_NOTES, "tab-notes", maxLines = 1) { tab = TAB_NOTES }
             val photoCount = day?.let { snapshot.photosFor(EntityType.DAY, it.id).size } ?: 0
-            ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos", maxLines = 2) { tab = TAB_PHOTOS }
+            ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos", maxLines = 1) { tab = TAB_PHOTOS }
         }
         if (tab == TAB_PROGRAM) {
             de.wanderlogplus.app.ui.places.PlanDoubtCard(
@@ -205,6 +207,8 @@ fun DayDetailScreen(
                     onLegMode = onLegMode,
                     onOpenLink = onOpenLink,
                     onInsert = { pos -> insertAt = pos.encode(); addingNote = false; adding = true },
+                    editing = programEditing,
+                    onEditing = { programEditing = it },
                     onOpenMap = onOpenMap?.let { open -> { open(date) } },
                     onTransitDetails = onTransitDetails?.let { open -> { id -> open(date, id) } },
                     onOpenPlace = onOpenPlace,
@@ -256,14 +260,6 @@ fun DayDetailScreen(
                     onSave = { pendingNote = noteDraft; onSetNote(date, noteDraft); editingNote = false },
                     onCancel = { editingNote = false },
                     attachments = attachments,
-                )
-            }
-            if (tab == TAB_PROGRAM) {
-                ExtendedFloatingActionButton(
-                    onClick = { insertAt = ItemPosition.End.encode(); addingNote = false; adding = true },
-                    icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                    text = { Text("Hinzufügen") },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("day-add"),
                 )
             }
         }

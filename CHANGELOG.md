@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.67.0
+
+- **Ortsseite aufgeräumt:** Der Name steht nur noch im Titelbild (dort bis zu zwei Zeilen). Statt fünf Status-Knöpfen ein einzelner Chip („● Idee ▾“) mit Auswahlmenü, daneben Kategorie und Bewertungszeile. Tabelog, Karte, Guides, Kosten und der Google-Eintrag (jetzt eine schlanke Zeile) stehen im Reiter „Info“ – die Reiter rücken in die obere Bildhälfte.
+- **Tagesprogramm kompakter:** Programmpunkte als kompakte Karten mit Bewertungszeile, an der Zeitleiste steht die Uhrzeit statt einer Nummer. Die ＋-Knöpfe erscheinen nur noch im Modus „Bearbeiten“ (auch ganz am Anfang und am Ende, bei einem leeren Tag ebenfalls); der „Hinzufügen“-Knopf unten entfällt.
+- **Reiter ohne Umbruch:** „Programm · Vorschläge 73 · Notizen · Fotos“ beim Tag, „Übersicht · Zimmer · Fotos“ bei Unterkünften – einzeilig, bei Platzmangel seitlich scrollbar.
+
 ## 0.66.0
 
 - **Zimmerfotos wählen:** Im Fotos-Reiter einer Unterkunft öffnet ein Tipp das Foto jetzt direkt groß (kein Rückfrage-Fenster mehr). Ein unauffälliger Knopf „Zimmerfotos wählen“ schaltet in einen Auswahlmodus: alle Fotos eures Zimmers antippen, „Fertig“ – sie erscheinen in der Zimmer-Karte und lassen sich dort antippen.

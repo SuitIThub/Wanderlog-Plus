@@ -209,7 +209,8 @@ class DayDetailEditTest {
     @Test fun addNoteSheetShowsNoteField() {
         seedTrip()
         show(Calls())
-        rule.onNodeWithTag("day-add").performClick()
+        rule.onNodeWithTag("program-edit").performClick()
+        rule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("insert") { n -> n.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.TestTag) { null }?.startsWith("insert-") == true })[0].performClick()
         rule.onNodeWithTag("add-note-open").tap()
         rule.onNodeWithTag("add-note-field").assertExists()
     }

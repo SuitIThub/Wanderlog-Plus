@@ -132,7 +132,7 @@ class WideLayoutTest {
         tapRail("reise")
         shows("two-pane")
         shows("trip-list")
-        shows("day-add") // detail of today's day (clock: 2027-04-02) right next to the list
+        shows("program-edit") // detail of today's day (clock: 2027-04-02) right next to the list
         tag("trip-list").performScrollToNode(hasTestTag("day-2027-04-03"))
         tag("day-2027-04-03").tap()
         rule.waitForIdle()

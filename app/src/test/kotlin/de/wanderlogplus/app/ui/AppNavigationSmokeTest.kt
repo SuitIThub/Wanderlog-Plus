@@ -156,11 +156,11 @@ class AppNavigationSmokeTest {
         tab("reise")
         tag("trip-list").performScrollToNode(hasTestTag("day-2027-04-02"))
         tag("day-2027-04-02").tap()
-        shows("day-add")
+        shows("program-edit")
         shows("program-list")
         tag("tab-suggestions").tap(); shows("suggestion-list")
         tag("tab-notes").tap(); rule.waitForIdle()
-        tag("tab-program").tap(); shows("day-add")
+        tag("tab-program").tap(); shows("program-edit")
     }
 
     @Test fun regionAndPlaceDetail() {
@@ -172,7 +172,7 @@ class AppNavigationSmokeTest {
         shows("place-s-tempel")
         tag("place-s-tempel").tap()
         shows("place-detail")
-        shows("status-chips")
+        shows("status-chip")
     }
 
     @Test fun logisticsDetailAndAttachmentViewer() {

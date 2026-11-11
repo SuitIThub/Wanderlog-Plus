@@ -160,6 +160,7 @@ class InsertAndSearchTest {
                 )
             }
         }
+        rule.onNodeWithTag("program-edit").performClick()
         rule.onNodeWithTag("insert-start").assertExists()
         rule.onNodeWithTag("insert-after:i-2").performScrollTo().performClick()
         rule.onNodeWithTag("add-search").performSemanticsAction(SemanticsActions.OnClick)
@@ -176,6 +177,7 @@ class InsertAndSearchTest {
                 )
             }
         }
+        rule.onNodeWithTag("program-edit").performClick()
         rule.onNodeWithTag("insert-start").performClick()
         rule.onNodeWithTag("add-from-suggestions").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("suggestion-add-s-garten").performClick()
@@ -189,7 +191,8 @@ class InsertAndSearchTest {
                 DayDetailScreen(Fixtures.trip(), "2027-04-02", onBack = {}, onAddSuggestion = { _, _ -> }, onMove = { _, _ -> }, onRemove = {})
             }
         }
-        rule.onNodeWithTag("day-add").performClick()
+        rule.onNodeWithTag("program-edit").performClick()
+        rule.onNodeWithTag("insert-start").performClick()
         rule.onNodeWithTag("add-note-open").assertExists()
         assertEquals(0, rule.onAllNodesWithTag("add-search").fetchSemanticsNodes().size)
     }
@@ -243,6 +246,7 @@ class StayInProgramUiTest {
                 )
             }
         }
+        rule.onNodeWithTag("program-edit").performClick()
         rule.onNodeWithTag("insert-after:i-3").performScrollTo().performClick()
         rule.onNodeWithTag("add-stay-open").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("add-stay-st-berg").performSemanticsAction(SemanticsActions.OnClick)

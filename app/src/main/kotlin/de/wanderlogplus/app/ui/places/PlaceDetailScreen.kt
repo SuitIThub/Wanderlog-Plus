@@ -212,7 +212,7 @@ fun PlaceDetailScreen(
             kicker = region?.name ?: NO_REGION_LABEL,
             imageUrl = saved.heroImage(place),
             accent = accent,
-            height = 140.dp,
+            // The default height leaves room for a name over two lines (no repeat of it below the hero any more).
             onBack = onBack,
             onEdit = { editingTags = true },
             onChangeImage = onSetHeaderImage?.let { { choosingImage = true } },
