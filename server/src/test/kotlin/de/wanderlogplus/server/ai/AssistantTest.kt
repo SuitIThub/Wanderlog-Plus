@@ -233,6 +233,40 @@ class AssistantTest {
         assertFalse(a.tips.any { it.claim.isBlank() })
     }
 
+    @Test fun reelJobWithTipsOnly() {
+        seedTrip()
+        val model = ChatModel { system, _, _ ->
+            when {
+                system.contains("Instagram-Reel") -> """{"summary":"Tipps","locations":[],"tips":[{"claim":"Kein Trinkgeld geben.","topic":"Geld"}]}"""
+                system.contains("gleichst") -> """{"tips":[{"i":0,"title":"Geld"}]}"""
+                else -> """{"verdict":"TRUE","text":"Kein Trinkgeld geben.","reason":"Belegt."}"""
+            }
+        }
+        val facts = FactSource { _, _ -> Facts(listOf(Fact("Unüblich.", listOf("https://a.jp"))), listOf("https://a.jp")) }
+        val j = AiJobs(
+            store, Assistant(model, FakeGeocoder()), FakeMedia(imagesOnly = true), tmp.resolve("work"), executor = Executors.newSingleThreadExecutor(),
+            tipCheck = TipCheck(facts, model),
+        )
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        val job = j.get(id)!!
+        assertEquals("DONE", job.status)
+        assertTrue(job.candidates.isEmpty())
+        assertEquals(de.wanderlogplus.shared.sync.TipVerdict.TRUE, job.tips.single().verdict)
+        assertEquals("Geld", job.tips.single().targetTitle)
+    }
+
+    @Test fun tipsWithoutTipCheckStayUnverified() {
+        seedTrip()
+        val model = ChatModel { _, _, _ -> """{"summary":"Tipps","locations":[],"tips":[{"claim":"Kein Trinkgeld geben.","topic":"Geld"}]}""" }
+        val j = jobs(model = model, media = FakeMedia(imagesOnly = true))
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/abc/")).id
+        j.drain()
+        val tip = j.get(id)!!.tips.single()
+        assertEquals(de.wanderlogplus.shared.sync.TipVerdict.UNVERIFIED, tip.verdict)
+        assertEquals("Geld", tip.targetTitle)
+    }
+
     @Test fun imagePostIsAnalyzed() {
         seedTrip()
         val media = FakeMedia(imagesOnly = true)

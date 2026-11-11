@@ -16,6 +16,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import de.wanderlogplus.shared.sync.JobItem
+import de.wanderlogplus.shared.sync.ReelTip
+import de.wanderlogplus.shared.sync.TipVerdict
 import de.wanderlogplus.shared.sync.JobStep
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -63,6 +65,8 @@ class AiJobs(
     private val files: de.wanderlogplus.server.FileStore? = null,
     /** How long a research waits for places it does not know yet (just added in the app, sync still on its way). */
     private val arrivalWaitMillis: Long = 60_000,
+    /** Matches and checks the travel tips of a reel; null: tips stay unchecked (UNVERIFIED). */
+    private val tipCheck: TipCheck? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -421,20 +425,36 @@ class AiJobs(
             val extracted = media.extract(downloaded, dir)
             t.step(countText(extracted.frames.size, "Bild", "Bilder") + if (extracted.audio != null) " und Tonspur" else ", keine Tonspur", JobProgress.OK)
             val context = TripContext.from(store)
-            t.step("KI erkennt Orte in Bild, Ton und Beschreibung …")
+            t.step("KI erkennt Orte und Tipps in Bild, Ton und Beschreibung …")
             val analysis = a.analyze(caption, extracted, context)
             val summary = analysis.summary
             val found = analysis.places
             summary?.let { t.step("Inhalt: $it") }
             if (found.isEmpty()) {
-                t.step("Kein konkreter Ort erkannt", JobProgress.WARN)
+                t.step("Kein konkreter Ort erkannt", if (analysis.tips.isEmpty()) JobProgress.WARN else JobProgress.INFO)
             } else {
                 t.step("${found.size} " + (if (found.size == 1) "Ort" else "Orte") + " erkannt: " + found.joinToString(", ") { it.name }, JobProgress.OK)
             }
+            if (analysis.tips.isNotEmpty()) t.step(countText(analysis.tips.size, "allgemeiner Tipp", "allgemeine Tipps") + " erkannt", JobProgress.OK)
             t.update { it.copy(status = "RESEARCHING", summary = summary, total = found.size) }
             if (found.isNotEmpty()) t.step("Recherche startet, bis zu ${minOf(found.size, a.parallelism)} Orte gleichzeitig")
             val candidates = a.researchAll(found, context, config, t) { n -> t.update { it.copy(progress = n) } }
-            t.done { it.copy(candidates = candidates, progress = found.size) }
+            val tips = when {
+                analysis.tips.isEmpty() -> emptyList()
+                tipCheck == null -> analysis.tips.map {
+                    ReelTip(it.claim, it.topic, it.evidence, verdict = TipVerdict.UNVERIFIED, text = it.claim, reason = "Keine Prüfung eingerichtet", targetTitle = it.topic.ifBlank { "Reisetipps" })
+                }
+                else -> {
+                    t.status("CHECKING")
+                    t.step("Tipps werden mit den Guides abgeglichen und geprüft …")
+                    tipCheck.checkAll(analysis.tips, ChatTrip.from(store).guides, t).also { r ->
+                        val covered = r.count { it.coveredBy != null }
+                        val wrong = r.count { it.verdict == TipVerdict.FALSE }
+                        t.step("Tipps geprüft: ${r.size - covered - wrong} übernehmbar, $covered schon in Guides, $wrong falsch", JobProgress.OK)
+                    }
+                }
+            }
+            t.done { it.copy(candidates = candidates, tips = tips, progress = found.size) }
         } catch (e: DownloadFailed) {
             t.fail("download_failed")
         } catch (e: AiFailed) {

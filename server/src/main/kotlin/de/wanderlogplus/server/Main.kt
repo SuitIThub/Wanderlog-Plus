@@ -1,6 +1,7 @@
 package de.wanderlogplus.server
 
 import de.wanderlogplus.server.ai.AiJobs
+import de.wanderlogplus.server.ai.TipCheck
 import de.wanderlogplus.server.ai.ChatAgent
 import de.wanderlogplus.server.ai.ParallelWebSearch
 import de.wanderlogplus.server.ai.Assistant
@@ -82,6 +83,10 @@ fun main() {
             )
         },
         files = FileStore.forConfig(config),
+        tipCheck = openRouter?.let { model ->
+            val text = textModel ?: model
+            TipCheck(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, parallelism = 3)
+        },
         guideWriter = textModel?.let { text ->
             GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
         },
