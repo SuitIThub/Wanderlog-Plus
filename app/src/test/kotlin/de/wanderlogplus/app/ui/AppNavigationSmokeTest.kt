@@ -168,7 +168,7 @@ class AppNavigationSmokeTest {
         tab("orte")
         tag("regions-list").performScrollToNode(hasTestTag("region-r-berg"))
         tag("region-r-berg").tap()
-        shows("view-list")
+        shows("view-map")
         shows("place-s-tempel")
         tag("place-s-tempel").tap()
         shows("place-detail")

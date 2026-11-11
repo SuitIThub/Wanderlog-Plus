@@ -24,6 +24,8 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -116,6 +118,9 @@ fun RegionPlacesScreen(
             height = 140.dp,
             onBack = onBack,
             titleMaxLines = 1,
+            // List or map: one switch on top instead of a row of its own.
+            action = if (showMap) de.wanderlogplus.app.ui.design.HeroAction(androidx.compose.material.icons.Icons.AutoMirrored.Filled.List, "Liste", "view-list") { showMap = false }
+            else de.wanderlogplus.app.ui.design.HeroAction(androidx.compose.material.icons.Icons.Filled.Map, "Karte", "view-map") { showMap = true },
         )
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 10.dp),
@@ -141,7 +146,7 @@ fun RegionPlacesScreen(
                 FilterChip(
                     selected = category == c,
                     onClick = { category = c },
-                    label = { Text(categoryLabel(c)) },
+                    label = { Text(de.wanderlogplus.app.ui.categoryShortLabel(c)) },
                     modifier = Modifier.testTag("filter-category-${c?.name ?: "ALL"}"),
                 )
             }
@@ -158,20 +163,6 @@ fun RegionPlacesScreen(
                     androidx.compose.material3.TextButton(onClick = show, modifier = Modifier.testTag("region-research-progress")) { Text("Ablauf") }
                 }
             }
-        }
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-            SegmentedButton(
-                selected = !showMap,
-                onClick = { showMap = false },
-                shape = SegmentedButtonDefaults.itemShape(0, 2),
-                modifier = Modifier.testTag("view-list"),
-            ) { Text("Liste") }
-            SegmentedButton(
-                selected = showMap,
-                onClick = { showMap = true },
-                shape = SegmentedButtonDefaults.itemShape(1, 2),
-                modifier = Modifier.testTag("view-map"),
-            ) { Text("Karte") }
         }
         if (showMap) {
             RegionMap(markers, onOpenPlace, Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp))
@@ -269,7 +260,8 @@ private fun PlaceCard(s: Suggestion, accent: Color, votes: List<de.wanderlogplus
 private fun StatusIndicator(savedPlaceId: String, status: PlaceStatus) {
     Row(Modifier.padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(Modifier.size(10.dp).background(statusColor(status), CircleShape).testTag("status-dot-$savedPlaceId"))
-        Text(statusLabel(status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // "Idee" is what most places are: the dot says enough there.
+        if (status != PlaceStatus.IDEA) Text(statusLabel(status), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
