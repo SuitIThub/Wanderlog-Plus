@@ -70,9 +70,20 @@ class TabelogCardTest {
         assertEquals(1, searched)
     }
 
-    @Test fun loadingWhileUnknownOrRequested() {
-        rule.setContent { WanderlogPlusTheme { TabelogCard(null, onOpen = {}, onRefresh = null, onSetLink = null, onSearch = {}) } }
+    @Test fun loadingWhileUnknownOrRequestedStillOffersTheSearch() {
+        var searched = 0
+        rule.setContent { WanderlogPlusTheme { TabelogCard(null, onOpen = {}, onRefresh = null, onSetLink = null, onSearch = { searched++ }) } }
         rule.onNodeWithText("Tabelog wird geladen …").assertExists()
+        rule.onNodeWithTag("tabelog-search").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, searched)
+    }
+
+    @Test fun withoutPositionNoLoadingForever() {
+        rule.setContent { WanderlogPlusTheme { TabelogCard(null, onOpen = {}, onRefresh = null, onSetLink = {}, onSearch = {}, hasPosition = false) } }
+        rule.onNodeWithText("Tabelog wird geladen …").assertDoesNotExist()
+        rule.onNodeWithText("Ohne Position kein Tabelog-Abgleich", substring = true).assertExists()
+        rule.onNodeWithTag("tabelog-search").assertExists()
+        rule.onNodeWithTag("tabelog-set-link").assertExists()
     }
 
     @Test fun linkDialogOnlyTakesTabelog() {

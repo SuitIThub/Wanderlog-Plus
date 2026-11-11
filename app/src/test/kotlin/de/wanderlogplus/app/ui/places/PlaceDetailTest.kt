@@ -307,4 +307,12 @@ class PlaceDetailTest {
         rule.waitForIdle()
         rule.onNode(hasText("alt", substring = true)).assertIsDisplayed()
     }
+
+    @Test fun aRestaurantWithoutPositionExplainsWhyNoTabelog() {
+        seed(EntityType.REGION, "r1", Region("r1", "Kyoto", "#3498db"))
+        seed(EntityType.PLACE, "p1", Place("p1", name = "Curry ohne Ort"))
+        seed(EntityType.SAVED_PLACE, "sv1", SavedPlace("sv1", "p1", "r1", PlaceCategory.FOOD))
+        show()
+        rule.onNodeWithText("Ohne Position kein Tabelog-Abgleich", substring = true).assertExists()
+    }
 }
