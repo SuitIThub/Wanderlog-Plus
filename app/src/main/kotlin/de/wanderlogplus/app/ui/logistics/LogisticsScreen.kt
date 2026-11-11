@@ -61,6 +61,8 @@ import de.wanderlogplus.shared.model.Flight
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.model.Train
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import de.wanderlogplus.shared.query.Movement
 import de.wanderlogplus.shared.sync.EntityType
 import java.time.LocalDate
@@ -203,43 +205,64 @@ fun LogisticsScreen(
     val stays = remember(entries) { entries.filterIsInstance<LogisticsEntry.StayEntry>() }
     var tab by rememberSaveable { mutableIntStateOf(TAB_MOVES) }
 
+    // Like the day program: adding only in "Bearbeiten" (＋ at the top and the end of the list).
+    var editing by rememberSaveable { mutableStateOf(false) }
+    val addSlot: (@Composable (tag: String) -> Unit)? = if (editing && onAdd != null) {
+        { tag -> AddButton(tag, stays = tab == TAB_STAYS, onAdd, onAddTransit) }
+    } else null
+
     Column(modifier.fillMaxSize()) {
         PrimaryTabRow(selectedTabIndex = tab) {
             ScreenTab("Fahrten", tab == TAB_MOVES, "tab-moves") { tab = TAB_MOVES }
             ScreenTab("Unterkünfte", tab == TAB_STAYS, "tab-stays") { tab = TAB_STAYS }
         }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (tab == TAB_MOVES) MovesTab(snapshot, moves, onOpen, onOpenJourney) else StaysTab(snapshot, stays, onOpen, today)
-            if (onAdd != null) {
-                var menu by remember { mutableStateOf(false) }
-                Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
-                    androidx.compose.material3.ExtendedFloatingActionButton(
-                        onClick = { if (tab == TAB_MOVES) menu = true else onAdd(EntityType.STAY) },
-                        icon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = null) },
-                        text = { Text("Hinzufügen") },
-                        modifier = Modifier.testTag("logistics-add"),
+        if (onAdd != null) {
+            Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
+                androidx.compose.material3.TextButton(onClick = { editing = !editing }, modifier = Modifier.testTag("logistics-edit")) {
+                    androidx.compose.material3.Icon(
+                        if (editing) androidx.compose.material.icons.Icons.Filled.Check else androidx.compose.material.icons.Icons.Filled.Edit,
+                        contentDescription = null, modifier = Modifier.padding(end = 6.dp),
                     )
-                    androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Zug / ÖPNV") }, onClick = { menu = false; onAdd(EntityType.TRAIN) },
-                            leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Train, contentDescription = null) },
-                            modifier = Modifier.testTag("logistics-add-train"),
-                        )
-                        if (onAddTransit != null) {
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text("ÖPNV-Verbindung suchen") }, onClick = { menu = false; onAddTransit() },
-                                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
-                                modifier = Modifier.testTag("logistics-add-transit"),
-                            )
-                        }
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text("Flug") }, onClick = { menu = false; onAdd(EntityType.FLIGHT) },
-                            leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Flight, contentDescription = null) },
-                            modifier = Modifier.testTag("logistics-add-flight"),
-                        )
-                    }
+                    Text(if (editing) "Fertig" else "Bearbeiten")
                 }
             }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (tab == TAB_MOVES) MovesTab(snapshot, moves, onOpen, onOpenJourney, addSlot) else StaysTab(snapshot, stays, onOpen, today, addSlot)
+        }
+    }
+}
+
+/** "＋ Hinzufügen": stays go straight to the form, moves offer train, connection search and flight. */
+@Composable
+private fun AddButton(tag: String, stays: Boolean, onAdd: (EntityType) -> Unit, onAddTransit: (() -> Unit)?) {
+    var menu by remember { mutableStateOf(false) }
+    Box {
+        androidx.compose.material3.OutlinedButton(
+            onClick = { if (stays) onAdd(EntityType.STAY) else menu = true },
+            modifier = Modifier.fillMaxWidth().testTag(tag),
+        ) {
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+            Text(if (stays) "Unterkunft hinzufügen" else "Fahrt hinzufügen")
+        }
+        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Zug / ÖPNV") }, onClick = { menu = false; onAdd(EntityType.TRAIN) },
+                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Train, contentDescription = null) },
+                modifier = Modifier.testTag("logistics-add-train"),
+            )
+            if (onAddTransit != null) {
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("ÖPNV-Verbindung suchen") }, onClick = { menu = false; onAddTransit() },
+                    leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Search, contentDescription = null) },
+                    modifier = Modifier.testTag("logistics-add-transit"),
+                )
+            }
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Flug") }, onClick = { menu = false; onAdd(EntityType.FLIGHT) },
+                leadingIcon = { androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Flight, contentDescription = null) },
+                modifier = Modifier.testTag("logistics-add-flight"),
+            )
         }
     }
 }
@@ -247,9 +270,12 @@ fun LogisticsScreen(
 private val ListPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)
 
 @Composable
-private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen: (LogisticsEntry) -> Unit, onOpenJourney: ((String) -> Unit)?) {
+private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen: (LogisticsEntry) -> Unit, onOpenJourney: ((String) -> Unit)?, addSlot: (@Composable (String) -> Unit)?) {
     if (moves.isEmpty()) {
-        EmptyHint("Keine Fahrten", Modifier.padding(16.dp).testTag("logistics-empty"))
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            EmptyHint(if (addSlot == null) "Keine Fahrten" else "Keine Fahrten – füge die erste hinzu.", Modifier.testTag("logistics-empty"))
+            addSlot?.invoke("logistics-add")
+        }
         return
     }
     // A journey shows as one card in place of its first leg; its other legs are left out of the list.
@@ -260,6 +286,7 @@ private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen
     val groups = remember(shown) { shown.groupBy { it.date } }
     val accent = MaterialTheme.colorScheme.primary
     LazyColumn(Modifier.fillMaxSize().testTag("logistics-list"), contentPadding = ListPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (addSlot != null) item(key = "add-top") { addSlot("logistics-add") }
         groups.forEach { (date, group) ->
             item(key = "date-$date") {
                 Text(
@@ -276,6 +303,7 @@ private fun MovesTab(snapshot: TripSnapshot, moves: List<LogisticsEntry>, onOpen
                 else MoveCard(snapshot, e, accent) { onOpen(e) }
             }
         }
+        if (addSlot != null) item(key = "add-end") { addSlot("logistics-add-end") }
     }
 }
 
@@ -321,13 +349,17 @@ private fun MoveCard(snapshot: TripSnapshot, e: LogisticsEntry, accent: Color, o
 }
 
 @Composable
-private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntry>, onOpen: (LogisticsEntry) -> Unit, today: String?) {
+private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntry>, onOpen: (LogisticsEntry) -> Unit, today: String?, addSlot: (@Composable (String) -> Unit)?) {
     if (stays.isEmpty()) {
-        EmptyHint("Keine Unterkünfte", Modifier.padding(16.dp).testTag("logistics-empty"))
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            EmptyHint(if (addSlot == null) "Keine Unterkünfte" else "Keine Unterkünfte – füge die erste hinzu.", Modifier.testTag("logistics-empty"))
+            addSlot?.invoke("logistics-add")
+        }
         return
     }
     val fallback = MaterialTheme.colorScheme.primary
     LazyColumn(Modifier.fillMaxSize().testTag("logistics-list"), contentPadding = ListPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (addSlot != null) item(key = "add-top") { addSlot("logistics-add") }
         items(stays, key = { "${it.type}-${it.id}" }) { e ->
             val s = e.stay
             val region = s.regionId?.let { id -> snapshot.regions.firstOrNull { it.id == id } }
@@ -348,6 +380,7 @@ private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntr
                 modifier = Modifier.testTag("logistics-${e.id}"),
             )
         }
+        if (addSlot != null) item(key = "add-end") { addSlot("logistics-add-end") }
     }
 }
 

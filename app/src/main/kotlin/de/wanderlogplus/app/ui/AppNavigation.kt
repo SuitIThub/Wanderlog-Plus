@@ -150,7 +150,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
-            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE, de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE)
+            LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.maps.ROUTE_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE, de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE)
             MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.more.BALANCES_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
@@ -451,6 +451,9 @@ fun AppNavigation(
                 onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
+                onOpenMap = type?.takeIf { it == EntityType.TRAIN || it == EntityType.FLIGHT }?.let { t ->
+                    { nav.navigate(de.wanderlogplus.app.maps.routeMapRoute(t.name.lowercase(), id)) }
+                },
             )
         }
 
@@ -467,6 +470,7 @@ fun AppNavigation(
                 onMoveLeg = { i, up -> vm.moveJourneyLeg(journeyId, i, up) },
                 onReplaceRide = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
                 onChangeJourney = transitApi?.let { { nav.navigate(de.wanderlogplus.app.ui.transit.journeyChangeRoute(journeyId)) } },
+                onOpenMap = { nav.navigate(de.wanderlogplus.app.maps.routeMapRoute(de.wanderlogplus.app.ui.logistics.JOURNEY_SEGMENT, journeyId)) },
             )
         }
 
@@ -873,6 +877,17 @@ fun AppNavigation(
                                 LogisticsDetailFor(vm, s, type, id, onBack = { nav.popBackStack() }, afterDelete = { nav.popBackStack() })
                             }
                         }
+                    }
+                }
+                composable(de.wanderlogplus.app.maps.ROUTE_MAP_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val kind = entry.arguments?.getString("type").orEmpty()
+                    val id = entry.arguments?.getString("id").orEmpty()
+                    snap?.let { s ->
+                        val shown = remember(s, kind, id) { de.wanderlogplus.app.ui.logistics.routeMapOf(s, kind, id) }
+                        if (shown == null) EmptyHint("Für diese Strecke gibt es keine Karte.", Modifier.padding(16.dp))
+                        else de.wanderlogplus.app.maps.RouteMapScreen(shown.first, shown.second, onBack = { nav.popBackStack() })
                     }
                 }
                 composable(LOGISTICS_EDIT_ROUTE) { entry ->

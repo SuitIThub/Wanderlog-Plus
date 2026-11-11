@@ -127,32 +127,28 @@ internal fun isAlmostSolid(width: Int, height: Int, pixel: (x: Int, y: Int) -> I
 }
 
 /** True when the active network has validated internet access (not just a captive portal or a dead Wi-Fi). */
-private fun hasValidatedInternet(context: Context): Boolean {
+internal fun hasValidatedInternet(context: Context): Boolean {
     val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
     val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
     return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
         caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
 }
 
-/** All MapLibre calls of the renderer; a separate class, so loading [RouteMapRenderer] never touches MapLibre. */
-private object RouteSnapshots {
-    private const val PADDING_PX = 48
-    private const val ROUTE_COLOR = "#A5520F"
+private const val ROUTE_COLOR = "#A5520F"
 
-    /** Must run on the main thread: MapSnapshotter's callbacks arrive there. */
-    suspend fun snapshot(context: Context, route: RouteGeometry, widthPx: Int, heightPx: Int): Bitmap? {
-        MapLibre.getInstance(context) // lazy: only when a snapshot is really needed
+/**
+ * The map style of a route, the same for snapshots and the full-screen map: one line with big end dots, or (with
+ * [RouteGeometry.segments]) rides in their colors, walks grey and dashed, small dots at the stops, big ones where one
+ * boards, changes or leaves.
+ */
+internal fun routeStyle(route: RouteGeometry): Style.Builder {
+    val ends = GeoJsonSource("route-ends", FeatureCollection.fromFeatures(route.stops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) }))
+    val segments = route.segments
+    if (segments == null) {
         val points = route.points().map { Point.fromLngLat(it.lng, it.lat) }
-        val segments = route.segments
-        if (segments != null) return snapshotSegments(context, route, segments, widthPx, heightPx)
-        val style = Style.Builder().fromUri(MAP_STYLE_URL)
+        return Style.Builder().fromUri(MAP_STYLE_URL)
             .withSource(GeoJsonSource("route", FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(points)))))
-            .withSource(
-                GeoJsonSource(
-                    "route-ends",
-                    FeatureCollection.fromFeatures(route.stops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) }),
-                ),
-            )
+            .withSource(ends)
             .withLayer(
                 LineLayer("route-line", "route").withProperties(
                     PropertyFactory.lineColor(ROUTE_COLOR),
@@ -169,51 +165,56 @@ private object RouteSnapshots {
                     PropertyFactory.circleStrokeWidth(2.5f),
                 ),
             )
-        return shoot(context, style, route, widthPx, heightPx)
     }
+    fun line(s: RouteSegment) = Feature.fromGeometry(LineString.fromLngLats(s.points.map { Point.fromLngLat(it.lng, it.lat) })).also { f ->
+        f.addStringProperty("color", s.color)
+    }
+    return Style.Builder().fromUri(MAP_STYLE_URL)
+        .withSource(GeoJsonSource("rides", FeatureCollection.fromFeatures(segments.filter { !it.walk }.map(::line))))
+        .withSource(GeoJsonSource("walks", FeatureCollection.fromFeatures(segments.filter { it.walk }.map(::line))))
+        .withSource(GeoJsonSource("minor", FeatureCollection.fromFeatures(route.minorStops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })))
+        .withSource(ends)
+        .withLayer(
+            LineLayer("walk-line", "walks").withProperties(
+                PropertyFactory.lineColor(WALK_COLOR),
+                PropertyFactory.lineWidth(3f),
+                PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
+            ),
+        )
+        .withLayer(
+            LineLayer("ride-line", "rides").withProperties(
+                PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("color")),
+                PropertyFactory.lineWidth(4.5f),
+                PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+                PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            ),
+        )
+        .withLayer(
+            CircleLayer("minor-layer", "minor").withProperties(
+                PropertyFactory.circleColor("#FFFFFF"),
+                PropertyFactory.circleRadius(2.5f),
+                PropertyFactory.circleStrokeColor("#555555"),
+                PropertyFactory.circleStrokeWidth(1f),
+            ),
+        )
+        .withLayer(
+            CircleLayer("route-ends-layer", "route-ends").withProperties(
+                PropertyFactory.circleColor("#37474F"),
+                PropertyFactory.circleRadius(6f),
+                PropertyFactory.circleStrokeColor("#FFFFFF"),
+                PropertyFactory.circleStrokeWidth(2.5f),
+            ),
+        )
+}
 
-    /** Rides in their colors, walks grey and dashed, small dots at the stops, big ones where one boards/changes/leaves. */
-    private suspend fun snapshotSegments(context: Context, route: RouteGeometry, segments: List<RouteSegment>, widthPx: Int, heightPx: Int): Bitmap? {
-        fun line(s: RouteSegment) = Feature.fromGeometry(LineString.fromLngLats(s.points.map { Point.fromLngLat(it.lng, it.lat) })).also { f ->
-            f.addStringProperty("color", s.color)
-        }
-        val style = Style.Builder().fromUri(MAP_STYLE_URL)
-            .withSource(GeoJsonSource("rides", FeatureCollection.fromFeatures(segments.filter { !it.walk }.map(::line))))
-            .withSource(GeoJsonSource("walks", FeatureCollection.fromFeatures(segments.filter { it.walk }.map(::line))))
-            .withSource(GeoJsonSource("minor", FeatureCollection.fromFeatures(route.minorStops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })))
-            .withSource(GeoJsonSource("route-ends", FeatureCollection.fromFeatures(route.stops.map { Feature.fromGeometry(Point.fromLngLat(it.lng, it.lat)) })))
-            .withLayer(
-                LineLayer("walk-line", "walks").withProperties(
-                    PropertyFactory.lineColor(WALK_COLOR),
-                    PropertyFactory.lineWidth(3f),
-                    PropertyFactory.lineDasharray(arrayOf(1.5f, 1.5f)),
-                ),
-            )
-            .withLayer(
-                LineLayer("ride-line", "rides").withProperties(
-                    PropertyFactory.lineColor(org.maplibre.android.style.expressions.Expression.get("color")),
-                    PropertyFactory.lineWidth(4.5f),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                ),
-            )
-            .withLayer(
-                CircleLayer("minor-layer", "minor").withProperties(
-                    PropertyFactory.circleColor("#FFFFFF"),
-                    PropertyFactory.circleRadius(2.5f),
-                    PropertyFactory.circleStrokeColor("#555555"),
-                    PropertyFactory.circleStrokeWidth(1f),
-                ),
-            )
-            .withLayer(
-                CircleLayer("route-ends-layer", "route-ends").withProperties(
-                    PropertyFactory.circleColor("#37474F"),
-                    PropertyFactory.circleRadius(6f),
-                    PropertyFactory.circleStrokeColor("#FFFFFF"),
-                    PropertyFactory.circleStrokeWidth(2.5f),
-                ),
-            )
-        return shoot(context, style, route, widthPx, heightPx)
+/** All MapLibre calls of the renderer; a separate class, so loading [RouteMapRenderer] never touches MapLibre. */
+private object RouteSnapshots {
+    private const val PADDING_PX = 48
+
+    /** Must run on the main thread: MapSnapshotter's callbacks arrive there. */
+    suspend fun snapshot(context: Context, route: RouteGeometry, widthPx: Int, heightPx: Int): Bitmap? {
+        MapLibre.getInstance(context) // lazy: only when a snapshot is really needed
+        return shoot(context, routeStyle(route), route, widthPx, heightPx)
     }
 
     private suspend fun shoot(context: Context, style: Style.Builder, route: RouteGeometry, widthPx: Int, heightPx: Int): Bitmap? {

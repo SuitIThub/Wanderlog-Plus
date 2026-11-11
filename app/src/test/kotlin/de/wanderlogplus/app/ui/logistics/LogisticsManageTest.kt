@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
@@ -99,6 +100,8 @@ class LogisticsManageTest {
     @Test fun addMenuOffersTrainAndFlightAndStaysGoStraightToTheForm() {
         val added = mutableListOf<EntityType>()
         rule.setContent { WanderlogPlusTheme { LogisticsScreen(snapshot, onAdd = { added += it }) } }
+        rule.onNode(androidx.compose.ui.test.hasTestTag("logistics-add")).assertDoesNotExist() // only in the edit mode
+        rule.onNodeWithTag("logistics-edit").performClick()
         rule.onNodeWithTag("logistics-add").performClick()
         rule.onNodeWithTag("logistics-add-flight").performClick()
         rule.onNodeWithTag("tab-stays").performClick()

@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.71.0
+
+- **Logistik mit „Bearbeiten“:** wie beim Tagesprogramm. In der Liste ersetzt „Bearbeiten“ den schwebenden „Hinzufügen“-Knopf; im Bearbeiten-Modus steht „＋ Fahrt hinzufügen“ bzw. „＋ Unterkunft hinzufügen“ ganz oben und ganz unten. In einer Reise erscheinen „＋ Teilstrecke“, die Pfeile, „Aus Reise entfernen“, „Vorhandene Fahrt hinzufügen“ und „Reise auflösen“ nur noch im Bearbeiten-Modus – sonst nur Fahrten und Umstiege.
+- **Karte im Vollbild:** Ein Tipp auf die Routenkarte einer Reise oder einer Teilstrecke öffnet sie bildschirmfüllend zum Verschieben, Zoomen und Drehen, gezeichnet wie das Vorschaubild und so, dass die ganze Strecke zu sehen ist. Offline bleibt es beim Vorschaubild.
+
 ## 0.70.0
 
 - **Texte auf Deutsch:** Recherchen schreiben Beschreibungen jetzt immer auf Deutsch und ersetzen dabei importierte englische oder japanische Beschreibungen (eigene deutsche Texte bleiben). Unter Mehr → KI-Aufträge übersetzt „Texte auf Deutsch übersetzen“ einmalig alle vorhandenen nicht-deutschen Beschreibungen und die japanischen Angaben der Tabelog-Karten.

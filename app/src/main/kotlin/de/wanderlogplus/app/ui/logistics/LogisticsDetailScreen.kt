@@ -104,6 +104,8 @@ fun LogisticsDetailScreen(
     onOpenJourney: ((String) -> Unit)? = null,
     /** "Zu einer Reise zusammenführen…" (this leg plus the picked ones); null hides it. */
     onJoin: ((List<Pair<EntityType, String>>) -> Unit)? = null,
+    /** Opens the route map full screen (flights and trains); null: the map is only a picture. */
+    onOpenMap: (() -> Unit)? = null,
     /** "In Teilstrecken aufteilen" for an old merged entry; null hides it. */
     onSplit: ((EntityType, String) -> Unit)? = null,
     /** Stays: research room and amenities (links, fresh); null hides "Recherchieren". */
@@ -179,7 +181,7 @@ fun LogisticsDetailScreen(
             titleMaxLines = 2,
             onChangeImage = if (stay != null && onSetHeaderImage != null) ({ choosingImage = true }) else null,
         )
-        RouteMap(view.route, view.accent, height = 160.dp)
+        RouteMap(view.route, view.accent, height = 160.dp, onClick = onOpenMap)
         if (type == EntityType.TRAIN || type == EntityType.FLIGHT) {
             val journey = remember(snapshot, type, id) { de.wanderlogplus.client.journeyOf(snapshot, type, id) }
             journey?.let { j ->
