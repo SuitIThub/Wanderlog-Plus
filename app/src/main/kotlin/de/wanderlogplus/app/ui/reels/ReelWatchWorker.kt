@@ -32,6 +32,8 @@ import java.util.concurrent.TimeUnit
 /** What the notification for a finished reel job says (fixed German text, no server data except counts). */
 fun reelNotificationText(job: AiJobInfo): Pair<String, String> = when {
     job.status == "FAILED" -> "Reel-Auswertung fehlgeschlagen" to errorText(job.error)
+    job.candidates.isEmpty() && job.tips.isNotEmpty() ->
+        "Beitrag ausgewertet" to (if (job.tips.size == 1) "1 Tipp gefunden und geprüft. Tippen zum Ansehen." else "${job.tips.size} Tipps gefunden und geprüft. Tippen zum Ansehen.")
     job.candidates.isEmpty() -> "Reel ausgewertet" to "Im Reel wurde kein konkreter Ort erkannt."
     else -> {
         val onRoute = job.candidates.count { it.onRoute }

@@ -82,7 +82,7 @@ class JobProgressTest {
         val reel = running.copy(kind = "reel", status = "ANALYZING", steps = listOf(JobStep(t0, "Bilder und Ton werden herausgelöst (ffmpeg) …")))
         rule.setContent {
             WanderlogPlusTheme {
-                ReelJobScreen(reel, null, imported = false, onImport = {}, onOpenPlaces = {}, onBack = {}, onShowProgress = { shown++ })
+                ReelJobScreen(reel, null, imported = false, onImport = { _, _ -> }, onOpenPlaces = {}, onBack = {}, onShowProgress = { shown++ })
             }
         }
         rule.onNodeWithTag("reel-last-step").assertExists()

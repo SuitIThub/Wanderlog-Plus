@@ -110,15 +110,22 @@ class ReelsViewModel(
         }
     }
 
-    /** Takes the picks over (once per job) as saved places. */
-    fun import(jobId: String, picks: List<ReelPick>, source: String?) {
-        if (imported.contains(jobId) || picks.isEmpty()) return
+    /**
+     * Takes the picks over (once per job) as saved places, and the picked [tips] into guides: one guide job on the
+     * server that merges them into existing guides or writes new ones.
+     */
+    fun import(jobId: String, picks: List<ReelPick>, tips: List<de.wanderlogplus.shared.sync.ReelTip>, source: String?) {
+        if (imported.contains(jobId) || (picks.isEmpty() && tips.isEmpty())) return
         writeScope.launch {
             try {
                 var ids: List<String> = emptyList()
-                edit { e, _ -> ids = importPicks(e, picks, source); Unit }
+                if (picks.isNotEmpty()) edit { e, _ -> ids = importPicks(e, picks, source); Unit }
                 imported.add(jobId)
                 _importedNow.value = true
+                if (tips.isNotEmpty()) {
+                    call { a -> a.startGuides(tipAsks(tips)) }
+                    if (_message.value == null) _message.value = if (tips.size == 1) "Der Tipp wird in die Guides übernommen" else "${tips.size} Tipps werden in die Guides übernommen"
+                }
                 // "Trotzdem importieren": the place was skipped as a duplicate, so it is researched now (the server
                 // waits until the sync has brought it over).
                 val kept = picks.filter { importable(it.candidate) }
@@ -145,7 +152,7 @@ class ReelsViewModel(
             _message.value = when (e.kind) {
                 ApiErrorKind.NOT_CONFIGURED -> errorText("ai_not_configured")
                 ApiErrorKind.NETWORK -> "Server nicht erreichbar"
-                ApiErrorKind.BAD_REQUEST -> "Das ist kein unterstützter Reel-Link"
+                ApiErrorKind.BAD_REQUEST -> "Das ist kein unterstützter Reel- oder Post-Link"
                 else -> "Anfrage fehlgeschlagen"
             }
         }

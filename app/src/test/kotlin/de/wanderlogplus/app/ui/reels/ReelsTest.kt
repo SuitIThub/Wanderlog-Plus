@@ -101,7 +101,7 @@ class ReelsTest {
     @Test fun previewPreselectsPlacesOnTheRoute() {
         var picks: List<ReelPick>? = null
         rule.setContent {
-            WanderlogPlusTheme { ReelJobScreen(doneJob, Fixtures.trip(), imported = false, onImport = { picks = it }, onOpenPlaces = {}, onBack = {}) }
+            WanderlogPlusTheme { ReelJobScreen(doneJob, Fixtures.trip(), imported = false, onImport = { p, _ -> picks = p }, onOpenPlaces = {}, onBack = {}) }
         }
         rule.onNodeWithText("Ein Tag in Bergstadt.").assertExists()
         rule.onNodeWithText("1 Ort übernehmen").assertExists()
@@ -118,7 +118,7 @@ class ReelsTest {
         val job = doneJob.copy(candidates = listOf(near, station))
         var picks: List<ReelPick>? = null
         rule.setContent {
-            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { picks = it }, onOpenPlaces = {}, onBack = {}) }
+            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { p, _ -> picks = p }, onOpenPlaces = {}, onBack = {}) }
         }
         rule.onNodeWithText("1 Ort übernehmen").assertExists()
         rule.onNodeWithText("Bahnhof Bergstadt").assertDoesNotExist()
@@ -131,7 +131,7 @@ class ReelsTest {
 
     @Test fun progressAndFailureAreShown() {
         val job = androidx.compose.runtime.mutableStateOf(AiJobInfo("j2", "reel", 0, "ANALYZING"))
-        rule.setContent { WanderlogPlusTheme { ReelJobScreen(job.value, null, false, {}, {}, {}) } }
+        rule.setContent { WanderlogPlusTheme { ReelJobScreen(job.value, null, false, { _, _ -> }, {}, {}) } }
         rule.onNodeWithTag("reel-status").assertExists()
         rule.onNodeWithText("KI schaut sich Bilder und Ton an …").assertExists()
         job.value = AiJobInfo("j2", "reel", 0, "FAILED", error = "download_failed")
@@ -140,7 +140,7 @@ class ReelsTest {
 
     @Test fun importedJobOffersPlaces() {
         var opened = false
-        rule.setContent { WanderlogPlusTheme { ReelJobScreen(doneJob, Fixtures.trip(), imported = true, onImport = {}, onOpenPlaces = { opened = true }, onBack = {}) } }
+        rule.setContent { WanderlogPlusTheme { ReelJobScreen(doneJob, Fixtures.trip(), imported = true, onImport = { _, _ -> }, onOpenPlaces = { opened = true }, onBack = {}) } }
         rule.onNodeWithTag("reel-imported").performClick()
         assertTrue(opened)
     }

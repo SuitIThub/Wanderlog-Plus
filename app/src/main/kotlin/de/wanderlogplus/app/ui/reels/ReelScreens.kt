@@ -45,6 +45,8 @@ import de.wanderlogplus.app.ui.design.SectionLabel
 import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.sync.AiJobInfo
+import de.wanderlogplus.shared.sync.ReelTip
+import de.wanderlogplus.shared.sync.TipVerdict
 import de.wanderlogplus.shared.sync.Worth
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,11 +77,11 @@ fun ReelsScreen(
         }
         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "Teile ein Instagram-Reel an die App, oder füge hier den Link ein. Die KI sucht die Orte darin, prüft, ob sie auf eurer Route liegen, und recherchiert sie.",
+                "Teile ein Instagram-Reel oder einen Post (auch Bilder und Galerien) an die App, oder füge hier den Link ein. Die KI sucht die Orte darin, prüft, ob sie auf eurer Route liegen, und recherchiert sie. Allgemeine Tipps prüft sie auf Wahrheit und schlägt sie für eure Guides vor.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedTextField(link, { link = it }, label = { Text("Reel-Link") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reel-link"))
+            OutlinedTextField(link, { link = it }, label = { Text("Reel- oder Post-Link") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("reel-link"))
             Button(onClick = { onStart(link.trim()) }, enabled = link.isNotBlank(), modifier = Modifier.align(Alignment.End).testTag("reel-start")) { Text("Auswerten") }
             SectionLabel("Bisherige Auswertungen")
         }
@@ -92,6 +94,7 @@ fun ReelsScreen(
                         Text(j.summary ?: (j.source ?: "Reel"), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         val state = when {
                             isImported(j.id) -> "übernommen"
+                            j.status == "DONE" && j.tips.isNotEmpty() -> "${j.candidates.size} Orte, ${j.tips.size} Tipps gefunden · neu"
                             j.status == "DONE" -> "${j.candidates.size} Orte gefunden · neu"
                             else -> statusLabel(j.status)
                         }
@@ -117,7 +120,8 @@ fun ReelJobScreen(
     job: AiJobInfo?,
     snapshot: TripSnapshot?,
     imported: Boolean,
-    onImport: (List<ReelPick>) -> Unit,
+    /** The picked places and the picked tips (with their chosen guide). */
+    onImport: (List<ReelPick>, List<ReelTip>) -> Unit,
     onOpenPlaces: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -134,6 +138,11 @@ fun ReelJobScreen(
     }
     val regions = remember(job?.id, candidates.size, snapshot) {
         mutableStateMapOf<Int, String?>().apply { if (snapshot != null) candidates.forEachIndexed { i, c -> put(i, defaultRegion(snapshot, c)) } }
+    }
+    // Tips: picked ones and the guide each goes into (changeable).
+    val tips = remember(job?.id, job?.tips) { mutableStateMapOf<Int, ReelTip>().apply { job?.tips.orEmpty().forEachIndexed { i, t -> put(i, t) } } }
+    val tipPicked = remember(job?.id, job?.tips?.size) {
+        mutableStateMapOf<Int, Boolean>().apply { job?.tips.orEmpty().forEachIndexed { i, t -> put(i, tipPreselected(t)) } }
     }
     val placedByHand = candidates.mapIndexedNotNull { i, c -> i.takeIf { c.positionSetByHand } }
     LaunchedEffect(placedByHand) {
@@ -162,7 +171,7 @@ fun ReelJobScreen(
                     androidx.compose.material3.OutlinedButton(onClick = show, modifier = Modifier.fillMaxWidth().testTag("reel-progress-live")) { Text("Ablauf live ansehen") }
                 }
             }
-            candidates.isEmpty() -> EmptyHint("Im Reel wurde kein konkreter Ort erkannt.", Modifier.padding(16.dp))
+            candidates.isEmpty() && tips.isEmpty() -> EmptyHint("Im Beitrag wurden weder Orte noch allgemeine Tipps erkannt.", Modifier.padding(16.dp))
             else -> {
                 job.summary?.let { Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp)) }
                 // Places only named for orientation (stations, landmarks in the background) are folded away.
@@ -229,17 +238,137 @@ fun ReelJobScreen(
                             }
                         }
                     }
+                    if (tips.isNotEmpty()) {
+                        item { SectionLabel("Tipps") }
+                        items(tips.size) { i ->
+                            val t = tips.getValue(i)
+                            ReelTipCard(
+                                tip = t,
+                                index = i,
+                                checked = tipPicked[i] == true,
+                                enabled = !imported && tipSelectable(t),
+                                snapshot = snapshot,
+                                onCheck = { tipPicked[i] = it },
+                                onTarget = { tips[i] = it },
+                            )
+                        }
+                    }
                 }
                 val count = picked.count { it.value }
+                val tipCount = tipPicked.count { it.value && tips[it.key]?.let(::tipSelectable) == true }
                 if (imported) {
-                    Button(onClick = onOpenPlaces, modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-imported")) { Text("Übernommen – zu den Orten") }
+                    if (candidates.isNotEmpty()) {
+                        Button(onClick = onOpenPlaces, modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-imported")) { Text("Übernommen – zu den Orten") }
+                    } else {
+                        Text("Übernommen – die Guides werden ergänzt.", Modifier.padding(16.dp).testTag("reel-imported"), style = MaterialTheme.typography.bodyMedium)
+                    }
                 } else {
                     Button(
-                        onClick = { onImport(candidates.indices.filter { picked[it] == true }.map { ReelPick(candidates[it], regions[it], research = forced[it] == true) }) },
-                        enabled = count > 0,
+                        onClick = {
+                            onImport(
+                                candidates.indices.filter { picked[it] == true }.map { ReelPick(candidates[it], regions[it], research = forced[it] == true) },
+                                tips.keys.sorted().filter { tipPicked[it] == true }.map { tips.getValue(it) }.filter(::tipSelectable),
+                            )
+                        },
+                        enabled = count + tipCount > 0,
                         modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-import"),
-                    ) { Text(if (count == 1) "1 Ort übernehmen" else "$count Orte übernehmen") }
+                    ) { Text(importLabel(count, tipCount)) }
                 }
+            }
+        }
+    }
+}
+
+/** "2 Orte und 1 Tipp übernehmen", "1 Ort übernehmen", "3 Tipps übernehmen". */
+fun importLabel(places: Int, tips: Int): String {
+    val p = if (places == 1) "1 Ort" else "$places Orte"
+    val t = if (tips == 1) "1 Tipp" else "$tips Tipps"
+    return when {
+        tips == 0 -> "$p übernehmen"
+        places == 0 -> "$t übernehmen"
+        else -> "$p und $t übernehmen"
+    }
+}
+
+/** Badge text and tone of a checked tip. */
+private fun tipBadge(t: ReelTip, guideTitle: (String) -> String?): BadgeSpec = when {
+    t.coveredBy != null -> BadgeSpec("steht schon in „" + (guideTitle(t.coveredBy!!) ?: "einem Guide") + "“", BadgeTone.Neutral)
+    t.verdict == TipVerdict.TRUE -> BadgeSpec("stimmt", BadgeTone.Positive)
+    t.verdict == TipVerdict.PARTLY -> BadgeSpec("übertrieben – korrigiert", BadgeTone.Accent)
+    t.verdict == TipVerdict.FALSE -> BadgeSpec("falsch", BadgeTone.Warning)
+    else -> BadgeSpec("nicht belegt", BadgeTone.Neutral)
+}
+
+/**
+ * One tip of a reel: checked text, verdict, reason, sources and the guide it goes into.
+ * Tags `reel-tip-<i>` (checkbox) and `reel-tip-target-<i>`.
+ */
+@Composable
+private fun ReelTipCard(
+    tip: ReelTip,
+    index: Int,
+    checked: Boolean,
+    enabled: Boolean,
+    snapshot: TripSnapshot?,
+    onCheck: (Boolean) -> Unit,
+    onTarget: (ReelTip) -> Unit,
+) {
+    val guides = snapshot?.guides.orEmpty()
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var showSources by remember { mutableStateOf(false) }
+    SurfaceCard {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = checked && tipSelectable(tip), onCheckedChange = onCheck, enabled = enabled, modifier = Modifier.testTag("reel-tip-$index"))
+                Text(tip.text.ifBlank { tip.claim }, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            }
+            Badge(tipBadge(tip) { id -> guides.firstOrNull { it.id == id }?.title })
+            if (tip.verdict == TipVerdict.PARTLY || tip.verdict == TipVerdict.FALSE) {
+                Text("Im Beitrag: " + tip.claim, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (tip.coveredQuote.isNotBlank()) Text("„" + tip.coveredQuote + "“", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (tip.reason.isNotBlank()) Text(tip.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (tip.sources.isNotEmpty()) {
+                androidx.compose.material3.TextButton(onClick = { showSources = !showSources }) { Text(if (showSources) "Quellen ausblenden" else "Quellen (${tip.sources.size})") }
+                if (showSources) tip.sources.forEach { s ->
+                    Text(
+                        runCatching { java.net.URI(s).host?.removePrefix("www.") }.getOrNull() ?: s,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { runCatching { uri.openUri(s) } },
+                    )
+                }
+            }
+            if (enabled) {
+                val newTitle = tip.targetTitle ?: tip.topic.ifBlank { "Reisetipps" }
+                val catalog = tip.targetTopic?.let { de.wanderlogplus.shared.guide.GuideTopics.byKey(it) }
+                val options = buildList<Pair<String, String>> {
+                    guides.sortedBy { it.title.lowercase() }.forEach { add("g:" + it.id to it.title) }
+                    if (catalog != null) add("t:" + catalog.key to "Neuer Guide: " + catalog.name)
+                    add("n:$newTitle" to "Neuer Guide: $newTitle")
+                }
+                val current = when {
+                    tip.guideId != null -> "g:" + tip.guideId
+                    tip.targetTopic != null -> "t:" + tip.targetTopic
+                    else -> "n:$newTitle"
+                }
+                LabeledDropdown(
+                    tag = "reel-tip-target-$index",
+                    label = "In Guide",
+                    value = options.firstOrNull { it.first == current }?.second ?: "Neuer Guide: $newTitle",
+                    options = options,
+                    onSelect = { key ->
+                        val v = key.substring(2)
+                        onTarget(
+                            when (key[0]) {
+                                'g' -> tip.copy(guideId = v, targetTopic = null, targetTitle = null)
+                                't' -> tip.copy(guideId = null, targetTopic = v, targetTitle = null)
+                                else -> tip.copy(guideId = null, targetTopic = null, targetTitle = v)
+                            },
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
