@@ -44,7 +44,8 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - Tabs **Einschätzung** (Gesamtfazit, Punkte je Kriterium: Muss man sehen, Lohnt sich, Wenn Zeit ist, Eher auslassen) und **Recherche** (Geheimtipps, versteckte Ecken, Gut zu wissen, Tipps, Hinweise, Quellen, ob eine Reservierung nötig, empfohlen oder nicht nötig ist).
 - **Recherchieren (KI)** für einen Ort, für eine Region oder aus der Übersicht für mehrere Regionen. Dort wählt man die Regionen und „Nur unrecherchierte“ oder „Alle“, mit Anzahl und Kostenhinweis. Die Regionen laufen nacheinander; verworfene Orte bleiben außen vor. „Fristen ändern“ am Ort bleibt bei einer neuen Recherche stehen.
 - **Ort löschen** nimmt ihn aus der Sammlung und aus allen Tagen; ein Wanderlog-Import holt ihn nicht zurück. Auf der Detailseite wischt man das Titelbild zum vorigen oder nächsten Ort derselben Region.
-- Links: Navigation und ÖPNV (Google Maps), Website, Anrufen, Tabelog-Suche (nur Essen), dazu eigene Links.
+- Links: Navigation und ÖPNV (Google Maps), Website, Anrufen, Tabelog (Essen und Nachtleben), dazu eigene Links.
+- **Tabelog** für Restaurants und Bars: Der Server sucht jeden gespeicherten Ort der Kategorie Essen oder Nachtleben bei Tabelog (über Apify, japanischer Name über Google) – einmal für den Bestand, danach automatisch für neue Orte, höchstens 20 je Viertelstunde. Treffer nur, wenn der Eintrag höchstens 300 m entfernt liegt und der Name passt. Am Ort steht eine Karte mit Score, Anzahl Bewertungen, Budget mittags/abends, Genre, Reservierung, Öffnungszeiten und einer deutschen Zusammenfassung der neuesten Bewertungen; „In Tabelog öffnen“ versucht zuerst die mehrsprachige Tabelog-App, sonst die englische Seite im Browser. Falscher oder fehlender Treffer: „Tabelog-Link setzen“. In der Regionsliste zeigt ein Chip den Score („★ 3,7“). Kosten bei Apify etwa 1,5–2 Cent pro Restaurant.
 
 ### Reels (KI)
 
