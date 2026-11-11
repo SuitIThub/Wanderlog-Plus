@@ -100,7 +100,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 
 ### Guthaben & Limits
 
-- Unter Mehr → Guthaben & Limits: Guthaben und Kontingente der bezahlten Dienste, live vom Server abgefragt (Keys bleiben auf dem Server): OpenRouter, Apify (Monatsbudget), AirLabs (Abfragen, Ablauf des Keys). Parallel nur als Link aufs Dashboard; für Google zählt der Server seine eigenen Aufrufe pro Monat (ohne Karten und Aufrufe direkt aus der App), dazu ein Link zur Cloud Console. Markiert ab 80 % Verbrauch oder 14 Tage vor Ablauf.
+- Unter Mehr → Guthaben & Limits: Guthaben und Kontingente der bezahlten Dienste, live vom Server abgefragt (Keys bleiben auf dem Server): OpenRouter, Apify (Monatsbudget), AirLabs (Abfragen, Ablauf des Keys). Parallel nur als Link aufs Dashboard; für Google zählt der Server seine eigenen Aufrufe pro Monat (ohne Karten und Aufrufe direkt aus der App), dazu ein Link zur Cloud Console. Markiert ab 80 % Verbrauch (OpenRouter: unter 5 $ übrig) oder 14 Tage vor Ablauf.
 
 ### KI-Kriterien und Ablauf
 

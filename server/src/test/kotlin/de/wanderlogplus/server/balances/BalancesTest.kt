@@ -50,8 +50,8 @@ class BalancesTest {
         answers: Map<String, Pair<Int, String>>,
         openRouter: String? = "or", apify: String? = "ap", airlabs: String? = "al",
         usage: GoogleUsage? = null, google: Boolean = true,
-    ): Pair<BalanceService, MutableList<Pair<String, Map<String, String>>>> {
-        val asked = mutableListOf<Pair<String, Map<String, String>>>()
+    ): Pair<BalanceService, List<Pair<String, Map<String, String>>>> {
+        val asked = java.util.Collections.synchronizedList(mutableListOf<Pair<String, Map<String, String>>>())
         val s = BalanceService(openRouter, apify, airlabs, usage, google, parallel = true, http = { url, headers ->
             asked += url to headers
             answers.entries.firstOrNull { url.contains(it.key) }?.value ?: (404 to "")
@@ -118,7 +118,7 @@ class BalancesTest {
     @Test
     fun `answers are cached for five minutes unless fresh`() {
         var t = 0L
-        val asked = mutableListOf<String>()
+        val asked = java.util.Collections.synchronizedList(mutableListOf<String>())
         val s = BalanceService("or", null, null, null, google = false, parallel = false, http = { url, _ -> asked += url; all.entries.first { url.contains(it.key) }.value }, now = { t })
         s.report(); s.report()
         assertEquals(2, asked.size)
@@ -160,5 +160,18 @@ class BalancesTest {
         val report = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString(de.wanderlogplus.shared.sync.BalanceReport.serializer(), r.bodyAsText())
         assertEquals(listOf("openrouter", "apify", "airlabs", "parallel", "google"), report.services.map { it.service })
         assertTrue(report.services.all { it.status == BalanceStatus.NOT_CONFIGURED })
+    }
+
+    @Test
+    fun `a slow service does not hold up the others`() {
+        val s = BalanceService("or", "ap", null, null, google = false, parallel = false, timeoutMs = 300, http = { url, _ ->
+            if ("apify" in url) Thread.sleep(5_000)
+            all.entries.first { url.contains(it.key) }.value
+        })
+        val started = System.currentTimeMillis()
+        val r = s.report().services.associateBy { it.service }
+        assertTrue(System.currentTimeMillis() - started < 3_000)
+        assertEquals(BalanceStatus.OK, r.getValue("openrouter").status)
+        assertEquals(BalanceStatus.UNAVAILABLE, r.getValue("apify").status)
     }
 }

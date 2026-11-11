@@ -5,7 +5,7 @@ App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel 
 
 ## 0.64.0
 
-- **Guthaben & Limits** (Mehr): zeigt, was die bezahlten Dienste noch hergeben – OpenRouter (Guthaben, verbraucht, übrig, Verbrauch heute/Woche/Monat), Apify (Monatsbudget des Plans und wann es neu beginnt), AirLabs (Abfragen im Monat und wann der Key abläuft). Parallel und Google haben dafür keine Abfrage: Parallel verlinkt aufs Dashboard, für Google zählt der Server seine eigenen Aufrufe pro Monat (Details, Textsuche, Umgebungssuche, Fotos, Routen) und verlinkt die Cloud Console. Ab 80 % Verbrauch oder 14 Tage vor Ablauf ist eine Karte markiert.
+- **Guthaben & Limits** (Mehr): zeigt, was die bezahlten Dienste noch hergeben – OpenRouter (Guthaben, verbraucht, übrig, Verbrauch heute/Woche/Monat), Apify (Monatsbudget des Plans und wann es neu beginnt), AirLabs (Abfragen im Monat und wann der Key abläuft). Parallel und Google haben dafür keine Abfrage: Parallel verlinkt aufs Dashboard, für Google zählt der Server seine eigenen Aufrufe pro Monat (Details, Textsuche, Umgebungssuche, Fotos, Routen) und verlinkt die Cloud Console. Markiert wird eine Karte ab 80 % Verbrauch (OpenRouter: unter 5 $ übrig, weil es Gesamtsummen meldet) oder 14 Tage vor Ablauf.
 
 ## 0.63.0
 

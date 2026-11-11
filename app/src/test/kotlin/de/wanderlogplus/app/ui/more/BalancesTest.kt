@@ -84,4 +84,29 @@ class BalancesTest {
         rule.onNodeWithText("Guthaben & Limits").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(BALANCES_ROUTE, opened)
     }
+
+    @Test fun openRouterWarnsOnWhatIsLeftNotOnTheLifetimeShare() {
+        val longLived = openRouter.copy(used = 400.0, limit = 500.0, remaining = 100.0)
+        assertNull(balanceWarning(longLived, today))
+        assertEquals("Nur noch 4,00 $ übrig", balanceWarning(openRouter.copy(used = 46.0, limit = 50.0, remaining = 4.0), today))
+    }
+
+    @Test fun datesAreTheProvidersDays() {
+        assertEquals(LocalDate.of(2026, 12, 3), balanceDate("2026-12-03T23:59:59.999Z"))
+        assertEquals("Key läuft heute ab", balanceWarning(airlabs, LocalDate.of(2026, 12, 5)))
+        assertEquals("Key läuft in 1 Tag ab", balanceWarning(airlabs, LocalDate.of(2026, 12, 4)))
+    }
+
+    @Test fun aFailedRefreshIsShown() {
+        var n = 0
+        val report = BalanceReport(listOf(openRouter), fetchedAt = 0)
+        rule.setContent { WanderlogPlusTheme { BalancesScreen(load = { n++; if (n == 1) report else null }, onBack = {}, today = today) } }
+        rule.waitUntil(5_000) { n == 1 }
+        rule.waitForIdle()
+        rule.onNodeWithTag("balances-refresh").performSemanticsAction(SemanticsActions.OnClick)
+        rule.mainClock.advanceTimeBy(1_000)
+        rule.waitForIdle()
+        rule.onNodeWithText("Aktualisieren fehlgeschlagen", substring = true).assertExists()
+        rule.onNodeWithText("15,01 $ übrig von 50,00 $").assertExists()
+    }
 }

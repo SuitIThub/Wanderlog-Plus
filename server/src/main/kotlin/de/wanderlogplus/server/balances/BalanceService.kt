@@ -17,6 +17,7 @@ import java.net.http.HttpResponse
 import java.time.Duration
 import java.util.Locale
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Credit and quotas of the paid services, asked live (OpenRouter, Apify, AirLabs) or as a link with own counts
@@ -34,16 +35,29 @@ class BalanceService(
     /** GET with headers → status and body; HTTP by default. */
     http: ((String, Map<String, String>) -> Pair<Int, String>)? = null,
     private val now: () -> Long = System::currentTimeMillis,
+    /** How long one service may take before its card says "nicht erreichbar". */
+    private val timeoutMs: Long = 15_000,
 ) {
     private val client by lazy { HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build() }
     private val get: (String, Map<String, String>) -> Pair<Int, String> = http ?: ::httpGet
     private val json = Json { ignoreUnknownKeys = true }
+    private val pool = java.util.concurrent.Executors.newFixedThreadPool(3) { r -> Thread(r, "balances").apply { isDaemon = true } }
     private var cached: BalanceReport? = null
 
     @Synchronized
     fun report(fresh: Boolean = false): BalanceReport {
         cached?.takeIf { !fresh && now() - it.fetchedAt < CACHE_MS }?.let { return it }
-        val asks = listOf(::openRouter, ::apify, ::airlabs).map { f -> CompletableFuture.supplyAsync { f() } }
+        // Each service on its own thread with its own deadline: a slow or failing one only greys out its card.
+        val asks = listOf(
+            Triple("openrouter", "OpenRouter (KI)", ::openRouter),
+            Triple("apify", "Apify (Tabelog, ÖPNV)", ::apify),
+            Triple("airlabs", "AirLabs (Flüge live)", ::airlabs),
+        ).map { (id, name, f) ->
+            val fallback = unavailable(id, name, null)
+            CompletableFuture.supplyAsync({ f() }, pool)
+                .completeOnTimeout(fallback, timeoutMs, TimeUnit.MILLISECONDS)
+                .exceptionally { fallback }
+        }
         val live = asks.map { it.join() }
         return BalanceReport(live + listOf(parallelCard(), googleCard()), now()).also { cached = it }
     }
@@ -111,7 +125,7 @@ class BalanceService(
         )
     }
 
-    private fun unavailable(service: String, name: String, link: String) =
+    private fun unavailable(service: String, name: String, link: String?) =
         ServiceBalance(service, name, BalanceStatus.UNAVAILABLE, link = link, note = "Gerade nicht abfragbar.")
 
     private fun data(answer: Pair<Int, String>): JsonObject? = if (answer.first !in 200..299) null
@@ -122,7 +136,7 @@ class BalanceService(
     private fun usd(v: Double) = String.format(Locale.GERMAN, "%.2f $", v)
 
     private fun httpGet(url: String, headers: Map<String, String>): Pair<Int, String> = try {
-        val b = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).GET()
+        val b = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET()
         headers.forEach { (k, v) -> b.header(k, v) }
         client.send(b.build(), HttpResponse.BodyHandlers.ofString()).let { it.statusCode() to it.body() }
     } catch (e: Exception) {

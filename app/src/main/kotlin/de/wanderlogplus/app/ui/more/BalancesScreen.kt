@@ -40,7 +40,7 @@ import de.wanderlogplus.shared.sync.ServiceBalance
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -53,14 +53,25 @@ private const val WARN_SHARE = 0.8
 /** Days before a key or plan runs out from which a card is marked. */
 private const val WARN_DAYS = 14L
 
-private fun dateOf(iso: String?): LocalDate? = iso?.let { runCatching { Instant.parse(it).atZone(ZoneId.of("Europe/Berlin")).toLocalDate() }.getOrNull() }
+/** The day as the provider means it: its stamps are UTC ("…-12-03T23:59:59.999Z" is the 3rd, not the 4th in Berlin). */
+fun balanceDate(iso: String?): LocalDate? = iso?.let { runCatching { Instant.parse(it).atZone(ZoneOffset.UTC).toLocalDate() }.getOrNull() }
+
+private fun dateOf(iso: String?): LocalDate? = balanceDate(iso)
+
+/** OpenRouter reports lifetime totals: what is left matters, not the share used. */
+private const val LOW_CREDIT_USD = 5.0
 
 /** Why a service needs attention ("84 % verbraucht", "Key läuft in 10 Tagen ab"); null when all is fine. */
 fun balanceWarning(b: ServiceBalance, today: LocalDate): String? {
     dateOf(b.expiresAt)?.let { end ->
         val days = ChronoUnit.DAYS.between(today, end)
         if (days < 0) return "Key ist abgelaufen"
+        if (days == 0L) return "Key läuft heute ab"
         if (days <= WARN_DAYS) return "Key läuft in $days " + (if (days == 1L) "Tag" else "Tagen") + " ab"
+    }
+    if (b.service == "openrouter") {
+        val left = b.remaining ?: return null
+        return if (b.status == BalanceStatus.OK && left < LOW_CREDIT_USD) "Nur noch ${usd(left)} übrig" else null
     }
     val used = b.used
     val limit = b.limit
@@ -88,7 +99,7 @@ private val DATE = DateTimeFormatter.ofPattern("d. MMMM yyyy", Locale.GERMAN)
  * (fresh = past its five-minute cache) and gives null when there is no server or it did not answer.
  */
 @Composable
-fun BalancesScreen(load: suspend (fresh: Boolean) -> BalanceReport?, onBack: () -> Unit, modifier: Modifier = Modifier, today: LocalDate = LocalDate.now()) {
+fun BalancesScreen(load: suspend (fresh: Boolean) -> BalanceReport?, onBack: () -> Unit, modifier: Modifier = Modifier, today: LocalDate = LocalDate.now(ZoneOffset.UTC)) {
     var report by remember { mutableStateOf<BalanceReport?>(null) }
     var failed by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
@@ -108,7 +119,12 @@ fun BalancesScreen(load: suspend (fresh: Boolean) -> BalanceReport?, onBack: () 
         }
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (failed && report == null) Text("Server nicht erreichbar – die Guthaben fragt der Server ab.", color = MaterialTheme.colorScheme.error)
+            if (failed) {
+                Text(
+                    if (report == null) "Server nicht erreichbar – die Guthaben fragt der Server ab." else "Aktualisieren fehlgeschlagen – unten der letzte Stand.",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             report?.services?.forEach { BalanceCard(it, today) }
             report?.let { Text("Stand " + java.text.SimpleDateFormat("HH:mm", Locale.GERMAN).format(java.util.Date(it.fetchedAt)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
