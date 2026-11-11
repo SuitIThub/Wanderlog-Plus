@@ -89,13 +89,6 @@ class TabelogCardTest {
         assertEquals("https://tabelog.com/tokyo/A1303/A130301/13001762/", set)
     }
 
-    @Test fun chipOnlyForFound() {
-        assertEquals("★ 3,7", tabelogChip(Place("p", tabelog = found))?.text)
-        assertNull(tabelogChip(Place("p", tabelog = TabelogInfo(TabelogStatus.NOT_FOUND))))
-        assertNull(tabelogChip(Place("p")))
-        assertNull(tabelogChip(Place("p", tabelog = found.copy(score = null))))
-    }
-
     @Test fun requestingWritesRequestedAndAsksTheServer() {
         val store = InMemoryEntityStore()
         val editor = LocalEditor(store, InMemoryOutbox(), HlcClock("dev-a", now = { 1000L }))

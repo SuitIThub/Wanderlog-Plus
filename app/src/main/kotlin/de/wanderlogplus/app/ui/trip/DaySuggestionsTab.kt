@@ -100,7 +100,8 @@ private fun SuggestionCard(s: Suggestion, dow: Int?, accent: Color, onAdd: () ->
     }
     PhotoCard(
         title = s.place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
-        subtitle = listOfNotNull(categoryLabel(s.saved.category), s.place?.rating?.let { ratingLabel(it) }).joinToString(" · "),
+        subtitle = categoryLabel(s.saved.category),
+        extra = { de.wanderlogplus.app.ui.places.RatingStrip(s.place, s.saved) },
         imageUrl = s.saved.heroImage(s.place),
         placeholderSymbol = categorySymbol(s.saved.category),
         accent = accent,
