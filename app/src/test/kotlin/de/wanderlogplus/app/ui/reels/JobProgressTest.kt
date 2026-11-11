@@ -77,6 +77,15 @@ class JobProgressTest {
         assertEquals("j1", opened)
     }
 
+    @Test fun jobListStartsTheGermanTranslation() {
+        var started = 0
+        val translate = running.copy(id = "t1", kind = "translate", total = 0)
+        rule.setContent { WanderlogPlusTheme { AiJobsScreen(listOf(translate), onOpen = {}, onBack = {}, onTranslate = { started++ }, clock = { t0 + 10_000 }) } }
+        rule.onNodeWithText("Übersetzung").assertExists()
+        rule.onNodeWithTag("translate-texts").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(1, started)
+    }
+
     @Test fun reelResultAndPlaceResearchLeadToTheAblauf() {
         var shown = 0
         val reel = running.copy(kind = "reel", status = "ANALYZING", steps = listOf(JobStep(t0, "Bilder und Ton werden herausgelöst (ffmpeg) …")))

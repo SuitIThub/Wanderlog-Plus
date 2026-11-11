@@ -67,6 +67,8 @@ class AiJobs(
     private val arrivalWaitMillis: Long = 60_000,
     /** Matches and checks the travel tips of a reel; null: tips stay unchecked (UNVERIFIED). */
     private val tipCheck: TipCheck? = null,
+    /** Translates texts into German ("Texte auf Deutsch übersetzen"); null: that job fails with `ai_not_configured`. */
+    private val translator: Translator? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -268,6 +270,65 @@ class AiJobs(
         }
     }
 
+    val translateConfigured: Boolean get() = translator != null
+
+    /**
+     * "Texte auf Deutsch übersetzen": every place description that is not German and the Japanese fields of Tabelog
+     * entries, in batches of ten texts per model call. Writes only those fields; German texts are never sent.
+     */
+    fun startTranslate(): AiJobInfo {
+        val job = save(AiJobInfo(UUID.randomUUID().toString(), "translate", now().toEpochMilli(), "QUEUED", steps = listOf(queuedStep()), appliedOnServer = writeResults != null))
+        executor.execute { runTranslate(job) }
+        return job
+    }
+
+    private fun runTranslate(start: AiJobInfo) {
+        val t = Tracker(start)
+        val tr = translator ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            val places = store.all(EntityType.PLACE).filter { !it.isDeleted }
+                .mapNotNull { r -> runCatching { EntityCodec.decode<de.wanderlogplus.shared.model.Place>(r) }.getOrNull() }
+            val descriptions = places.filter { !it.description.isNullOrBlank() && !looksGerman(it.description!!) }
+            val tabelog = places.filter { p ->
+                p.tabelog?.let { i -> listOf(i.genre, i.reservation, i.hours, i.station).any(::hasJapanese) } == true
+            }
+            t.update { it.copy(total = descriptions.size + tabelog.size) }
+            t.step("${descriptions.size} Beschreibungen und ${tabelog.size} Tabelog-Einträge werden übersetzt")
+            var done = 0
+            descriptions.chunked(TRANSLATE_BATCH).forEach { batch ->
+                val german = tr.toGerman(batch.map { it.description!! })
+                val edits = batch.zip(german).filter { (p, g) -> g != p.description }
+                    .map { (p, g) -> ServerEdit(EntityType.PLACE, p.id, mapOf("description" to JsonPrimitive(g))) }
+                if (edits.isNotEmpty()) writeResults?.invoke(edits)
+                done += batch.size
+                t.update { it.copy(progress = done) }
+            }
+            tabelog.chunked(TRANSLATE_BATCH / 2).forEach { batch ->
+                // Four fields per entry; only the Japanese ones are sent.
+                val slots = batch.flatMap { p -> p.tabelog!!.let { i -> listOf("genre" to i.genre, "reservation" to i.reservation, "hours" to i.hours, "station" to i.station) }.filter { hasJapanese(it.second) }.map { (k, v) -> Triple(p.id, k, v) } }
+                val german = tr.toGerman(slots.map { it.third })
+                val byPlace = slots.zip(german).groupBy({ it.first.first }, { it.first.second to it.second })
+                val edits = batch.mapNotNull { p ->
+                    val changes = byPlace[p.id]?.toMap() ?: return@mapNotNull null
+                    val i = p.tabelog!!
+                    val next = i.copy(
+                        genre = changes["genre"] ?: i.genre, reservation = changes["reservation"] ?: i.reservation,
+                        hours = changes["hours"] ?: i.hours, station = changes["station"] ?: i.station,
+                    )
+                    ServerEdit(EntityType.PLACE, p.id, mapOf("tabelog" to json.encodeToJsonElement(de.wanderlogplus.shared.model.TabelogInfo.serializer(), next)))
+                }
+                if (edits.isNotEmpty()) writeResults?.invoke(edits)
+                done += batch.size
+                t.update { it.copy(progress = done) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Translate job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
     fun get(id: String): AiJobInfo? = store.aiJob(id)?.let { json.decodeFromString(AiJobInfo.serializer(), it) }
 
     fun list(kind: String?, limit: Int): List<AiJobInfo> = store.aiJobs(kind, limit).map { json.decodeFromString(AiJobInfo.serializer(), it) }
@@ -370,7 +431,8 @@ class AiJobs(
     }
 
     /**
-     * Writes one research result into the trip: dossier, worth, verdict and (only where empty) the place description.
+     * Writes one research result into the trip: dossier, worth, verdict and the place description where there is none or
+     * the old one is not German.
      * A newer or the same research already stored is kept. Returns whether anything was written.
      */
     private fun writeDossier(r: DossierResult): Boolean {
@@ -386,7 +448,11 @@ class AiJobs(
         val edits = mutableListOf(ServerEdit(EntityType.SAVED_PLACE, r.savedPlaceId, fields))
         val placeId = (saved.fields["placeId"]?.value as? JsonPrimitive)?.contentOrNull
         if (placeId != null && r.description.isNotBlank()) {
-            edits += ServerEdit(EntityType.PLACE, placeId, mapOf("description" to JsonPrimitive(r.description)), onlyIfEmpty = setOf("description"))
+            // A description of its own stays; one that is not German (from the Wanderlog import) gets the German one.
+            val existing = (store.get(EntityType.PLACE, placeId)?.fields?.get("description")?.value as? JsonPrimitive)?.contentOrNull
+            if (replacesDescription(existing, r.description)) {
+                edits += ServerEdit(EntityType.PLACE, placeId, mapOf("description" to JsonPrimitive(r.description)))
+            }
         }
         return write(edits) > 0
     }
@@ -588,6 +654,7 @@ class AiJobs(
 
     companion object {
         const val MAX_STEPS = 300
+        const val TRANSLATE_BATCH = 10
 
         /** Short German reason for the log's last line (the app explains [code] in full). */
         fun failText(code: String): String = when (code) {

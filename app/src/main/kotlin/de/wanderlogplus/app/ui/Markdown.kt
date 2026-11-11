@@ -116,7 +116,7 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier) {
         SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        parseMarkdown(text).forEach { block ->
+        parseMarkdown(euroed(text)).forEach { block ->
             val prefix = when (block) {
                 is MdBlock.Paragraph -> ""
                 is MdBlock.Bullet -> "• "

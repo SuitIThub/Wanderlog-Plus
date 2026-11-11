@@ -20,21 +20,42 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Two or three German sentences from the newest Tabelog reviews (Japanese); empty when there are none or the model fails. */
+/**
+ * German texts for a Tabelog entry, in one model call: two or three sentences from the newest reviews (Japanese) and
+ * the Japanese fields (genre, reservation, hours, station) in German. Whatever fails stays as it was.
+ */
 class TabelogSummary(private val model: ChatModel) {
-    fun summarize(reviews: List<TabelogReview>): String {
-        if (reviews.isEmpty()) return ""
+    fun summarize(reviews: List<TabelogReview>): String = describe(reviews, TabelogInfo(TabelogStatus.FOUND)).summary
+
+    /** [info] with [TabelogInfo.summary] from [reviews] and its Japanese fields in German. */
+    fun describe(reviews: List<TabelogReview>, info: TabelogInfo): TabelogInfo {
+        val fields = linkedMapOf("genre" to info.genre, "reservation" to info.reservation, "hours" to info.hours, "station" to info.station)
+            .filterValues { de.wanderlogplus.server.ai.hasJapanese(it) }
+        if (reviews.isEmpty() && fields.isEmpty()) return info
         val system = """
-            Du fasst Restaurant-Bewertungen von Tabelog (japanisch) für deutsche Japan-Reisende zusammen.
-            Zwei bis drei kurze Sätze auf Deutsch: was gelobt wird, was kritisiert wird, ein praktischer Tipp (Bestellung, Wartezeit, Zeitpunkt).
-            Nur was in den Bewertungen steht. Antworte nur mit JSON: {"summary": "…"}
+            Du bereitest einen Restaurant-Eintrag von Tabelog (japanisch) für deutsche Japan-Reisende auf.
+            summary: zwei bis drei kurze Sätze auf Deutsch aus den Bewertungen – was gelobt wird, was kritisiert wird, ein praktischer Tipp
+            (Bestellung, Wartezeit, Zeitpunkt); nur was dort steht; ohne Bewertungen leer.
+            Die übrigen Felder: die japanischen Angaben knapp auf Deutsch (Genre, Reservierung, Öffnungszeiten mit Ruhetagen, Lage zum Bahnhof);
+            Zeiten und Preise unverändert, Namen in lateinischer Umschrift.
+            Antworte nur mit JSON: {"summary": "…"${fields.keys.joinToString("") { ", \"$it\": \"…\"" }}}
         """.trimIndent()
-        val user = reviews.joinToString("\n\n") { r -> "Bewertung (${r.date}): ${r.title}\n${r.text.take(1500)}" }
+        val user = buildString {
+            fields.forEach { (k, v) -> append(k).append(": ").append(v).append('\n') }
+            reviews.forEach { r -> append("\nBewertung (").append(r.date).append("): ").append(r.title).append('\n').append(r.text.take(1500)).append('\n') }
+        }
         return try {
-            (completeJson(model, system, user, GERMAN_PLEASE) { (it["summary"] as? JsonPrimitive)?.content?.isNotBlank() == true }["summary"] as JsonPrimitive)
-                .content.trim()
+            val o = completeJson(model, system, user, GERMAN_PLEASE) { o -> reviews.isEmpty() || (o["summary"] as? JsonPrimitive)?.content?.isNotBlank() == true }
+            fun text(k: String) = (o[k] as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotEmpty() }
+            info.copy(
+                summary = if (reviews.isEmpty()) info.summary else text("summary") ?: info.summary,
+                genre = fields["genre"]?.let { text("genre") } ?: info.genre,
+                reservation = fields["reservation"]?.let { text("reservation") } ?: info.reservation,
+                hours = fields["hours"]?.let { text("hours") } ?: info.hours,
+                station = fields["station"]?.let { text("station") } ?: info.station,
+            )
         } catch (e: Exception) {
-            ""
+            info
         }
     }
 }
@@ -128,21 +149,24 @@ open class TabelogSweeper(
         return found(hit ?: match, reviews, match.url)
     }
 
-    private fun found(hit: TabelogHit, reviews: List<TabelogReview>, fallbackUrl: String) = TabelogInfo(
-        status = TabelogStatus.FOUND,
-        url = canonicalTabelogUrl(hit.url) ?: canonicalTabelogUrl(fallbackUrl) ?: fallbackUrl,
-        name = hit.name,
-        score = hit.score,
-        reviewCount = hit.reviewCount,
-        genre = hit.genre,
-        budgetLunch = hit.budgetLunch,
-        budgetDinner = hit.budgetDinner,
-        hours = hit.hours,
-        reservation = hit.reservation,
-        station = hit.station,
-        summary = summary?.summarize(reviews).orEmpty(),
-        checkedAt = now(),
-    )
+    private fun found(hit: TabelogHit, reviews: List<TabelogReview>, fallbackUrl: String): TabelogInfo {
+        val info = TabelogInfo(
+            status = TabelogStatus.FOUND,
+            url = canonicalTabelogUrl(hit.url) ?: canonicalTabelogUrl(fallbackUrl) ?: fallbackUrl,
+            name = hit.name,
+            score = hit.score,
+            reviewCount = hit.reviewCount,
+            genre = hit.genre,
+            budgetLunch = hit.budgetLunch,
+            budgetDinner = hit.budgetDinner,
+            hours = hit.hours,
+            reservation = hit.reservation,
+            station = hit.station,
+            checkedAt = now(),
+        )
+        // Summary and German fields in one call; without a model the entry stays as Tabelog has it.
+        return summary?.describe(reviews, info) ?: info
+    }
 
     private fun notFound() = TabelogInfo(TabelogStatus.NOT_FOUND, checkedAt = now())
 

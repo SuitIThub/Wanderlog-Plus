@@ -37,11 +37,11 @@ internal fun PlaceInfoTab(place: Place?, accent: Color, today: String?, saved: d
             androidx.compose.foundation.layout.Row(Modifier.padding(top = 4.dp).testTag("place-worth")) {
                 de.wanderlogplus.app.ui.design.Badge(de.wanderlogplus.app.ui.design.BadgeSpec(de.wanderlogplus.app.ui.reels.worthLabel(w), de.wanderlogplus.app.ui.reels.worthTone(w)))
             }
-            if (saved.worthReason.isNotBlank()) Text(saved.worthReason, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            if (saved.worthReason.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(saved.worthReason), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
         }
         place?.description?.takeIf { it.isNotBlank() }?.let {
             SectionLabel("Beschreibung", color = accent)
-            Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            Text(de.wanderlogplus.app.ui.euroed(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
         }
 
         SectionLabel("Öffnungszeiten", color = accent)

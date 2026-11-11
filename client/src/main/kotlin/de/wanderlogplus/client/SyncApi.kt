@@ -427,6 +427,11 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Translates every non-German place description and the Japanese Tabelog texts into German, as one job. */
+    suspend fun startTranslate(): AiJobInfo = call {
+        client.post("$base/api/ai/translate") { auth() }
+    }
+
     /** Credit and quotas of the paid services; [fresh] skips the server's five-minute cache. */
     suspend fun balances(fresh: Boolean = false): de.wanderlogplus.shared.sync.BalanceReport = call {
         client.get("$base/api/balances" + if (fresh) "?fresh=1" else "") { auth() }

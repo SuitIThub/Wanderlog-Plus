@@ -85,6 +85,7 @@ fun main() {
             )
         },
         files = FileStore.forConfig(config),
+        translator = (textModel ?: openRouter)?.let { de.wanderlogplus.server.ai.Translator(it) },
         tipCheck = openRouter?.let { model ->
             val text = textModel ?: model
             TipCheck(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, parallelism = 3)

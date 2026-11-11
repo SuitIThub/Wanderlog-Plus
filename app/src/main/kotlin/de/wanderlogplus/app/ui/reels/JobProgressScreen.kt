@@ -62,6 +62,7 @@ fun jobKindLabel(kind: String): String = when (kind) {
     "reel" -> "Reel-Auswertung"
     "research" -> "Recherche"
     "assess" -> "Einschätzung"
+    "translate" -> "Übersetzung"
     else -> "KI-Auftrag"
 }
 
@@ -208,11 +209,24 @@ private fun LogRow(step: JobStep) {
 
 /** "KI-Aufträge": recent reel analyses, researches and judgements; a tap opens their Ablauf. Tag `ai-job-<id>`. */
 @Composable
-fun AiJobsScreen(jobs: List<AiJobInfo>, onOpen: (jobId: String) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier, clock: () -> Long = System::currentTimeMillis) {
+fun AiJobsScreen(
+    jobs: List<AiJobInfo>,
+    onOpen: (jobId: String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onTranslate: (() -> Unit)? = null,
+    clock: () -> Long = System::currentTimeMillis,
+) {
     Column(modifier.fillMaxSize().testTag("ai-jobs")) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
-            Text("KI-Aufträge", style = MaterialTheme.typography.titleLarge)
+            Text("KI-Aufträge", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        }
+        // One-off: English or Japanese descriptions and Tabelog texts into German (server job "translate").
+        if (onTranslate != null) {
+            androidx.compose.material3.TextButton(onClick = onTranslate, modifier = Modifier.padding(horizontal = 8.dp).testTag("translate-texts")) {
+                Text("Texte auf Deutsch übersetzen")
+            }
         }
         if (jobs.isEmpty()) {
             EmptyHint("Noch keine KI-Aufträge", Modifier.padding(16.dp))
