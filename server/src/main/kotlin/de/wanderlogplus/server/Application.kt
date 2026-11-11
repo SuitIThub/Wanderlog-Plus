@@ -398,6 +398,7 @@ fun Application.module(services: Services) {
                 if (!services.ai.guidesConfigured) throw AiNotConfigured()
                 val req = call.receive<de.wanderlogplus.shared.sync.GuideRequest>()
                 if (req.asks.isEmpty() || req.asks.size > 30) throw BadInput()
+                if (req.asks.any { a -> a.additions.size > 20 || a.additions.any { it.text.length > 1000 || it.sources.size > 20 } }) throw BadInput()
                 call.respond(services.ai.startGuides(req.asks))
             }
             get("/api/ai/jobs") {

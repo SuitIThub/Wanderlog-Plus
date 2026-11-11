@@ -88,7 +88,7 @@ fun main() {
             TipCheck(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, parallelism = 3)
         },
         guideWriter = textModel?.let { text ->
-            GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
+            GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, de.wanderlogplus.server.ai.LinkCheck())
         },
     )
     // The chat saves guide pins and rules right away and writes guides through the guides job.

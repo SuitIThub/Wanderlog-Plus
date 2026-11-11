@@ -70,6 +70,76 @@ class GuideWriterTest {
         assertEquals(old.extraTriggers, g.extraTriggers)
     }
 
+    private fun withLinks(title: String, sections: Int = 1) = """{"title":"$title","summary":"Kurz.",
+        "sections":[${(1..sections).joinToString(",") { """{"heading":"A$it","text":"t","dos":["Waschen"],"donts":["Handtuch ins Wasser"]}""" }}],
+        "phrases":[{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}],
+        "links":[{"name":"Japan Transit","kind":"app","androidPackage":"jp.co.jorudan.jtp"},{"name":"Erfunden","kind":"web","url":"https://erfunden.example/"}]}"""
+
+    private val probe = UrlProbe { it == "https://play.google.com/store/apps/details?id=jp.co.jorudan.jtp" }
+
+    private val existing = Guide(
+        "g1", topic = "onsen", title = "Onsen", summary = "Alt.", sources = listOf("https://alt.jp"),
+        sections = listOf(
+            de.wanderlogplus.shared.model.GuideSection("A1", "t", dos = listOf("Waschen"), donts = listOf("Handtuch ins Wasser")),
+            de.wanderlogplus.shared.model.GuideSection("A2", "t", dos = listOf("Waschen"), donts = listOf("Handtuch ins Wasser")),
+        ),
+        phrases = listOf(de.wanderlogplus.shared.model.GuidePhrase("Wo ist das Bad?", "お風呂はどこですか？", "ofuro wa doko desu ka?")),
+        pinnedTo = listOf(GuideTarget(GuideTargetType.PLACE, "s1")),
+    )
+
+    private val additions = listOf(de.wanderlogplus.shared.sync.GuideAddition("Tattoo-Sticker helfen in manchen Onsen.", listOf("https://neu.jp", "https://alt.jp")))
+
+    @Test
+    fun `written links are checked`() {
+        val g = GuideWriter(facts, Scripted { withLinks("Onsen") }, LinkCheck(probe)).write(GuideAsk(topic = "onsen"), "", null)
+        assertEquals(listOf("Japan Transit"), g.links.map { it.name })
+    }
+
+    @Test
+    fun `without a link check no link is stored`() {
+        val g = GuideWriter(facts, Scripted { withLinks("Onsen") }).write(GuideAsk(topic = "onsen"), "", null)
+        assertTrue(g.links.isEmpty())
+    }
+
+    @Test
+    fun `merging does not research and keeps pins`() {
+        var researched = 0
+        val counting = FactSource { q, s -> researched++; facts.facts(q, s) }
+        val model = Scripted { withLinks("Onsen", sections = 3) }
+        val g = GuideWriter(counting, model, LinkCheck(probe)).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
+        assertEquals(0, researched)
+        assertTrue("Tattoo-Sticker helfen" in model.asked.single())
+        assertTrue("A2" in model.asked.single())
+        assertEquals("g1", g.id)
+        assertEquals(existing.pinnedTo, g.pinnedTo)
+        assertEquals(listOf("https://alt.jp", "https://neu.jp"), g.sources)
+        assertEquals(3, g.sections.size)
+        assertEquals(listOf("Japan Transit"), g.links.map { it.name })
+    }
+
+    @Test
+    fun `a merge that loses content fails`() {
+        val model = Scripted { withLinks("Onsen", sections = 1) }
+        val e = kotlin.runCatching { GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", existing) }.exceptionOrNull()
+        assertEquals("ai_bad_answer", (e as AiFailed).code)
+        assertEquals(2, model.asked.size)
+    }
+
+    @Test
+    fun `keepsContent compares sections dos donts and phrases`() {
+        assertTrue(keepsContent(existing, existing.copy(sections = existing.sections + existing.sections)))
+        assertTrue(!keepsContent(existing, existing.copy(phrases = emptyList())))
+        assertTrue(!keepsContent(existing, existing.copy(sections = existing.sections.map { it.copy(dos = emptyList()) })))
+    }
+
+    @Test
+    fun `a new guide with additions puts them into the prompt`() {
+        val model = Scripted { withLinks("Geld") }
+        val g = GuideWriter(facts, model).write(GuideAsk(title = "Geld", additions = additions), "", null)
+        assertTrue("Geprüfte Ergänzungen" in model.asked.single() && "Tattoo-Sticker helfen" in model.asked.single())
+        assertTrue("https://neu.jp" in g.sources)
+    }
+
     private val tmp = Files.createTempDirectory("wlp-guides")
     private val store = SqliteStore(tmp.resolve("wanderlog-plus.db"))
     private val sync = SyncService(store)
@@ -118,6 +188,17 @@ class GuideWriterTest {
         assertEquals("DONE", job.status)
         assertEquals(listOf("FAILED", "DONE"), job.items.map { it.state })
         assertEquals(listOf("ryokan"), storedGuides().map { it.topic })
+    }
+
+    @Test
+    fun `a tip for a topic with a guide merges into that guide`() {
+        val j = jobs(Scripted { answer("Onsen & Sentō") })
+        j.startGuides(listOf(GuideAsk(topic = "onsen"))); j.drain()
+        val first = storedGuides().single()
+        val merge = jobs(Scripted { user -> if ("Ergänzungen" in user) answer("Onsen & Sentō (ergänzt)") else error("researched") })
+        merge.startGuides(listOf(GuideAsk(topic = "onsen", additions = additions))); merge.drain()
+        assertEquals(listOf(first.id), storedGuides().map { it.id })
+        assertEquals("Onsen & Sentō (ergänzt)", storedGuides().single().title)
     }
 
     @Test
