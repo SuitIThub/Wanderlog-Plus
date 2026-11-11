@@ -36,6 +36,8 @@ data class ServerConfig(
     val apifyToken: String? = null,
     /** Apify actor of the timetable search ("Japan Train Route & Fare Finder"). */
     val apifyTransitActor: String = ApifyTransitSource.DEFAULT_ACTOR,
+    /** Apify actor for Tabelog lookups of restaurants (WLP_APIFY_TABELOG_ACTOR). */
+    val apifyTabelogActor: String = de.wanderlogplus.server.tabelog.ApifyTabelogSource.DEFAULT_ACTOR,
 ) {
     companion object {
         const val MIN_TOKEN_LENGTH = 16
@@ -95,6 +97,7 @@ data class ServerConfig(
                 },
                 apifyToken = env["WLP_APIFY_TOKEN"]?.takeIf { it.isNotBlank() },
                 apifyTransitActor = env["WLP_APIFY_TRANSIT_ACTOR"]?.takeIf { it.isNotBlank() } ?: ApifyTransitSource.DEFAULT_ACTOR,
+                apifyTabelogActor = env["WLP_APIFY_TABELOG_ACTOR"]?.takeIf { it.isNotBlank() } ?: de.wanderlogplus.server.tabelog.ApifyTabelogSource.DEFAULT_ACTOR,
             )
         }
     }
