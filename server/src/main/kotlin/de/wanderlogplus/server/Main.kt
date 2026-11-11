@@ -38,14 +38,16 @@ fun main() {
     val openRouter = config.openRouterKey?.let { OpenRouterModel(it, config.aiModel) }
     // Text work (chat, judgements, research evaluation) runs on the stronger text model; reels stay on the media model.
     val textModel = config.openRouterKey?.let { OpenRouterModel(it, config.textModel) }
-    val routes = RoutesService(store, config.googleRoutesKey?.let { GoogleRoutesTransport(it) })
+    // Every Google call of the server is counted per month ("Guthaben & Limits" in the app).
+    val googleUsage = de.wanderlogplus.server.balances.GoogleUsage(config.dataDir.resolve("api-usage.json"))
+    val routes = RoutesService(store, config.googleRoutesKey?.let { de.wanderlogplus.server.balances.counted(googleUsage, GoogleRoutesTransport(it)) })
     val transit = TransitService(
         store,
         config.apifyToken?.let { ApifyTransitSource(it, config.apifyTransitActor) },
         // Stations from Google Places (reliable, Japanese names); OpenStreetMap only when Google has no answer.
         config.apifyToken?.let {
             val osm = PhotonStationFinder(PhotonGeocoder())
-            config.googlePlacesKey?.let { key -> GoogleStationFinder(HttpPlacesApi(key), store, osm) } ?: osm
+            config.googlePlacesKey?.let { key -> GoogleStationFinder(de.wanderlogplus.server.balances.counted(googleUsage, HttpPlacesApi(key)), store, osm) } ?: osm
         },
         elsewhere = TransitousSource(store, OpenMeteoHttp()),
     )
@@ -57,9 +59,9 @@ fun main() {
     val weather = WeatherService(store, OpenMeteoHttp())
     val photon = PhotonGeocoder()
     // Google details (hours, rating, price, contact) of places, cached: for research facts and to fill taken-over places.
-    val googleDetails = config.googlePlacesKey?.let { GooglePlaceDetails(store, HttpPlaceDetailsTransport(it)) }
+    val googleDetails = config.googlePlacesKey?.let { GooglePlaceDetails(store, de.wanderlogplus.server.balances.counted(googleUsage, HttpPlaceDetailsTransport(it))) }
     // Google knows small restaurants and bars that OpenStreetMap lacks; Photon stays the fallback.
-    val placeFinder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(HttpPlacesSearchTransport(it)), photon) } ?: photon
+    val placeFinder = config.googlePlacesKey?.let { FallbackGeocoder(GooglePlacesGeocoder(de.wanderlogplus.server.balances.counted(googleUsage, HttpPlacesSearchTransport(it))), photon) } ?: photon
     val aiJobs = AiJobs(
         store,
         openRouter?.let { model ->
@@ -109,15 +111,19 @@ fun main() {
         rates = RatesService(store, OpenMeteoHttp()),
         flightLive = FlightLiveService(store, OpenMeteoHttp(), config.airlabsKey),
         trainLive = TrainLiveService(store, OpenMeteoHttp()),
-        photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { GooglePlacesPhotoTransport(it) }),
-        placesSearch = GooglePlacesSearch(config.googlePlacesKey?.let { de.wanderlogplus.server.ai.HttpPlacesSearchTransport(it, SEARCH_FIELD_MASK) }, store),
+        photos = PlacePhotosService(store, config.dataDir.resolve("place-photos"), config.googlePlacesKey?.let { de.wanderlogplus.server.balances.counted(googleUsage, GooglePlacesPhotoTransport(it)) }),
+        placesSearch = GooglePlacesSearch(config.googlePlacesKey?.let { de.wanderlogplus.server.balances.counted(googleUsage, de.wanderlogplus.server.ai.HttpPlacesSearchTransport(it, SEARCH_FIELD_MASK)) }, store),
         placeEnricher = googleDetails?.let { PlaceEnricher(store, sync, it) },
+        balances = de.wanderlogplus.server.balances.BalanceService(
+            config.openRouterKey, config.apifyToken, config.airlabsKey, googleUsage,
+            google = config.googlePlacesKey != null || config.googleRoutesKey != null, parallel = config.parallelKey != null,
+        ),
         // Tabelog for restaurants: Japanese names from Google (Tabelog's search only understands Japanese).
         tabelog = config.apifyToken?.let { token ->
             de.wanderlogplus.server.tabelog.TabelogSweeper(
                 store,
                 de.wanderlogplus.server.tabelog.ApifyTabelogSource(token, config.apifyTabelogActor),
-                config.googlePlacesKey?.let { de.wanderlogplus.server.tabelog.GoogleJaNames(de.wanderlogplus.server.tabelog.HttpGoogleJaTransport(it)) }
+                config.googlePlacesKey?.let { de.wanderlogplus.server.tabelog.GoogleJaNames(de.wanderlogplus.server.balances.counted(googleUsage, de.wanderlogplus.server.tabelog.HttpGoogleJaTransport(it))) }
                     ?: de.wanderlogplus.server.tabelog.LatinNames,
                 (textModel ?: openRouter)?.let { de.wanderlogplus.server.tabelog.TabelogSummary(it) },
                 write = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },

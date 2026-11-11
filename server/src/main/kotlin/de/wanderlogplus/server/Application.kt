@@ -103,6 +103,9 @@ class Services(
     val placeEnricher: PlaceEnricher? = null,
     /** Tabelog data for restaurants (Apify); null without an Apify token. */
     val tabelog: de.wanderlogplus.server.tabelog.TabelogSweeper? = null,
+    /** Credit and quotas of the paid services ("Guthaben & Limits"). */
+    val balances: de.wanderlogplus.server.balances.BalanceService =
+        de.wanderlogplus.server.balances.BalanceService(null, null, null, null, google = false, parallel = false),
 )
 
 /** No Apify token, so no Tabelog lookups (`/api/tabelog/refresh` answers `tabelog_not_configured`). */
@@ -406,6 +409,10 @@ fun Application.module(services: Services) {
                 if (req.asks.isEmpty() || req.asks.size > 30) throw BadInput()
                 if (req.asks.any { a -> a.additions.size > 20 || a.additions.any { it.text.length > 1000 || it.sources.size > 20 } }) throw BadInput()
                 call.respond(services.ai.startGuides(req.asks))
+            }
+            get("/api/balances") {
+                val fresh = call.request.queryParameters["fresh"] == "1"
+                call.respond(withContext(Dispatchers.IO) { services.balances.report(fresh) })
             }
             post("/api/tabelog/refresh") {
                 val t = services.tabelog ?: throw TabelogNotConfigured()
