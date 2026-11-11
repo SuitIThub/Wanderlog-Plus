@@ -200,6 +200,10 @@ fun GuideScreen(
             Text(g.title, style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
             GuideJobs.stateOf(g, jobs)?.let { GuideJobBanner(it) }
             if (g.summary.isNotBlank()) SurfaceCard { Text(g.summary, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
+            if (g.links.isNotEmpty()) {
+                Text("Apps & Links", fontWeight = FontWeight.SemiBold)
+                GuideLinkChips(g.links)
+            }
             g.sections.forEach { s ->
                 SurfaceCard {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -352,6 +356,7 @@ fun GuidesSection(snapshot: TripSnapshot, target: GuideTarget, onOpenGuide: (Str
             onHide = actions?.let { a -> { id: String -> a.hide(id, target) } },
             onAdd = if (actions != null && others.isNotEmpty()) ({ picking = true }) else null,
         )
+        GuideLinkChips(remember(shown) { de.wanderlogplus.shared.guide.GuideLinks.union(shown) })
     }
     if (picking && actions != null) {
         AlertDialog(
