@@ -422,6 +422,7 @@ fun AppNavigation(
                 onResearch = if (vm.canAssess) { ids: List<String> -> vm.research(ids, snap.regions.firstOrNull { it.id == key }?.name ?: "Ohne Region") } else null,
                 researchStatus = status.takeIf { researching.isNotEmpty() },
                 onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
+                onSetRegion = vm::setRegion,
             )
         }
 

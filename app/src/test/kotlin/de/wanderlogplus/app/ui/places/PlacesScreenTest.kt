@@ -77,7 +77,7 @@ class PlacesScreenTest {
         assertTrue(top("place-sv-a") < top("place-sv-b"))
         assertTrue(top("place-sv-b") < top("category-FOOD"))
         rule.onNode(hasText("Besucht") and hasTestTag("place-sv-b")).assertExists()
-        rule.onNode(hasText("Idee") and hasTestTag("place-sv-a")).assertExists()
+        rule.onNodeWithTag("status-dot-sv-a", useUnmergedTree = true).assertExists() // "Idee": only the dot
         rule.onNodeWithTag("place-sv-o").assertDoesNotExist()
         rule.onNodeWithTag("place-sv-f").performClick()
         assertEquals("sv-f", opened)
@@ -162,14 +162,24 @@ class PlacesScreenTest {
     @Test fun toggleAlwaysShownAndMapUnavailableInTests() {
         seedData()
         rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        // One switch in the header: the map symbol in the list, the list symbol on the map.
         rule.onNodeWithTag("view-map").assertExists()
-        rule.onNodeWithTag("view-list").assertExists()
-        // Semantics click: Robolectric's injected touch does not reach the segmented buttons reliably.
+        rule.onNodeWithTag("view-list").assertDoesNotExist()
         rule.onNodeWithTag("view-map").performSemanticsAction(SemanticsActions.OnClick)
         // LocalMapsEnabled defaults to false, so MapLibre is never loaded under Robolectric.
         rule.onNodeWithText("Karte nicht verfügbar").assertIsDisplayed()
         rule.onNodeWithTag("place-sv-a").assertDoesNotExist()
         rule.onNodeWithTag("view-list").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("place-sv-a").assertExists()
+    }
+
+    @Test fun shortCategoryChipsAndNoIdeaLabel() {
+        seedData()
+        rule.setContent { WanderlogPlusTheme { RegionPlacesScreen(TripSnapshot.from(store.all()), "r1", onBack = {}, onOpenPlace = {}) } }
+        rule.onNode(hasTestTag("filter-category-SIGHT") and hasText("Sehenswert")).assertExists()
+        // "Idee" is what most places are: only the dot; other states keep their word.
+        rule.onNodeWithTag("status-dot-sv-a", useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Idee") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("place-sv-a")), useUnmergedTree = true).assertDoesNotExist()
+        rule.onNode(hasText("Besucht") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("place-sv-b")), useUnmergedTree = true).assertExists()
     }
 }

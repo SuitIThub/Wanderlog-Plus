@@ -45,6 +45,8 @@ import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.HeroHeader
 import de.wanderlogplus.app.ui.design.SectionLabel
 import de.wanderlogplus.app.ui.design.heroImageUrl
+import de.wanderlogplus.app.ui.design.roomPhotoOf
+import de.wanderlogplus.app.ui.design.heroImage
 import de.wanderlogplus.app.ui.design.routeTitle
 import de.wanderlogplus.app.ui.places.linkIcon
 import de.wanderlogplus.app.ui.regionColor
@@ -423,7 +425,7 @@ private fun bookingView(snapshot: TripSnapshot, type: EntityType?, id: String, t
             BookingView(
                 title = stayName(snapshot, s),
                 kicker = stayPeriod(s),
-                imageUrl = de.wanderlogplus.app.ui.design.HeaderImages.url(s.headerImage) ?: place?.heroImageUrl(),
+                imageUrl = s.heroImage(place, snapshot.roomPhotoOf(s.id)),
                 accent = region?.let { regionColor(it.color) } ?: primary,
                 route = null,
                 // Check-in/out stand as tiles above, booking number, travellers and conditions folded under "Buchung".

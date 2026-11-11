@@ -75,6 +75,20 @@ private fun InfoCard(content: @Composable () -> Unit) {
 /** Compact weekday table; the row at [todayIndex] gets a tinted background, bold text and a "heute" badge. */
 @Composable
 private fun HoursTable(lines: List<Pair<String, String>>, todayIndex: Int?) {
+    // The same every day: one line instead of seven ("Täglich 09:30–18:00", "Öffnungszeiten unbekannt").
+    val same = lines.map { it.second }.distinct().singleOrNull()
+    if (same != null && lines.size == 7) {
+        val unknown = same == "unbekannt"
+        InfoCard {
+            Text(
+                if (unknown) "Öffnungszeiten unbekannt" else "Täglich $same",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (unknown) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag(if (unknown) "hours-unknown" else "hours-daily"),
+            )
+        }
+        return
+    }
     InfoCard {
         lines.forEachIndexed { i, (day, text) ->
             val isToday = i == todayIndex

@@ -57,6 +57,8 @@ fun TabelogCard(
     onSetLink: ((String) -> Unit)?,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The restaurant has a position: only then the server can match it with Tabelog. */
+    hasPosition: Boolean = true,
 ) {
     var menu by remember { mutableStateOf(false) }
     var linking by remember { mutableStateOf(false) }
@@ -98,7 +100,17 @@ fun TabelogCard(
                         OutlinedButton(onClick = onSearch, modifier = Modifier.testTag("tabelog-search")) { Text("In Tabelog suchen") }
                     }
                 }
-                else -> Text("Tabelog wird geladen …", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> {
+                    // Never stuck on "loading": the search is always there, and without a position nothing will come.
+                    Text(
+                        if (hasPosition) "Tabelog wird geladen …" else "Ohne Position kein Tabelog-Abgleich – Ort mit Google verknüpfen oder den Link setzen.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (!hasPosition && onSetLink != null) OutlinedButton(onClick = { linking = true }, modifier = Modifier.testTag("tabelog-set-link")) { Text("Tabelog-Link setzen") }
+                        OutlinedButton(onClick = onSearch, modifier = Modifier.testTag("tabelog-search")) { Text("In Tabelog suchen") }
+                    }
+                }
             }
         }
     }

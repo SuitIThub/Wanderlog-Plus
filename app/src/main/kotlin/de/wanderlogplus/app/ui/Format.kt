@@ -34,6 +34,13 @@ fun regionColor(hex: String?): androidx.compose.ui.graphics.Color {
     return androidx.compose.ui.graphics.Color(if (h.length == 6) 0xFF000000L or v else v)
 }
 
+/** Short names for filter chips ("Sehenswert" instead of "Sehenswürdigkeiten"). */
+fun categoryShortLabel(c: de.wanderlogplus.shared.model.PlaceCategory?) = when (c) {
+    de.wanderlogplus.shared.model.PlaceCategory.SIGHT -> "Sehenswert"
+    de.wanderlogplus.shared.model.PlaceCategory.NIGHTLIFE -> "Nachtleben"
+    else -> categoryLabel(c)
+}
+
 fun categoryLabel(c: de.wanderlogplus.shared.model.PlaceCategory?) = when (c) {
     null -> "Alle"
     de.wanderlogplus.shared.model.PlaceCategory.SIGHT -> "Sehenswürdigkeiten"

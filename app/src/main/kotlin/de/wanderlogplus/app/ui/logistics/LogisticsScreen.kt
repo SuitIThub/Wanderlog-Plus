@@ -49,6 +49,8 @@ import de.wanderlogplus.app.ui.design.PhotoCard
 import de.wanderlogplus.app.ui.design.PhotoCardStyle
 import de.wanderlogplus.app.ui.design.ScreenTab
 import de.wanderlogplus.app.ui.design.heroImageUrl
+import de.wanderlogplus.app.ui.design.roomPhotoOf
+import de.wanderlogplus.app.ui.design.heroImage
 import de.wanderlogplus.app.ui.design.routeTitle
 import de.wanderlogplus.app.ui.design.viaLine
 import de.wanderlogplus.app.ui.design.timesOf
@@ -337,7 +339,7 @@ private fun StaysTab(snapshot: TripSnapshot, stays: List<LogisticsEntry.StayEntr
             PhotoCard(
                 title = e.name,
                 subtitle = stayPeriod(s),
-                imageUrl = s.heroImage(snapshot.places[s.placeId]),
+                imageUrl = s.heroImage(snapshot.places[s.placeId], snapshot.roomPhotoOf(s.id)),
                 placeholderSymbol = "🏨",
                 accent = region?.let { regionColor(it.color) } ?: fallback,
                 style = PhotoCardStyle.Large,

@@ -3,6 +3,15 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.69.0
+
+- **Mehr-Menü in drei Gruppen:** Reise (Guides, Notizen), KI (Reels auswerten, KI-Aufträge, KI-Kriterien), Verwaltung (Import, Konflikte, Guthaben & Limits, Einstellungen).
+- **Regionsliste:** Liste/Karte als ein Symbol oben im Titelbild statt einer eigenen Zeile; kürzere Filter („Sehenswert“, „Nachtleben“); „Idee“ steht nicht mehr an jeder Karte – der Punkt reicht, andere Status bleiben beschriftet.
+- **Orte weit außerhalb ihrer Region:** In der Regionsliste weist ein Hinweis auf Orte hin, die mehr als 50 km von der Mitte der Region liegen (z. B. Kōyasan in „Osaka“), mit Vorschlag für die passendere Region und „Verschieben“ pro Ort. Nichts wird automatisch verschoben.
+- **Öffnungszeiten:** Gleiche Zeiten an allen Tagen als eine Zeile („Täglich 09:30–18:00“), ganz unbekannte als „Öffnungszeiten unbekannt“.
+- **Titelbild von Unterkünften:** Ohne eigenes Titelbild zeigt eine Unterkunft ein markiertes Zimmerfoto (statt des ersten Google-Fotos).
+- **Tabelog-Karte:** hängt nie mehr bei „wird geladen“ fest – „In Tabelog suchen“ ist immer da; Restaurants ohne Position sagen, warum es keinen Abgleich gibt, und bieten „Tabelog-Link setzen“.
+
 ## 0.68.0
 
 - **„Heute“ ohne Doppelungen:** Was die Jetzt-Karte zeigt (aktueller und nächster Programmpunkt), steht nicht mehr noch einmal in der Liste darunter. Notizen im Programm erscheinen leise (klein, kursiv) als Anmerkung.

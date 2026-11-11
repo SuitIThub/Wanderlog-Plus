@@ -50,6 +50,17 @@ class HeaderImagesAndLinksTest {
         assertNull(SavedPlace("x", "p").heroImage(null))
     }
 
+    @Test fun aStayWithoutOwnHeaderShowsARoomPhoto() {
+        val place = Place("p", imageKeys = listOf("k1"))
+        val room = de.wanderlogplus.shared.model.Attachment("a1", de.wanderlogplus.shared.sync.EntityType.STAY, "st", "roomhash", kind = "photo", label = de.wanderlogplus.shared.model.Attachment.LABEL_ROOM)
+        HeaderImages.resolver = { if (it == "att:roomhash") "file:///photos/room" else null }
+        assertEquals("file:///photos/room", de.wanderlogplus.shared.model.Stay("st", "p").heroImage(place, room))
+        // An own header wins; without a room photo the hotel's image stays.
+        HeaderImages.resolver = { when (it) { "att:roomhash" -> "file:///photos/room"; "att:own" -> "file:///photos/own"; else -> null } }
+        assertEquals("file:///photos/own", de.wanderlogplus.shared.model.Stay("st", "p", headerImage = "att:own").heroImage(place, room))
+        assertEquals(placeImageUrl("k1"), de.wanderlogplus.shared.model.Stay("st", "p").heroImage(place, null))
+    }
+
     @Test fun urlsGetAScheme() {
         assertEquals("https://booking.com/x", normalizeUrl(" booking.com/x "))
         assertEquals("http://a.b", normalizeUrl("http://a.b"))

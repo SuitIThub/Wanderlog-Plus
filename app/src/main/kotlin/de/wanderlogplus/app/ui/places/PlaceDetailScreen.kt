@@ -280,7 +280,7 @@ fun PlaceDetailScreen(
 
         when (tab) {
             TAB_INFO -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (place != null && de.wanderlogplus.shared.model.isRestaurant(saved, place)) {
+                if (place != null && (saved.category == PlaceCategory.FOOD || saved.category == PlaceCategory.NIGHTLIFE)) {
                     val context = androidx.compose.ui.platform.LocalContext.current
                     TabelogCard(
                         info = place.tabelog,
@@ -289,6 +289,7 @@ fun PlaceDetailScreen(
                         onSetLink = onTabelogRequest?.let { r -> { url: String -> r(place.id, url) } },
                         onSearch = { builtIn.firstOrNull { it.kind == LinkKind.TABELOG }?.let { onOpenLink?.invoke(it) } },
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        hasPosition = !(place.lat == 0.0 && place.lng == 0.0),
                     )
                 }
 

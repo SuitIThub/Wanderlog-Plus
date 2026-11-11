@@ -75,6 +75,8 @@ fun HeroHeader(
     onTitleOverflow: ((Boolean) -> Unit)? = null,
     /** "Titelbild ändern"; null hides the button. */
     onChangeImage: (() -> Unit)? = null,
+    /** One more button on top (e.g. list/map); null hides it. */
+    action: HeroAction? = null,
 ) {
     Box(modifier.fillMaxWidth().height(height).testTag("hero")) {
         PhotoOrGradient(imageUrl, accent, "hero-fallback", Modifier.matchParentSize(), gradient = heroGradient(accent))
@@ -84,9 +86,10 @@ fun HeroHeader(
             HeroButton(Icons.AutoMirrored.Filled.ArrowBack, "Zurück", onBack, "hero-back", Modifier.align(Alignment.TopStart))
         }
         val openChat = LocalOpenChat.current
-        if (onEdit != null || openChat != null || onChangeImage != null) {
+        if (onEdit != null || openChat != null || onChangeImage != null || action != null) {
             Row(Modifier.align(Alignment.TopEnd)) {
                 if (openChat != null) HeroButton(Icons.AutoMirrored.Filled.Chat, "Reise-Chat", openChat, "hero-chat", Modifier)
+                if (action != null) HeroButton(action.icon, action.label, action.onClick, action.tag, Modifier)
                 if (onChangeImage != null) HeroButton(Icons.Filled.Image, "Titelbild ändern", onChangeImage, "hero-image", Modifier)
                 if (onEdit != null) HeroButton(Icons.Filled.Edit, "Bearbeiten", onEdit, "hero-edit", Modifier)
             }
@@ -156,3 +159,6 @@ private fun HeroChip(text: String) {
         )
     }
 }
+
+/** An extra round button in a [HeroHeader]. */
+data class HeroAction(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val tag: String, val onClick: () -> Unit)

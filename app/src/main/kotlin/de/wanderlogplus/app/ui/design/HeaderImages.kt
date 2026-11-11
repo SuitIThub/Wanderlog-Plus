@@ -27,5 +27,10 @@ object HeaderImages {
 /** The header of a saved place: its own image, else the place's first image. */
 fun SavedPlace?.heroImage(place: Place?): String? = HeaderImages.url(this?.headerImage) ?: place?.heroImageUrl()
 
-/** The header of a stay: its own image, else the hotel's first image. */
-fun Stay?.heroImage(place: Place?): String? = HeaderImages.url(this?.headerImage) ?: place?.heroImageUrl()
+/** The header of a stay: its own image, else a photo marked as room photo, else the hotel's first image. */
+fun Stay?.heroImage(place: Place?, roomPhoto: de.wanderlogplus.shared.model.Attachment? = null): String? =
+    HeaderImages.url(this?.headerImage) ?: roomPhoto?.let { HeaderImages.url(HeaderImages.OWN + it.fileHash) } ?: place?.heroImageUrl()
+
+/** The first photo of a stay marked as room photo; null without one. */
+fun de.wanderlogplus.client.TripSnapshot.roomPhotoOf(stayId: String): de.wanderlogplus.shared.model.Attachment? =
+    photosFor(de.wanderlogplus.shared.sync.EntityType.STAY, stayId).firstOrNull { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM }
