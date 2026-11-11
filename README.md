@@ -95,7 +95,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - Unter Mehr → Guides: Themen wie Japanisch für unterwegs, Onsen, Im Restaurant bestellen (mit Omakase, Izakaya, Ramen), Shinkansen, Tempel & Schreine. Die App schlägt vor, was Orte, Unterkünfte und Fahrten berühren; abhaken und „Ausgewählte erstellen“. Abgelehnte Themen kommen nicht wieder. Alles liegt offline auf dem Gerät.
 - Jeder Guide hat das Wichtigste vorn, Tun- und Lassen-Listen und Sätze auf Japanisch mit Lautschrift, zum Vorlesen und groß zum Hinhalten. Unten steht „Zuletzt recherchiert“.
 - Chips an Orten, Unterkünften, Fahrten und Tagen (lange drücken blendet ihn hier aus, Plus heftet ihn an). Auf der Heute-Seite steht „Für heute“.
-- **Apps & Links:** Erwähnt ein Guide eine App oder Webseite, steht sie als Chip im Guide und überall, wo der Guide gezeigt wird. Eine installierte App öffnet sich direkt, sonst ihr Play-Store-Eintrag; Webseiten im Browser. Der Server prüft jeden Link (Seite erreichbar, Play-Store-Eintrag vorhanden). „Links ergänzen“ (Menü der Guide-Übersicht) trägt sie für bestehende Guides nach.
+- **Apps & Links:** Erwähnt ein Guide eine App oder Webseite, steht sie als Chip im Guide. Eine installierte App öffnet sich direkt, sonst ihr Play-Store-Eintrag; Webseiten im Browser. Der Server prüft jeden Link (Seite erreichbar, Play-Store-Eintrag vorhanden). „Links ergänzen“ (Menü der Guide-Übersicht) trägt sie für bestehende Guides nach.
 
 ### KI-Kriterien und Ablauf
 

@@ -372,7 +372,6 @@ fun GuidesSection(snapshot: TripSnapshot, target: GuideTarget, onOpenGuide: (Str
             onHide = actions?.let { a -> { id: String -> a.hide(id, target) } },
             onAdd = if (actions != null && others.isNotEmpty()) ({ picking = true }) else null,
         )
-        GuideLinkChips(remember(shown) { de.wanderlogplus.shared.guide.GuideLinks.union(shown) })
     }
     if (picking && actions != null) {
         AlertDialog(

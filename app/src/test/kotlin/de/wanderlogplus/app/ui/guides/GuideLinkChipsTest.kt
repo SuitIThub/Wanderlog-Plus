@@ -42,7 +42,7 @@ class GuideLinkChipsTest {
         EntityRecord(type, id, fields.mapValues { (_, v) -> FieldValue(v, Hlc(1, 0, "a").encode()) })
 
     @Test
-    fun guidesSectionShowsTheLinksOfItsGuidesOnce() {
+    fun guidesSectionShowsNoLinks() {
         val snapshot = TripSnapshot.from(
             listOf(
                 rec(EntityType.PLACE, "p-ryo", EntityCodec.fields(Place("p-ryo", name = "Tsutaya Ryokan"))),
@@ -52,9 +52,9 @@ class GuideLinkChipsTest {
             ),
         )
         rule.setContent { WanderlogPlusTheme { GuidesSection(snapshot, GuideTarget(GuideTargetType.STAY, "st"), onOpenGuide = {}) } }
-        rule.onNodeWithTag("guide-links").assertExists()
-        rule.onAllNodesWithTag("guide-link", useUnmergedTree = true).assertCountEquals(2)
-        rule.onNodeWithText("Japan Transit").assertExists()
+        // Links belong to the guide page only: on a stay they were too many and mostly unrelated.
+        rule.onNodeWithTag("guides-section").assertExists()
+        rule.onNodeWithTag("guide-links").assertDoesNotExist()
     }
 
     @Test
@@ -64,7 +64,7 @@ class GuideLinkChipsTest {
     }
 
     @Test
-    fun todayWidgetShowsLinksOfOpenGuides() {
+    fun todayWidgetShowsNoLinks() {
         val open = Guide("a", title = "Shinkansen", links = listOf(transit))
         val done = Guide("b", title = "Vorbei", links = listOf(jg))
         rule.setContent {
@@ -72,8 +72,7 @@ class GuideLinkChipsTest {
                 TodayGuidesWidget(listOf(DayGuide(open, 600, false), DayGuide(done, 300, true)), suggested = 0, accent = Color.Blue, onOpenGuide = {}, onSuggestions = null)
             }
         }
-        rule.onNodeWithText("Japan Transit").assertExists()
-        rule.onNodeWithText("japan-guide").assertDoesNotExist()
+        rule.onNodeWithText("Japan Transit").assertDoesNotExist()
     }
 
     @Test
