@@ -370,7 +370,8 @@ class AiJobs(
     }
 
     /**
-     * Writes one research result into the trip: dossier, worth, verdict and (only where empty) the place description.
+     * Writes one research result into the trip: dossier, worth, verdict and the place description where there is none or
+     * the old one is not German.
      * A newer or the same research already stored is kept. Returns whether anything was written.
      */
     private fun writeDossier(r: DossierResult): Boolean {
@@ -386,7 +387,11 @@ class AiJobs(
         val edits = mutableListOf(ServerEdit(EntityType.SAVED_PLACE, r.savedPlaceId, fields))
         val placeId = (saved.fields["placeId"]?.value as? JsonPrimitive)?.contentOrNull
         if (placeId != null && r.description.isNotBlank()) {
-            edits += ServerEdit(EntityType.PLACE, placeId, mapOf("description" to JsonPrimitive(r.description)), onlyIfEmpty = setOf("description"))
+            // A description of its own stays; one that is not German (from the Wanderlog import) gets the German one.
+            val existing = (store.get(EntityType.PLACE, placeId)?.fields?.get("description")?.value as? JsonPrimitive)?.contentOrNull
+            if (replacesDescription(existing, r.description)) {
+                edits += ServerEdit(EntityType.PLACE, placeId, mapOf("description" to JsonPrimitive(r.description)))
+            }
         }
         return write(edits) > 0
     }

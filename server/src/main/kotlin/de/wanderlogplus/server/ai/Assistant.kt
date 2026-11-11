@@ -412,7 +412,7 @@ class OpenRouterResearcher(private val model: ChatModel) : PlaceResearcher {
 }
 
 /** The JSON shape both researchers ask for. */
-internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was der Ort ist und was ihn ausmacht",
+internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze auf Deutsch, was der Ort ist und was ihn ausmacht",
 "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER",
 "criteria": [{"key": "Kriterium", "score": 1-5, "note": "kurz"}], "worth": "MUST|WORTH|OPTIONAL|SKIP", "verdict": "Gesamtfazit, 1–2 Sätze",
 "insiderTips": ["Geheimtipps, höchstens 4"], "hiddenSpots": ["versteckte Ecken oder kleine Orte in der Nähe, höchstens 4"],
@@ -421,6 +421,7 @@ internal const val RESEARCH_JSON_SHAPE = """{"description": "2–4 Sätze, was d
 "reservation": {"need": "REQUIRED|RECOMMENDED|NOT_NEEDED|UNKNOWN", "opensDaysBefore": "Zahl oder null", "opensOn": "yyyy-MM-dd oder null", "byDaysBefore": "Zahl oder null", "note": "ein Satz, Deutsch"}}
 reservation: ob man reservieren oder Tickets vorab kaufen muss (REQUIRED), es sich empfiehlt (RECOMMENDED) oder nicht nötig ist (NOT_NEEDED); UNKNOWN, wenn unklar. opensDaysBefore: die Buchung öffnet so viele Tage vor dem Besuch; opensOn: feste Freischaltung an einem Datum; byDaysBefore: spätestens so viele Tage vorher reservieren (weil es sonst ausgebucht ist). Nur angeben, was du gefunden hast, sonst null.
 nearbyPoints: höchstens 6 konkrete Punkte, die zum Ort gehören oder direkt daneben liegen (weitere Eingänge/Tore, Aussichtspunkte, die versteckten Ecken, nächster Bahnhof). lat/lng nur, wenn du sie sicher kennst, sonst 0.
+Alle Texte auf Deutsch, auch wenn die Quellen englisch oder japanisch sind (Namen dürfen bleiben).
 Hat der Ort mehrere Filialen: Schreibe über die Filiale, die Stadtteil und Hinweise meinen, und nenne höchstens 3 andere Filialen derselben Stadt als nearbyPoints mit kind "branch" (Name mit Stadtteil, z. B. „Stand Fuji Ebisu“)."""
 
 internal fun researchPrompt(q: ResearchQuery) = buildString {
