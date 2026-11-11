@@ -74,6 +74,20 @@ class TripQueries(
     /** The region [date] gets from its stay, ignoring any manual override ("Automatisch"). */
     fun derivedRegionFor(date: String): String? = stayFor(date)?.regionId
 
+    /**
+     * Places of [date]'s region (and its day trips) that may be visited now: ideas, noted and planned ones (planned
+     * for another day count too), without the day's own program.
+     */
+    fun openNowCandidatesFor(date: String): List<SavedPlace> {
+        val r = regionFor(date) ?: return emptyList()
+        val regionIds = regions.filter { it.dayTripFromRegionId == r }.map { it.id }.toSet() + r
+        val dayId = dayByDate[date]?.id
+        val today = dayItems.filter { it.kind == DayItemKind.PLACE && it.dayId == dayId }.mapNotNull { it.placeId }.toSet()
+        return savedPlaces.filter {
+            it.regionId in regionIds && it.status in setOf(PlaceStatus.IDEA, PlaceStatus.SHORTLIST, PlaceStatus.PLANNED) && it.placeId !in today
+        }
+    }
+
     fun suggestionsFor(date: String): List<SavedPlace> {
         val r = regionFor(date) ?: return emptyList()
         val regionIds = regions.filter { it.dayTripFromRegionId == r }.map { it.id }.toSet() + r

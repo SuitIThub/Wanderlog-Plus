@@ -62,6 +62,7 @@ import de.wanderlogplus.shared.model.Attachment
 import de.wanderlogplus.shared.model.Place
 import de.wanderlogplus.shared.model.Stay
 import de.wanderlogplus.shared.query.DayNow
+import de.wanderlogplus.shared.query.DayStep
 import de.wanderlogplus.shared.query.Suggestion
 import de.wanderlogplus.shared.query.TodayQueries
 import de.wanderlogplus.shared.query.TodayState
@@ -212,12 +213,15 @@ private fun During(
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
     val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date) }
     val ideaDeadlines = remember(snapshot, date) { ideaDeadlineRows(snapshot, date) }
-    val openNow = remember(snapshot, date, now) {
+    val openNow = remember(snapshot, date, now, dayNow, stayPlace) {
         val dow = now.dayOfWeek.value % 7 // 0 = Sunday
         val time = now.format(HH_MM)
         val planned = view.day?.let { d -> snapshot.dayItemsFor(d.id).mapNotNull { it.placeId }.toSet() }.orEmpty()
-        val all = snapshot.queries()?.suggestionsFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
-        sortSuggestions(all.filter { it.saved.placeId !in planned && isOpenAt(it.place?.openingPeriods.orEmpty(), dow, time) != false }).take(MAX_OPEN_NOW)
+        val all = snapshot.queries()?.openNowCandidatesFor(date).orEmpty().map { Suggestion(it, snapshot.places[it.placeId]) }
+        // Where you are: the current or next stop, else tonight's stay.
+        val anchor = ((dayNow.current ?: dayNow.next) as? DayStep.Visit)?.place?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) } ?: stayPlace
+        val open = sortSuggestions(all.filter { it.saved.placeId !in planned && isOpenAt(it.place?.openingPeriods.orEmpty(), dow, time) == true })
+        openNowRows(open, anchor, dow, nowMin, MAX_OPEN_NOW)
     }
     val weather = LocalTripWeather.current
     val todayWeather = weather?.forDate(date)
