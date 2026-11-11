@@ -9,11 +9,13 @@ RUN gradle :server:installDist --no-daemon
 FROM eclipse-temurin:17-jre
 # ffmpeg zerlegt Reels in Einzelbilder und Ton, yt-dlp lädt sie, gallery-dl lädt Bild-Posts und Galerien. Beide kommen
 # bewusst als aktuelle Release-Datei statt aus apt: Instagram ändert sich oft, ältere Versionen scheitern dann. Neu bauen
-# holt neue Versionen.
+# holt neue Versionen. gallery-dl liegt auf Codeberg (die GitHub-Releases haben keine Dateien mehr); Codeberg kennt kein
+# "latest" in Download-Links, daher wird die neueste Version über die API ermittelt.
 RUN apt-get update && apt-get install -y --no-install-recommends curl ffmpeg ca-certificates \
     && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
     && chmod 755 /usr/local/bin/yt-dlp \
-    && curl -fsSL https://github.com/mikf/gallery-dl/releases/latest/download/gallery-dl.bin -o /usr/local/bin/gallery-dl \
+    && GDL_TAG=$(curl -fsSL https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest | grep -o '"tag_name":"[^"]*"' | cut -d'"' -f4) \
+    && curl -fsSL "https://codeberg.org/mikf/gallery-dl/releases/download/${GDL_TAG}/gallery-dl.bin" -o /usr/local/bin/gallery-dl \
     && chmod 755 /usr/local/bin/gallery-dl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin wlp \
