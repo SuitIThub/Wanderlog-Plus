@@ -3,6 +3,7 @@ package de.wanderlogplus.app.ui.places
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Restaurant
@@ -11,6 +12,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -67,3 +71,38 @@ fun RatingStrip(place: Place?, saved: SavedPlace, modifier: Modifier = Modifier)
         }
     }
 }
+
+/**
+ * The place's status as one small chip ("● Idee ▾"); a tap opens the five statuses. Replaces the row of five
+ * buttons: it is changed rarely. Tags `status-chip`, `status-option-<STATUS>`.
+ */
+@Composable
+fun StatusChip(status: de.wanderlogplus.shared.model.PlaceStatus, onSet: (de.wanderlogplus.shared.model.PlaceStatus) -> Unit) {
+    var open by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Box {
+        androidx.compose.material3.AssistChip(
+            onClick = { open = true },
+            label = { Text(de.wanderlogplus.app.ui.statusLabel(status)) },
+            leadingIcon = {
+                androidx.compose.foundation.layout.Box(
+                    Modifier.size(10.dp).androidxBackground(statusColor(status)),
+                )
+            },
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            modifier = Modifier.testTag("status-chip"),
+        )
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            de.wanderlogplus.shared.model.PlaceStatus.entries.forEach { s ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(de.wanderlogplus.app.ui.statusLabel(s)) },
+                    leadingIcon = { androidx.compose.foundation.layout.Box(Modifier.size(10.dp).androidxBackground(statusColor(s))) },
+                    onClick = { open = false; onSet(s) },
+                    modifier = Modifier.testTag("status-option-${s.name}"),
+                )
+            }
+        }
+    }
+}
+
+private fun Modifier.androidxBackground(c: androidx.compose.ui.graphics.Color) =
+    this.then(Modifier.background(c, androidx.compose.foundation.shape.CircleShape))

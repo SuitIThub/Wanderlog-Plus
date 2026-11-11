@@ -61,12 +61,14 @@ class GoogleLinkTest {
     }
 
     @Test
-    fun linkedPlaceShowsAddress() {
+    fun linkedPlaceShowsACompactLine() {
         val s = Fixtures.trip().let { t -> t.copy(places = t.places + ("p-nudel" to t.places.getValue("p-nudel").copy(googlePlaceId = "g1", address = "Shijo 5, Kyoto"))) }
         rule.setContent {
             WanderlogPlusTheme { PlaceDetailScreen(s, "s-nudel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, googleSearch = { _, _ -> emptyList() }, onLinkGoogle = { _, _, _ -> }) }
         }
-        rule.onNode(androidx.compose.ui.test.hasText("Shijo 5, Kyoto", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("google-link"))).assertExists()
+        // On the place page the Google row is one line; the address stands under "Details", not twice.
+        rule.onNode(androidx.compose.ui.test.hasText("verknüpft", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("google-link"))).assertExists()
+        rule.onNode(androidx.compose.ui.test.hasText("Shijo 5, Kyoto", substring = true) and androidx.compose.ui.test.hasAnyAncestor(androidx.compose.ui.test.hasTestTag("google-link"))).assertDoesNotExist()
         rule.onNodeWithText("Ändern").assertExists()
     }
 

@@ -206,9 +206,6 @@ fun PlaceDetailScreen(
 
     val fileCount = snapshot.attachmentsFor(EntityType.SAVED_PLACE, saved.id).size
 
-    // The one-line hero cuts long names; the full name then opens the details below it.
-    var titleCut by remember(saved.id) { mutableStateOf(false) }
-
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("place-detail")) {
         HeroHeader(
             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
@@ -219,8 +216,7 @@ fun PlaceDetailScreen(
             onBack = onBack,
             onEdit = { editingTags = true },
             onChangeImage = onSetHeaderImage?.let { { choosingImage = true } },
-            titleMaxLines = 1,
-            onTitleOverflow = { titleCut = it },
+            titleMaxLines = 2,
             modifier = if (onOpenSibling == null) Modifier else Modifier.pointerInput(saved.id, snapshot) {
                 var dx = 0f
                 detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
@@ -231,36 +227,22 @@ fun PlaceDetailScreen(
         )
 
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            place?.name?.takeIf { titleCut && it.isNotBlank() }?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.testTag("place-full-name"),
-                )
-            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                place?.let(::ratingText)?.let { Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
-                Text(
-                    categoryLabel(saved.category),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        categoryLabel(saved.category),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    RatingStrip(place, saved)
+                }
+                StatusChip(saved.status) { s -> if (saved.status != s) onSetStatus(saved.id, s) }
             }
             if (saved.tags.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     saved.tags.forEach { Badge(tagBadge(it)) }
-                }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("status-chips")) {
-                PlaceStatus.entries.forEach { s ->
-                    FilterChip(
-                        selected = saved.status == s,
-                        onClick = { if (saved.status != s) onSetStatus(saved.id, s) },
-                        label = { Text(statusLabel(s)) },
-                    )
                 }
             }
             val votes = snapshot.votes.filter { it.savedPlaceId == saved.id }
@@ -285,43 +267,6 @@ fun PlaceDetailScreen(
 
         val builtIn = remember(place, saved.category) { place?.let { GoogleExternalLinks.linksFor(it, saved.category) }.orEmpty() }
         de.wanderlogplus.app.ui.design.LinkRow(builtIn, saved.links, onOpenLink, onSetLinks?.let { set -> { l: List<de.wanderlogplus.shared.model.CustomLink> -> set(saved.id, l) } })
-        place?.let { p ->
-            GoogleLinkRow(
-                p, listOfNotNull(p.name.ifBlank { null }, region?.name).joinToString(" "), googleSearch.takeIf { onLinkGoogle != null },
-                onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
-                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
-
-        if (place != null && de.wanderlogplus.shared.model.isRestaurant(saved, place)) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            TabelogCard(
-                info = place.tabelog,
-                onOpen = { de.wanderlogplus.app.links.openTabelog(context, place.tabelog?.englishUrl().orEmpty()) },
-                onRefresh = onTabelogRequest?.let { r -> { r(place.id, null) } },
-                onSetLink = onTabelogRequest?.let { r -> { url: String -> r(place.id, url) } },
-                onSearch = { builtIn.firstOrNull { it.kind == LinkKind.TABELOG }?.let { onOpenLink?.invoke(it) } },
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
-
-        if (onOpenMap != null) {
-            val points = remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
-            PlaceMapCard(points, accent, onOpenMap, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
-        }
-
-        de.wanderlogplus.app.ui.guides.LocalOpenGuide.current?.let { open ->
-            de.wanderlogplus.app.ui.guides.GuidesSection(
-                snapshot, de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.PLACE, saved.id), open,
-                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
-
-        de.wanderlogplus.app.ui.budget.CostsSection(
-            snapshot, saved.id, today ?: java.time.LocalDate.now().toString(), accent,
-            Modifier.padding(horizontal = 16.dp),
-        )
-
         PrimaryScrollableTabRow(selectedTabIndex = tab, modifier = Modifier.padding(top = 4.dp), edgePadding = 8.dp) {
             ScreenTab("Info", tab == TAB_INFO, "tab-info") { tab = TAB_INFO }
             ScreenTab("Einschätzung", tab == TAB_ASSESS, "tab-assessment") { tab = TAB_ASSESS }
@@ -334,7 +279,47 @@ fun PlaceDetailScreen(
         }
 
         when (tab) {
-            TAB_INFO -> PlaceInfoTab(place, accent, today, saved)
+            TAB_INFO -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (place != null && de.wanderlogplus.shared.model.isRestaurant(saved, place)) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    TabelogCard(
+                        info = place.tabelog,
+                        onOpen = { de.wanderlogplus.app.links.openTabelog(context, place.tabelog?.englishUrl().orEmpty()) },
+                        onRefresh = onTabelogRequest?.let { r -> { r(place.id, null) } },
+                        onSetLink = onTabelogRequest?.let { r -> { url: String -> r(place.id, url) } },
+                        onSearch = { builtIn.firstOrNull { it.kind == LinkKind.TABELOG }?.let { onOpenLink?.invoke(it) } },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+
+                PlaceInfoTab(place, accent, today, saved)
+                if (onOpenMap != null) {
+                    val points = remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
+                    PlaceMapCard(points, accent, onOpenMap, Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 4.dp))
+                }
+
+                de.wanderlogplus.app.ui.guides.LocalOpenGuide.current?.let { open ->
+                    de.wanderlogplus.app.ui.guides.GuidesSection(
+                        snapshot, de.wanderlogplus.shared.model.GuideTarget(de.wanderlogplus.shared.model.GuideTargetType.PLACE, saved.id), open,
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
+
+                de.wanderlogplus.app.ui.budget.CostsSection(
+                    snapshot, saved.id, today ?: java.time.LocalDate.now().toString(), accent,
+                    Modifier.padding(horizontal = 16.dp),
+                )
+
+                place?.let { p ->
+                    GoogleLinkRow(
+                        p, listOfNotNull(p.name.ifBlank { null }, region?.name).joinToString(" "), googleSearch.takeIf { onLinkGoogle != null },
+                        onLinkGoogle?.let { link -> { h: de.wanderlogplus.client.GeoPlace?, take: Boolean -> link(p.id, h, take) } },
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        compact = true,
+                    )
+                }
+
+            }
             TAB_ASSESS -> PlaceAssessmentTab(saved, accent, research)
             TAB_RESEARCH -> PlaceResearchTab(saved, accent, research)
             TAB_PHOTOS -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
