@@ -82,14 +82,14 @@ fun TabelogCard(
                     tabelogScoreText(info)?.let { Badge(BadgeSpec(it, if ((info.score ?: 0.0) >= 3.5) BadgeTone.Positive else BadgeTone.Neutral), Modifier.testTag("tabelog-score")) }
                     if (info.name.isNotBlank()) Text(listOf(info.name, info.genre).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodyMedium)
                     val budget = listOfNotNull(info.budgetLunch.takeIf { it.isNotBlank() }?.let { "Mittags $it" }, info.budgetDinner.takeIf { it.isNotBlank() }?.let { "Abends $it" })
-                    if (budget.isNotEmpty()) Text(budget.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                    if (info.reservation.isNotBlank()) Text("Reservierung: " + info.reservation, style = MaterialTheme.typography.bodySmall)
+                    if (budget.isNotEmpty()) Text(de.wanderlogplus.app.ui.euroed(budget.joinToString(" · ")), style = MaterialTheme.typography.bodySmall)
+                    if (info.reservation.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed("Reservierung: " + info.reservation), style = MaterialTheme.typography.bodySmall)
                     if (info.station.isNotBlank()) Text(info.station, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (info.hours.isNotBlank()) {
                         TextButton(onClick = { showHours = !showHours }) { Text(if (showHours) "Öffnungszeiten ausblenden" else "Öffnungszeiten (Tabelog)") }
                         if (showHours) Text(info.hours, style = MaterialTheme.typography.bodySmall)
                     }
-                    if (info.summary.isNotBlank()) Text(info.summary, style = MaterialTheme.typography.bodyMedium)
+                    if (info.summary.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(info.summary), style = MaterialTheme.typography.bodyMedium)
                     Button(onClick = onOpen, modifier = Modifier.fillMaxWidth().testTag("tabelog-open")) { Text("In Tabelog öffnen") }
                 }
                 TabelogStatus.NOT_FOUND -> {

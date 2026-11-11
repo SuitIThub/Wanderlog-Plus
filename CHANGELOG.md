@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.70.0
+
+- **Texte auf Deutsch:** Recherchen schreiben Beschreibungen jetzt immer auf Deutsch und ersetzen dabei importierte englische oder japanische Beschreibungen (eigene deutsche Texte bleiben). Unter Mehr → KI-Aufträge übersetzt „Texte auf Deutsch übersetzen“ einmalig alle vorhandenen nicht-deutschen Beschreibungen und die japanischen Angaben der Tabelog-Karten.
+- **Tabelog auf Deutsch:** Neue Tabelog-Einträge bekommen Genre, Reservierung, Öffnungszeiten und Bahnhof gleich auf Deutsch – im selben KI-Aufruf wie die Zusammenfassung.
+- **Yen in Euro:** Wo ein Preis in Yen steht (¥1,200, ￥1,000～￥1,999, 1500円, 3.000 Yen, 2万円), steht der Euro-Betrag dahinter („≈ 7 €“, bei Spannen „≈ 6–12 €“) – in der Tabelog-Karte, Beschreibungen, Einschätzung, Guides, Notizen, Zimmerinfos und im Chat. Der Kurs wird einmal am Tag geholt und auf dem Gerät gemerkt, offline gilt der letzte.
+
 ## 0.69.0
 
 - **Mehr-Menü in drei Gruppen:** Reise (Guides, Notizen), KI (Reels auswerten, KI-Aufträge, KI-Kriterien), Verwaltung (Import, Konflikte, Guthaben & Limits, Einstellungen).

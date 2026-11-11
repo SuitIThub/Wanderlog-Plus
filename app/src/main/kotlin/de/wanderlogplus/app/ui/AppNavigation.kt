@@ -493,6 +493,7 @@ fun AppNavigation(
             de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat,
             de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
             de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
+            LocalYenRate provides rememberYenRate(budgetVm?.let { vm -> suspend { vm.rate("JPY", null)?.rate } }),
             de.wanderlogplus.app.ui.guides.LocalGuideActions provides guidesVm,
             de.wanderlogplus.app.ui.guides.LocalGuideJobs provides guideJobs,
             de.wanderlogplus.app.ui.guides.LocalOpenGuide provides { id: String -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },

@@ -36,6 +36,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 
 ### Orte
 
+- **Texte auf Deutsch:** Recherchen schreiben deutsch und ersetzen nicht-deutsche importierte Beschreibungen; „Texte auf Deutsch übersetzen“ (Mehr → KI-Aufträge) übersetzt den Bestand einmalig, inklusive der Tabelog-Angaben.
 - **Bewertungszeile** unter jedem Ort in Regionsliste und Tagesvorschlägen, je mit eigenem kleinen Symbol: Stern = Google-Bewertung (mit Anzahl; auch die aus dem Wanderlog-Import sind Google-Werte), Besteck = Tabelog-Score, Funkeln = KI-Einschätzung (Muss, Lohnt, Wenn Zeit, Auslassen). Es steht nur, was bekannt ist.
 - Regionen mit Umschalter Liste | Karte. Bearbeitbar sind Notiz, Status, Tags (⭐/⚠️), Region und Kategorie. Status: Idee, Vorgemerkt, Geplant, Besucht, Verworfen.
 - **Abstimmen**: jeder Zugang gibt 👍 (+1), 👍👍 (+2, „will ich unbedingt“) oder 👎 (−2); nochmal tippen nimmt die Stimme zurück. Ab 2 Punkten wird aus einer Idee „Vorgemerkt“, darunter wieder eine Idee. Die Punktzahl steht in der Liste, die Namen unter dem Ort.
@@ -46,7 +47,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - **Recherchieren (KI)** für einen Ort, für eine Region oder aus der Übersicht für mehrere Regionen. Dort wählt man die Regionen und „Nur unrecherchierte“ oder „Alle“, mit Anzahl und Kostenhinweis. Die Regionen laufen nacheinander; verworfene Orte bleiben außen vor. „Fristen ändern“ am Ort bleibt bei einer neuen Recherche stehen.
 - **Ort löschen** nimmt ihn aus der Sammlung und aus allen Tagen; ein Wanderlog-Import holt ihn nicht zurück. Auf der Detailseite wischt man das Titelbild zum vorigen oder nächsten Ort derselben Region.
 - Links: Navigation und ÖPNV (Google Maps), Website, Anrufen, Tabelog (Essen und Nachtleben), dazu eigene Links.
-- **Tabelog** für Restaurants und Bars: Der Server sucht jeden gespeicherten Ort der Kategorie Essen oder Nachtleben bei Tabelog (über Apify, japanischer Name über Google) – einmal für den Bestand, danach automatisch für neue Orte, höchstens 20 je Viertelstunde. Treffer nur, wenn der Eintrag höchstens 300 m entfernt liegt und der Name passt. Am Ort steht eine Karte mit Score, Anzahl Bewertungen, Budget mittags/abends, Genre, Reservierung, Öffnungszeiten und einer deutschen Zusammenfassung der neuesten Bewertungen; „In Tabelog öffnen“ versucht zuerst die mehrsprachige Tabelog-App, sonst die englische Seite im Browser. Falscher oder fehlender Treffer: „Tabelog-Link setzen“. In Regionsliste und Tagesvorschlägen steht der Score in der Bewertungszeile. Kosten bei Apify etwa 1,5–2 Cent pro Restaurant.
+- **Tabelog** für Restaurants und Bars: Der Server sucht jeden gespeicherten Ort der Kategorie Essen oder Nachtleben bei Tabelog (über Apify, japanischer Name über Google) – einmal für den Bestand, danach automatisch für neue Orte, höchstens 20 je Viertelstunde. Treffer nur, wenn der Eintrag höchstens 300 m entfernt liegt und der Name passt. Am Ort steht eine Karte mit Score, Anzahl Bewertungen, Budget mittags/abends, Genre, Reservierung, Öffnungszeiten und einer deutschen Zusammenfassung der neuesten Bewertungen (die japanischen Angaben ebenfalls auf Deutsch); „In Tabelog öffnen“ versucht zuerst die mehrsprachige Tabelog-App, sonst die englische Seite im Browser. Falscher oder fehlender Treffer: „Tabelog-Link setzen“. In Regionsliste und Tagesvorschlägen steht der Score in der Bewertungszeile. Kosten bei Apify etwa 1,5–2 Cent pro Restaurant.
 
 ### Reels (KI)
 
@@ -81,6 +82,7 @@ Die Leiste hat **Heute**, **Reise**, **Orte**, **Logistik**, **Budget** und **Me
 - Eigener Tab: Gesamtsumme in Euro, was beim Anbieter noch offen ist, Summen nach Kategorie, pro Person bezahlt, Anteil und Saldo („bekommt“ / „schuldet“ / „ausgeglichen“).
 - **Ausgleich** schlägt vor, wer wem wie viel zahlt. „Als bezahlt eintragen“, „Teilbetrag“ oder „Komplett bezahlt“ hält die Zahlung fest; „Zahlung eintragen“ geht auch ohne Vorschlag.
 - **Kosten hinzufügen**: Betrag und Währung, Kategorie, Datum, Bezug (Unterkunft, Flug, Zug, Ort oder frei), wer bezahlt hat, Aufteilung gleich, nach Prozent oder nach Beträgen, schon zurückgezahlt, Status offen, angezahlt oder bezahlt. Die Aufteilung wird geprüft.
+- **Yen in Euro überall:** Hinter Yen-Preisen in Texten (Tabelog, Beschreibungen, Guides, Notizen, Chat …) steht der Euro-Betrag („¥1,200 (≈ 7 €)“, Spannen als „≈ 6–12 €“); Kurs einmal täglich, auf dem Gerät gemerkt.
 - Für Fremdwährungen schlägt die App den EZB-Kurs vor (Euro pro Einheit). Wechselt eine Kosten auf „bezahlt“, wird der Kurs dieses Tages einmal übernommen; ein von Hand gesetzter Kurs bleibt. Kosten ohne Kurs zählen nicht in die Summe.
 - **Personen** hinzufügen und umbenennen. Mitreisende, Zahler, Aufteilung, Ausgleichszahlungen und offene Kosten kommen aus Wanderlog; Änderungen in der App haben Vorrang, neue Wanderlog-Kosten kommen dazu.
 

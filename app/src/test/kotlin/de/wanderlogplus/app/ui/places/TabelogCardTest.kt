@@ -58,6 +58,18 @@ class TabelogCardTest {
         assertEquals(1, opened)
     }
 
+    @Test fun yenBudgetsShowEurosWhenARateIsKnown() {
+        val priced = found.copy(budgetLunch = "￥1,000～￥1,999", budgetDinner = "")
+        rule.setContent {
+            WanderlogPlusTheme {
+                androidx.compose.runtime.CompositionLocalProvider(de.wanderlogplus.app.ui.LocalYenRate provides 0.006) {
+                    TabelogCard(priced, onOpen = {}, onRefresh = {}, onSetLink = {}, onSearch = {})
+                }
+            }
+        }
+        rule.onNodeWithText("Mittags ￥1,000～￥1,999 (≈ 6–12 €)").assertExists()
+    }
+
     @Test fun notFoundOffersLinkAndSearch() {
         var searched = 0
         var retried = 0

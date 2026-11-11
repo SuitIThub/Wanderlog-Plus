@@ -215,7 +215,7 @@ fun GuideScreen(
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(g.title, style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
             GuideJobs.stateOf(g, jobs)?.let { GuideJobBanner(it) }
-            if (g.summary.isNotBlank()) SurfaceCard { Text(g.summary, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
+            if (g.summary.isNotBlank()) SurfaceCard { Text(de.wanderlogplus.app.ui.euroed(g.summary), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
             if (g.links.isNotEmpty()) {
                 Text("Apps & Links", fontWeight = FontWeight.SemiBold)
                 GuideLinkChips(g.links, showNotes = true)
@@ -224,7 +224,7 @@ fun GuideScreen(
                 SurfaceCard {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(s.heading, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
-                        if (s.text.isNotBlank()) Text(s.text)
+                        if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(s.text))
                         s.dos.forEach { DoLine(it, good = true) }
                         s.donts.forEach { DoLine(it, good = false) }
                     }

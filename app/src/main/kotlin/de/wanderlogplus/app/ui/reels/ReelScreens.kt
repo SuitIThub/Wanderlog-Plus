@@ -320,7 +320,7 @@ private fun ReelTipCard(
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = checked && tipSelectable(tip), onCheckedChange = onCheck, enabled = enabled, modifier = Modifier.testTag("reel-tip-$index"))
-                Text(tip.text.ifBlank { tip.claim }, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text(de.wanderlogplus.app.ui.euroed(tip.text.ifBlank { tip.claim }), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             }
             Badge(tipBadge(tip) { id -> guides.firstOrNull { it.id == id }?.title })
             if (tip.verdict == TipVerdict.PARTLY || tip.verdict == TipVerdict.FALSE) {

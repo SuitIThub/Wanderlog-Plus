@@ -90,7 +90,7 @@ internal fun PlaceAssessmentTab(saved: SavedPlace, accent: Color, action: Resear
                         Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("score-average"))
                     }
                 }
-                verdict?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("place-verdict")) }
+                verdict?.let { Text(de.wanderlogplus.app.ui.euroed(it), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag("place-verdict")) }
             }
         }
         val criteria = d?.criteria.orEmpty()
@@ -121,7 +121,7 @@ private fun CriterionRow(c: CriterionScore, accent: Color) {
             Text("${c.score}/5", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 8.dp))
         }
         if (c.note.isNotBlank()) {
-            Text(c.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(de.wanderlogplus.app.ui.euroed(c.note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

@@ -76,7 +76,7 @@ fun StayInfoCards(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Zimmer", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     if (room.type.isNotBlank()) Text(room.type, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    if (room.description.isNotBlank()) Text(room.description, style = MaterialTheme.typography.bodyMedium)
+                    if (room.description.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(room.description), style = MaterialTheme.typography.bodyMedium)
                     if (roomPhotos.isNotEmpty()) {
                         de.wanderlogplus.app.ui.attachments.PhotoGrid(roomPhotos, files, onAdd = null, onOpen = onOpenPhoto)
                     }
@@ -88,7 +88,7 @@ fun StayInfoCards(
             SurfaceCard(Modifier.testTag("stay-property")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Unterkunft", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    if (property.description.isNotBlank()) Text(property.description, style = MaterialTheme.typography.bodyMedium)
+                    if (property.description.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(property.description), style = MaterialTheme.typography.bodyMedium)
                     if (property.houseRules.isNotBlank()) Text("Hausregeln: " + property.houseRules)
                 }
             }
