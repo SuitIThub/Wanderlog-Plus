@@ -79,5 +79,83 @@
         </provider>
         <!-- "Reserviert" in a reservation reminder. -->
         <receiver android:name=".reminders.ReservationDoneReceiver" android:exported="false" />
+        <!-- Home screen widgets (Glance). -->
+        <receiver
+            android:name=".widgets.NextUpReceiver"
+            android:exported="true"
+            android:label="@string/widget_next_up_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_next_up" />
+        </receiver>
+        <receiver
+            android:name=".widgets.NextRideReceiver"
+            android:exported="true"
+            android:label="@string/widget_next_ride_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_next_ride" />
+        </receiver>
+        <receiver
+            android:name=".widgets.TodayReceiver"
+            android:exported="true"
+            android:label="@string/widget_today_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today" />
+        </receiver>
+        <receiver
+            android:name=".widgets.StayReceiver"
+            android:exported="true"
+            android:label="@string/widget_stay_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_stay" />
+        </receiver>
+        <receiver
+            android:name=".widgets.BudgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_budget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_budget" />
+        </receiver>
+        <receiver
+            android:name=".widgets.WeatherReceiver"
+            android:exported="true"
+            android:label="@string/widget_weather_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_weather" />
+        </receiver>
+        <receiver
+            android:name=".widgets.ChatReceiver"
+            android:exported="true"
+            android:label="@string/widget_chat_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_chat" />
+        </receiver>
     </application>
 </manifest>

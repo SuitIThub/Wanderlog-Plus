@@ -109,6 +109,17 @@ class SettingsStore(context: Context) : SyncStateStore {
         }
     }
 
+    private val lastJpyRateKey = stringPreferencesKey("last_jpy_rate")
+
+    /** The last fetched yen rate (euros per yen) and its day, for the budget widget offline. */
+    val lastJpyRate: Flow<de.wanderlogplus.app.widgets.StoredRate?> = appContext.serverDataStore.data.map { p ->
+        p[lastJpyRateKey]?.split('|')?.takeIf { it.size == 2 }?.let { (r, d) -> r.toDoubleOrNull()?.let { de.wanderlogplus.app.widgets.StoredRate(it, d) } }
+    }
+
+    suspend fun setLastJpyRate(rate: Double, date: String) {
+        appContext.serverDataStore.edit { it[lastJpyRateKey] = "$rate|$date" }
+    }
+
     /** Tests: empties the settings and sync state of the active profile. */
     internal suspend fun clearForTests() {
         appContext.serverDataStore.edit { it.clear() }

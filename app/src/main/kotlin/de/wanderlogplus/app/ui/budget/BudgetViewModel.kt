@@ -61,6 +61,8 @@ class BudgetViewModel(
     private val writeScope: CoroutineScope,
     private val api: suspend () -> SyncApi?,
     private val today: () -> String,
+    /** Every rate fetched (currency, rate); the app keeps the yen rate for the budget widget. */
+    private val onRate: suspend (String, RateInfo) -> Unit = { _, _ -> },
 ) : ViewModel(), BudgetActions {
     private val _message = MutableStateFlow<String?>(null)
 
@@ -72,7 +74,7 @@ class BudgetViewModel(
     }
 
     override suspend fun rate(currency: String, date: String?): RateInfo? = try {
-        api()?.rate(currency, date)
+        api()?.rate(currency, date)?.also { r -> runCatching { onRate(currency, r) } }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

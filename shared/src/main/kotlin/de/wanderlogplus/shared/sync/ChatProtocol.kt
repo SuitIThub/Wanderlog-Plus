@@ -145,7 +145,28 @@ data class ChatSendRequest(
     val location: ChatLocation? = null,
     /** The objects picked with "@" while typing; stored with the message. */
     val refs: List<ChatRef> = emptyList(),
+    /** A quick ask from the home screen widget: answer short, ranked places; used for this answer only, never stored. */
+    val quick: QuickAsk? = null,
 )
+
+/**
+ * A "Was jetzt?" ask from the widget: [kind] sight or food, local time [now] ("HH:mm"), and when the next planned
+ * program point starts ([freeUntil], "HH:mm") with its name and position – a guide for how much time there is.
+ */
+@Serializable
+data class QuickAsk(
+    val kind: String,
+    val now: String,
+    val freeUntil: String? = null,
+    val nextLabel: String? = null,
+    val nextLat: Double? = null,
+    val nextLng: Double? = null,
+) {
+    companion object {
+        const val KIND_SIGHT = "sight"
+        const val KIND_FOOD = "food"
+    }
+}
 
 /**
  * An object the user picked with "@" in a chat message: [type] (one of the constants), its [id] (saved place, stay,

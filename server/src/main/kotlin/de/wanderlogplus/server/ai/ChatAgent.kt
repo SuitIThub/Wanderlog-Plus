@@ -169,7 +169,37 @@ internal fun distanceText(km: Double): String =
     if (km < 1) "${(km * 1000).toInt() / 10 * 10} m" else String.format(Locale.GERMAN, if (km < 20) "%.1f km" else "%.0f km", km)
 
 /** Turns where the chat was opened into German prompt text. */
+/** [q] when it is usable (known kind, "HH:mm" times, sane labels and coordinates), else null; bad optional parts are dropped. */
+fun validQuick(q: de.wanderlogplus.shared.sync.QuickAsk?): de.wanderlogplus.shared.sync.QuickAsk? {
+    q ?: return null
+    val time = Regex("""([01]\d|2[0-3]):[0-5]\d""")
+    if (q.kind != de.wanderlogplus.shared.sync.QuickAsk.KIND_SIGHT && q.kind != de.wanderlogplus.shared.sync.QuickAsk.KIND_FOOD) return null
+    if (!time.matches(q.now)) return null
+    val latOk = q.nextLat?.let { it in -90.0..90.0 } == true && q.nextLng?.let { it in -180.0..180.0 } == true
+    return q.copy(
+        freeUntil = q.freeUntil?.takeIf { time.matches(it) },
+        nextLabel = q.nextLabel?.trim()?.take(120)?.takeIf { it.isNotEmpty() },
+        nextLat = q.nextLat.takeIf { latOk },
+        nextLng = q.nextLng.takeIf { latOk },
+    )
+}
+
 object ChatContextText {
+    /** The rules for a quick widget ask: short, ranked cards, the free time until the next program point as a guide. */
+    fun quick(q: de.wanderlogplus.shared.sync.QuickAsk): String = buildString {
+        val what = if (q.kind == de.wanderlogplus.shared.sync.QuickAsk.KIND_FOOD) "Essen" else "Sehenswürdigkeit"
+        append("\nSchnellfrage vom Widget (").append(what).append("), jetzt ").append(q.now).append(" Uhr: ")
+        append("Antworte kurz (2–4 Sätze). Schlage 2–5 passende Ziele als Karten vor, das beste zuerst. ")
+        append("Beachte Uhrzeit, Öffnungszeiten, Wetter, das restliche Programm und die Entfernung; ")
+        append("bevorzuge hinterlegte Orte, Web-Funde sind erlaubt.\n")
+        q.freeUntil?.let { until ->
+            append("Bis zum nächsten Programmpunkt").append(q.nextLabel?.let { " $it" } ?: "").append(" um ").append(until).append(" ist Zeit")
+            if (q.nextLat != null && q.nextLng != null) append(" (dort: Koordinaten ").append("%.5f,%.5f".format(java.util.Locale.ROOT, q.nextLat, q.nextLng)).append(")")
+            append(". Schlage vor, was samt Hin- und Weiterweg ungefähr in diese Zeit passt; das ist ein Richtwert, kein Muss – es ist Urlaub. ")
+            append("Ziele in Richtung des nächsten Punkts sind ein Plus.\n")
+        }
+    }
+
     /**
      * What the "@" mentions of a user message point to, as a block after the text; unknown objects are left out.
      * [detailed]: the newest message also gets each object's details, so the model need not look them up.
@@ -1366,13 +1396,20 @@ class ChatAgent(
 ) {
 
     /** Answers the last user message of [history] (the earlier ones are context). Blocking; throws [AiFailed]. */
-    fun answer(history: List<ChatMessage>, plain: ChatTrip, location: de.wanderlogplus.shared.sync.ChatLocation? = null, say: (String) -> Unit = {}): ChatAnswer {
+    fun answer(
+        history: List<ChatMessage>,
+        plain: ChatTrip,
+        location: de.wanderlogplus.shared.sync.ChatLocation? = null,
+        /** A quick ask from the home screen widget (this answer only). */
+        quick: de.wanderlogplus.shared.sync.QuickAsk? = null,
+        say: (String) -> Unit = {},
+    ): ChatAnswer {
         val trip = weather?.let { w -> try { plain.withWeather(w(plain, today())) } catch (e: Exception) { null } } ?: plain
         val last = history.lastOrNull { it.role == ChatMessage.ROLE_USER } ?: throw AiFailed("ai_bad_answer")
         val context = last.context ?: ChatContext()
         val here = location?.let { Anchor("Dein Standort", it.lat, it.lng) }
         val tools = ChatTools(trip, web, here ?: ChatContextText.anchor(context, trip, today()), geocoder, ways, here, guides, say)
-        val (stable, volatile) = systemParts(trip, context, location)
+        val (stable, volatile) = systemParts(trip, context, location, quick)
         val messages = mutableListOf(cachedSystem(stable, volatile))
         history.filter { it.role != ChatMessage.ROLE_ERROR }.takeLast(MAX_HISTORY).forEach { m ->
             messages += if (m.role == ChatMessage.ROLE_USER) {
@@ -1403,18 +1440,28 @@ class ChatAgent(
         throw AiFailed("ai_bad_answer")
     }
 
-    fun systemPrompt(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): String =
-        systemParts(trip, context, location).let { (a, b) -> a + b }
+    fun systemPrompt(
+        trip: ChatTrip,
+        context: ChatContext,
+        location: de.wanderlogplus.shared.sync.ChatLocation? = null,
+        quick: de.wanderlogplus.shared.sync.QuickAsk? = null,
+    ): String = systemParts(trip, context, location, quick).let { (a, b) -> a + b }
 
     /**
      * The system prompt in two parts: rules and trip data that only change with the trip (cached by the model provider),
      * then what changes per message (date, weather, screen, location).
      */
-    fun systemParts(trip: ChatTrip, context: ChatContext, location: de.wanderlogplus.shared.sync.ChatLocation? = null): Pair<String, String> =
+    fun systemParts(
+        trip: ChatTrip,
+        context: ChatContext,
+        location: de.wanderlogplus.shared.sync.ChatLocation? = null,
+        quick: de.wanderlogplus.shared.sync.QuickAsk? = null,
+    ): Pair<String, String> =
         stablePrompt(trip) to buildString {
             append(ChatContextText.weather(trip))
             append("Aktueller Kontext:\n").append(ChatContextText.current(context, trip, today()))
             location?.let { append(ChatContextText.location(it, trip)) }
+            quick?.let { append(ChatContextText.quick(it)) }
         }
 
     private fun stablePrompt(trip: ChatTrip): String = buildString {

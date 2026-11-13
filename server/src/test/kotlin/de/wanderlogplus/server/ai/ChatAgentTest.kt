@@ -602,4 +602,39 @@ class ChatAgentTest {
         val req = OpenRouterModel.toolRequestBody("m", listOf(buildJsonObject { put("role", "user"); put("content", "hi") }), JsonArray(listOf(JsonPrimitive("t"))))
         assertTrue(""""tools":["t"]""" in req)
     }
+
+    @Test
+    fun `a quick widget ask asks for ranked cards and weighs the free time`() {
+        val agent = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }
+        val ctx = ChatContext(ChatScreens.TODAY, date = "2027-05-19")
+        val free = agent.systemPrompt(trip, ctx, quick = de.wanderlogplus.shared.sync.QuickAsk("food", "14:05", "16:30", "Teamlab", 35.6, 139.7))
+        assertTrue("Essen" in free && "14:05" in free && "16:30" in free && "Teamlab" in free && "Richtwert" in free && "das beste zuerst" in free, free)
+        val open = agent.systemPrompt(trip, ctx, quick = de.wanderlogplus.shared.sync.QuickAsk("sight", "10:00"))
+        assertTrue("Sehenswürdigkeit" in open && "das beste zuerst" in open)
+        assertFalse("Richtwert" in open)
+        val plain = agent.systemPrompt(trip, ctx)
+        assertFalse("Schnellfrage" in plain || "Richtwert" in plain)
+    }
+
+    @Test
+    fun `answer passes the quick ask into the system prompt`() {
+        val model = ScriptedModel(listOf(text("Geh essen.")))
+        ChatAgent(model, null) { "2027-05-19" }.answer(
+            listOf(user("Wo kann ich jetzt gut essen?", ChatContext(ChatScreens.TODAY, date = "2027-05-19"))), trip,
+            quick = de.wanderlogplus.shared.sync.QuickAsk("food", "12:00"),
+        )
+        assertTrue("Schnellfrage" in systemText(model.seen.first()))
+    }
+
+    @Test
+    fun `invalid quick asks are dropped`() {
+        val ok = de.wanderlogplus.shared.sync.QuickAsk("food", "12:00", "13:30", "Tempel")
+        assertEquals(ok, validQuick(ok))
+        assertEquals(null, validQuick(ok.copy(kind = "dance")))
+        assertEquals(null, validQuick(ok.copy(now = "12 Uhr")))
+        assertEquals(ok.copy(freeUntil = null), validQuick(ok.copy(freeUntil = "später")))
+        assertEquals(120, validQuick(ok.copy(nextLabel = "x".repeat(400)))!!.nextLabel!!.length)
+        assertEquals(null, validQuick(ok.copy(nextLat = 200.0))!!.nextLat)
+        assertEquals(null, validQuick(null))
+    }
 }

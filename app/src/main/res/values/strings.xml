@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Wanderlog Plus</string>
+    <string name="widget_next_up_label">Als Nächstes</string>
+    <string name="widget_next_up_desc">Der nächste Programmpunkt mit Uhrzeit und Countdown</string>
+    <string name="widget_next_ride_label">Nächste Fahrt</string>
+    <string name="widget_next_ride_desc">Der nächste Zug oder Flug mit Gleis, Sitz und Ticket</string>
+    <string name="widget_today_label">Heute kompakt</string>
+    <string name="widget_today_desc">Der heutige Tag: Region, Unterkunft und Programm</string>
+    <string name="widget_stay_label">Unterkunft heute</string>
+    <string name="widget_stay_desc">Die Unterkunft für heute Nacht mit Adresse</string>
+    <string name="widget_budget_label">Yen &amp; Budget</string>
+    <string name="widget_budget_desc">Yen-Kurs, Umrechnung und heutige Ausgaben</string>
+    <string name="widget_weather_label">Wetter</string>
+    <string name="widget_weather_desc">Das Wetter der Region des Tages</string>
+    <string name="widget_chat_label">Reise-Chat</string>
+    <string name="widget_chat_desc">Reise-Chat und Empfehlungen für jetzt</string>
 </resources>

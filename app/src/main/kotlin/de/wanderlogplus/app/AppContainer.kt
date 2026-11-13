@@ -104,6 +104,14 @@ class AppContainer(context: Context) {
     val weather: de.wanderlogplus.app.weather.WeatherRepository by lazy {
         de.wanderlogplus.app.weather.WeatherRepository(api = { syncApi() }, file = File(appContext.filesDir, AppProfile.scoped(appContext, "weather.json")))
     }
+    /** Home screen widgets: redraw on changes, every 15 min and at the next boundary. */
+    val widgets: de.wanderlogplus.app.widgets.WidgetUpdater by lazy {
+        de.wanderlogplus.app.widgets.WidgetUpdater(
+            load = { de.wanderlogplus.app.widgets.loadWidgetInput(appContext, this) },
+            scheduler = de.wanderlogplus.app.widgets.WorkBoundaryScheduler(appContext),
+            redraw = de.wanderlogplus.app.widgets.androidRedraw(appContext),
+        )
+    }
     val legs: LegRepository by lazy { LegRepository(api = { syncApi() }, dir = File(appContext.filesDir, AppProfile.scoped(appContext, "legs"))) }
 
     val fileSyncRunner: FileSyncRunner by lazy {

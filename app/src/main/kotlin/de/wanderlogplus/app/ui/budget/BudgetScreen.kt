@@ -71,11 +71,25 @@ private sealed interface BudgetSheet {
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun BudgetScreen(snapshot: TripSnapshot, today: String, actions: BudgetActions, modifier: Modifier = Modifier) {
+fun BudgetScreen(
+    snapshot: TripSnapshot,
+    today: String,
+    actions: BudgetActions,
+    modifier: Modifier = Modifier,
+    /** Opens the form for a new cost in yen right away (from the budget widget's „+“); [onStartConsumed] then. */
+    startNewJpy: Boolean = false,
+    onStartConsumed: () -> Unit = {},
+) {
     val people = snapshot.trip?.travelers.orEmpty()
     val summary = remember(snapshot) { BudgetMath.summary(snapshot.expenses, people) }
     val targets = remember(snapshot) { costTargets(snapshot) }
     var sheet by remember { mutableStateOf<BudgetSheet?>(null) }
+    androidx.compose.runtime.LaunchedEffect(startNewJpy) {
+        if (startNewJpy) {
+            sheet = BudgetSheet.Edit(newExpense(snapshot, today).copy(currency = "JPY", category = de.wanderlogplus.shared.query.BudgetCategories.FOOD), true)
+            onStartConsumed()
+        }
+    }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var person by rememberSaveable { mutableStateOf<String?>(null) }
 
