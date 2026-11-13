@@ -63,6 +63,7 @@ fun isFinished(job: AiJobInfo) = job.status == "DONE" || job.status == "FAILED"
 /** What went wrong, in words the user can act on. */
 fun errorText(code: String?): String = when (code) {
     "download_failed" -> "Das Reel ließ sich nicht laden (privat oder von Instagram blockiert). Speichere es in Instagram und teile die Videodatei an die App."
+    "login_required" -> "Instagram zeigt diesen Beitrag nur angemeldet. Auf dem Server WLP_INSTAGRAM_SESSIONID setzen oder die Session-ID erneuern (sie läuft ab, wenn man sich in Instagram abmeldet)."
     "ai_not_configured" -> "Auf dem Server ist kein OpenRouter-Key eingetragen (WLP_OPENROUTER_KEY)."
     "ai_key_rejected" -> "OpenRouter hat den Key abgelehnt."
     "ai_no_credit" -> "Das OpenRouter-Guthaben ist aufgebraucht."

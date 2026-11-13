@@ -669,7 +669,8 @@ class AiJobs(
             }
             t.done { it.copy(candidates = candidates, tips = tips, progress = found.size) }
         } catch (e: DownloadFailed) {
-            t.fail("download_failed")
+            e.reasons.forEach { t.step("Laden fehlgeschlagen – $it", JobProgress.WARN) }
+            t.fail(if (e.loginRequired) "login_required" else "download_failed")
         } catch (e: AiFailed) {
             t.fail(e.code)
         } catch (e: Exception) {
@@ -756,6 +757,7 @@ class AiJobs(
         /** Short German reason for the log's last line (the app explains [code] in full). */
         fun failText(code: String): String = when (code) {
             "download_failed" -> "Reel ließ sich nicht laden"
+            "login_required" -> "Instagram verlangt eine Anmeldung"
             "ai_not_configured" -> "kein OpenRouter-Key"
             "ai_key_rejected", "research_key_rejected" -> "Key abgelehnt"
             "ai_no_credit", "research_no_credit" -> "Guthaben aufgebraucht"

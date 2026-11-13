@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.72.1
+
+- **Bild-Posts und Galerien mit Instagram-Anmeldung:** Auf dem Server reicht jetzt die Session-ID (`WLP_INSTAGRAM_SESSIONID` in `.env`); daraus wird die Cookies-Datei für die Downloader erzeugt. Eine falsch gesetzte `WLP_INSTAGRAM_COOKIES` blockiert Reels nicht mehr, sondern wird mit Warnung ignoriert.
+- **Warum ein Beitrag nicht lädt:** Scheitert das Laden, steht der Grund der Downloader im „Ablauf“. Verlangt Instagram eine Anmeldung, sagt die App das ausdrücklich und nennt die Abhilfe.
+
 ## 0.72.0
 
 - **Reel-Infos zum Ort statt eigener Guide:** Was ein Reel über einen oder zwei bestimmte Orte sagt (Ruhetag, bestes Gericht, Wartezeit), schlägt die Auswertung jetzt als „In Recherche: <Ort>“ vor statt als neuen Guide. Neue Guides gibt es nur noch für allgemeine Themen.

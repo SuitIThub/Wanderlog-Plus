@@ -116,4 +116,33 @@ class ReelMediaTest {
         val g = args.first { it.first() == "gallery-dl" }
         assertTrue("--range" in g && "--filesize-max" in g)
     }
+
+    @Test
+    fun `the failure keeps the tools' reasons`() {
+        val m = ToolReelMedia(tool = { a, _ ->
+            if (a.first() == "gallery-dl") ToolRun(false, "[instagram][error] HttpError: '401 Unauthorized' for 'https://www.instagram.com/api/v1/media/1/info/'")
+            else ToolRun(false, "ERROR: [Instagram] abc: There is no video in this post")
+        })
+        val e = kotlin.test.assertFailsWith<DownloadFailed> { m.download("https://www.instagram.com/p/abc/", Files.createTempDirectory("dl")) }
+        assertEquals(2, e.reasons.size)
+        assertTrue("401 Unauthorized" in e.reasons[0] && "https://" !in e.reasons[0], e.reasons[0])
+        assertTrue(e.loginRequired)
+    }
+
+    @Test
+    fun `toolReason takes the last error line without links`() {
+        assertEquals("ERROR: kaputt bei <Link>", toolReason("info: start\nERROR: kaputt bei https://x.y/z?a=1\nfertig"))
+        assertEquals("letzte Zeile", toolReason("eins\nletzte Zeile\n"))
+        assertNull(toolReason("  "))
+        assertEquals(200, toolReason("ERROR: " + "x".repeat(400))!!.length)
+    }
+
+    @Test
+    fun `login walls are recognised`() {
+        assertTrue(DownloadFailed(listOf("[instagram][error] Redirected to login page")).loginRequired)
+        assertTrue(DownloadFailed(listOf("HttpError: '401 Unauthorized'")).loginRequired)
+        assertTrue(DownloadFailed(listOf("ERROR: Requested content is not available, rate-limit reached or login required")).loginRequired)
+        assertTrue(!DownloadFailed(listOf("ERROR: There is no video in this post")).loginRequired)
+        assertTrue(!DownloadFailed().loginRequired)
+    }
 }

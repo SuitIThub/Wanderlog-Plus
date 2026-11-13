@@ -14,8 +14,28 @@ import kotlin.io.path.name
 import kotlin.io.path.readBytes
 import kotlin.io.path.readText
 
-/** The reel or post could not be downloaded (private, login wall, Instagram changed, no network). */
-class DownloadFailed : RuntimeException("download_failed")
+/**
+ * The reel or post could not be downloaded (private, login wall, Instagram changed, no network); [reasons] are the
+ * tools' last error lines, links removed.
+ */
+class DownloadFailed(val reasons: List<String> = emptyList()) : RuntimeException("download_failed") {
+    /** Instagram showed the post only to logged-in users (or wants a fresh login). */
+    val loginRequired: Boolean get() = reasons.any { r -> LOGIN_HINTS.any { it in r.lowercase() } }
+
+    private companion object {
+        val LOGIN_HINTS = listOf("login", "log in", "logged in", "401", "unauthorized", "checkpoint")
+    }
+}
+
+/** How a tool run went: [ok] on exit code 0; [error] its last error line, links removed (null when ok or silent). */
+data class ToolRun(val ok: Boolean, val error: String? = null)
+
+/** The line of a tool's output that says what went wrong: the last one with "error", else the last one; links removed, 200 characters at most. */
+internal fun toolReason(output: String): String? {
+    val lines = output.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val line = lines.lastOrNull { "error" in it.lowercase() } ?: lines.lastOrNull() ?: return null
+    return line.replace(Regex("""https?://\S+"""), "<Link>").take(200)
+}
 
 /**
  * What came down for a reel or post: its videos and pictures in gallery order and the text that came with it
@@ -81,9 +101,11 @@ class ToolReelMedia(
     private val galleryDl: String = "gallery-dl",
     /** Runs a tool (arguments, timeout in seconds), true on success; replaced in tests. */
     runner: ((List<String>, Long) -> Boolean)? = null,
+    /** Like [runner], with the tool's error line; replaced in tests. */
+    tool: ((List<String>, Long) -> ToolRun)? = null,
 ) : ReelMedia {
     private val json = Json { ignoreUnknownKeys = true }
-    private val runTool: (List<String>, Long) -> Boolean = runner ?: ::run
+    private val runTool: (List<String>, Long) -> ToolRun = tool ?: runner?.let { r -> { a, t -> ToolRun(r(a, t)) } } ?: ::runWithReason
 
     /**
      * Instagram posts (`/p/`) may be galleries mixing pictures and videos, where yt-dlp would bring only a video:
@@ -91,11 +113,12 @@ class ToolReelMedia(
      */
     override fun download(url: String, dir: Path): Downloaded {
         val post = isInstagramPost(url)
-        val first = if (post) gallery(url, dir) else video(url, dir)
-        return first ?: (if (post) video(url, dir) else gallery(url, dir)) ?: throw DownloadFailed()
+        val reasons = mutableListOf<String>()
+        val first = if (post) gallery(url, dir, reasons) else video(url, dir, reasons)
+        return first ?: (if (post) video(url, dir, reasons) else gallery(url, dir, reasons)) ?: throw DownloadFailed(reasons)
     }
 
-    private fun video(url: String, dir: Path): Downloaded? {
+    private fun video(url: String, dir: Path, reasons: MutableList<String>): Downloaded? {
         val args = mutableListOf(
             ytDlp, "--no-playlist", "--no-progress", "--no-warnings",
             "-f", "mp4/best[height<=720]/best",
@@ -105,13 +128,14 @@ class ToolReelMedia(
         )
         cookies?.let { args += listOf("--cookies", it.toString()) }
         args += url
-        if (!runTool(args, 180)) return null
+        val r = runTool(args, 180)
+        if (!r.ok) { r.error?.let(::toolReason)?.let { reasons += "yt-dlp: $it" }; return null }
         val video = dir.listDirectoryEntries("video.*").firstOrNull { it.isRegularFile() && !it.name.endsWith(".json") } ?: return null
         val info = dir.listDirectoryEntries("*.info.json").firstOrNull()
         return Downloaded(listOf(video), emptyList(), info?.let { captionOf(it.readText()) })
     }
 
-    private fun gallery(url: String, dir: Path): Downloaded? {
+    private fun gallery(url: String, dir: Path, reasons: MutableList<String>): Downloaded? {
         val gallery = Files.createDirectories(dir.resolve("gallery"))
         // At most the first 20 items and 200 MB each; {num} keeps the gallery order in the file names.
         val g = mutableListOf(
@@ -120,9 +144,12 @@ class ToolReelMedia(
         )
         cookies?.let { g += listOf("--cookies", it.toString()) }
         g += url
-        runTool(g, 180)
+        val r = runTool(g, 180)
         val (videos, images) = collectGallery(gallery)
-        if (videos.isEmpty() && images.isEmpty()) return null
+        if (videos.isEmpty() && images.isEmpty()) {
+            reasons += "gallery-dl: " + (r.error?.let(::toolReason) ?: if (r.ok) "keine Bilder gefunden" else "fehlgeschlagen")
+            return null
+        }
         return Downloaded(videos, images, galleryCaption(gallery))
     }
 
@@ -161,6 +188,26 @@ class ToolReelMedia(
             }
         }
         return Media(pictures.take(MAX_POST_IMAGES), audio)
+    }
+
+    /** Runs a downloader without a shell; its output goes to a temp file only to keep the last error line (links removed). */
+    private fun runWithReason(args: List<String>, timeoutSeconds: Long): ToolRun {
+        val log = try { Files.createTempFile("wlp-tool", ".log") } catch (e: Exception) { return ToolRun(run(args, timeoutSeconds)) }
+        try {
+            val p = try {
+                ProcessBuilder(args).redirectErrorStream(true).redirectOutput(log.toFile()).start()
+            } catch (e: Exception) {
+                return ToolRun(false, "${args.first()} lässt sich nicht starten")
+            }
+            if (!p.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                p.destroyForcibly()
+                return ToolRun(false, "Zeitüberschreitung nach $timeoutSeconds s")
+            }
+            val ok = p.exitValue() == 0
+            return ToolRun(ok, if (ok) null else toolReason(log.readText()) ?: "Exit-Code ${p.exitValue()}")
+        } finally {
+            try { Files.deleteIfExists(log) } catch (_: Exception) {}
+        }
     }
 
     /** Runs a tool without a shell; true on exit code 0 within [timeoutSeconds]. Output is discarded (may contain URLs). */
