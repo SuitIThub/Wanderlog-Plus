@@ -50,8 +50,9 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
             Du schreibst für eine Reise-App einen allgemeinen Guide für Reisende in Japan: knapp, praktisch, auf Deutsch, das Wichtigste zuerst.
             Behaupte nichts, was nicht in den Fakten oder den geprüften Ergänzungen steht, außer allgemein Bekanntem (Grußformeln, einfache Sätze).
             Sätze zum Zeigen: kurz, höflich, Japanisch in Kana/Kanji, Lautschrift in Romaji.
-            Antworte nur mit JSON: {"title": "…", "summary": "das Wichtigste in höchstens 3 Zeilen",
-            "sections": [{"heading": "…", "text": "kurz", "dos": ["…"], "donts": ["…"]}],
+            $FORMAT_RULES
+            Antworte nur mit JSON: {"title": "…", "summary": "Zeile 1\nZeile 2\nZeile 3",
+            "sections": [{"heading": "…", "text": "Kern in 1–2 Sätzen", "dos": ["…"], "donts": ["…"], "details": "Hintergrund oder leer"}],
             "phrases": [{"german": "…", "japanese": "…", "romaji": "…", "situation": "wann"}],
             "extraTriggers": [{"kind": "text", "words": ["…"], "on": "PLACE|STAY|ANY"} oder {"kind": "category", "category": "SIGHT|FOOD|SHOPPING|NIGHTLIFE|OTHER"}
               oder {"kind": "stay"} oder {"kind": "train", "words": []} oder {"kind": "flight"}],
@@ -97,7 +98,9 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
             Du ergänzt einen bestehenden Guide einer Japan-Reise-App um geprüfte Informationen.
             Behalte alle Abschnitte, Do's, Don'ts und Sätze inhaltlich bei; arbeite die Ergänzungen in passende Abschnitte ein
             oder lege einen neuen Abschnitt an. Knapp, praktisch, auf Deutsch. Gib den ganzen Guide zurück.
-            Antworte nur mit JSON: {"title": "…", "summary": "…", "sections": [{"heading": "…", "text": "…", "dos": ["…"], "donts": ["…"]}],
+            $FORMAT_RULES
+            Antworte nur mit JSON: {"title": "…", "summary": "Zeile 1\nZeile 2\nZeile 3",
+            "sections": [{"heading": "…", "text": "…", "dos": ["…"], "donts": ["…"], "details": "…"}],
             "phrases": [{"german": "…", "japanese": "…", "romaji": "…", "situation": "…"}],
             $LINKS_FORMAT}
             $LINKS_RULE
@@ -162,7 +165,7 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
         summary = o.text("summary"),
         sections = (o["sections"] as? JsonArray).orEmpty().mapNotNull { e ->
             val s = e as? JsonObject ?: return@mapNotNull null
-            GuideSection(s.text("heading").ifBlank { return@mapNotNull null }, s.text("text"), s.strings("dos"), s.strings("donts"))
+            GuideSection(s.text("heading").ifBlank { return@mapNotNull null }, s.text("text"), s.strings("dos"), s.strings("donts"), s.text("details"))
         },
         phrases = (o["phrases"] as? JsonArray).orEmpty().mapNotNull { e ->
             val p = e as? JsonObject ?: return@mapNotNull null
@@ -174,6 +177,27 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
     private fun JsonObject.strings(k: String) = (this[k] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
 
     companion object {
+        /** How a guide title should look: a guideline with examples of what to leave out, never a template. */
+        internal val TITLE_RULE = """
+            Titel: kurz und treffend, er benennt das Thema. Lass weg, was man aus der Reise ohnehin weiß: Orte, Städte, Strecken,
+            „in Japan“, und keine Inhaltsliste als Untertitel. Zum Beispiel „Shinkansen & Suica“ statt
+            „Shinkansen & Suica: Tokyo – Nagoya – Shin-Osaka – Hiroshima“ oder „Yakiniku & Grill“ statt „Yakiniku & Grill in Japan“.
+            Die Beispiele zeigen nur, was wegfällt; „A & B“ ist kein Muster. Titel haben ganz verschiedene Formen, etwa
+            „Trinkgeld“, „Onsen-Etikette“, „Bezahlen mit Karte“ oder „Nachtzüge“. Ein Titel ist so lang, wie das Thema es braucht.
+        """.trimIndent()
+
+        /** Shape of a guide: glance, short core per section, background folded away as details. */
+        internal val FORMAT_RULES = TITLE_RULE + "\n" + """
+            Der Guide dient zum Vorbereiten und zum schnellen Nachschlagen vor Ort.
+            summary heißt in der App „Auf einen Blick“: 3 bis 5 Zeilen, durch Zeilenumbrüche getrennt, je eine Kernaussage in höchstens etwa
+            80 Zeichen, ohne Aufzählungszeichen, das vor Ort Wichtigste zuerst.
+            Höchstens 6 Abschnitte; heading 1 bis 4 Wörter; text ist der Kern in 1 bis 2 Sätzen; höchstens 4 dos und 4 donts,
+            je ein kurzer Satz.
+            details: was zum Vorbereiten nützt, vor Ort aber nicht gebraucht wird (Hintergrund, Ausnahmen, Beispiele),
+            höchstens etwa 600 Zeichen; sonst leer.
+            Ergänzungen aus Reels oder Posts: nur die Aussage selbst, nichts über den Beitrag, die Person oder die Geschichte drumherum.
+        """.trimIndent()
+
         private const val LINKS_FORMAT =
             "\"links\": [{\"name\": \"…\", \"kind\": \"app|web\", \"url\": \"https://… oder leer\", \"androidPackage\": \"Android-Paket-ID oder leer\", \"note\": \"wofür, wenige Wörter\"}]"
         private const val LINKS_RULE =

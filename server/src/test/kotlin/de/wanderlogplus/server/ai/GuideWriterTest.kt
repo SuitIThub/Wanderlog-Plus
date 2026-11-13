@@ -27,9 +27,11 @@ class GuideWriterTest {
 
     private class Scripted(private val answer: (String) -> String) : ChatModel {
         val asked = mutableListOf<String>()
+        val systems = mutableListOf<String>()
         override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String {
             val user = (parts.single() as AiPart.Text).text
             asked += user
+            systems += system
             return answer(user)
         }
     }
@@ -250,5 +252,39 @@ class GuideWriterTest {
         assertEquals(listOf(first.id), again.guideIds)
         j.drain()
         assertTrue(storedGuides().single().writtenAt >= first.writtenAt)
+    }
+
+    @Test
+    fun `sections carry details`() {
+        val model = Scripted { """{"title":"Onsen","summary":"Erst waschen.
+Leise sein.","sections":[{"heading":"Ablauf","text":"So.","details":"Hintergrund"}]}""" }
+        val g = GuideWriter(facts, model).write(GuideAsk(topic = "onsen"), "", null)
+        assertEquals("Hintergrund", g.sections.single().details)
+    }
+
+    @Test
+    fun `prompts carry the format rules and the title is taken as it is`() {
+        val model = Scripted { answer("Shinkansen & Suica: Tokyo – Nagoya") }
+        val g = GuideWriter(facts, model).write(GuideAsk(title = "Shinkansen"), "", null)
+        assertEquals("Shinkansen & Suica: Tokyo – Nagoya", g.title)
+        val merging = Scripted { withLinks("Onsen", sections = 3) }
+        GuideWriter(facts, merging).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
+        for (system in listOf(model.systems.single(), merging.systems.single())) {
+            for (needle in listOf("Shinkansen & Suica", "Onsen-Etikette", "kein Muster", "Auf einen Blick", "details")) {
+                assertTrue(needle in system, "$needle fehlt")
+            }
+        }
+    }
+
+    @Test
+    fun `merge keeps details`() {
+        val old = existing.copy(sections = existing.sections.map { it.copy(details = "Hintergrund") })
+        val model = Scripted { """{"title":"Onsen","summary":"Kurz.","sections":[
+            {"heading":"A1","text":"t","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Hintergrund"},
+            {"heading":"A2","text":"t","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Hintergrund"}],
+            "phrases":[{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}]}""" }
+        val g = GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", old)
+        assertTrue("Hintergrund" in model.asked.single())
+        assertEquals(listOf("Hintergrund", "Hintergrund"), g.sections.map { it.details })
     }
 }
