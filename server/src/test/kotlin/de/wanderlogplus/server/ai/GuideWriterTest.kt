@@ -287,4 +287,49 @@ Leise sein.","sections":[{"heading":"Ablauf","text":"So.","details":"Hintergrund
         assertTrue("Hintergrund" in model.asked.single())
         assertEquals(listOf("Hintergrund", "Hintergrund"), g.sections.map { it.details })
     }
+
+    private val tidyAnswer = """{"title":"Onsen","summary":"Erst waschen.
+Leise sein.
+Kein Handtuch ins Wasser.","sections":[
+        {"heading":"Ablauf","text":"Waschen, dann baden.","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Früher …"},
+        {"heading":"Tattoos","text":"Oft verboten.","details":"Sticker helfen manchmal."}],
+        "phrases":[{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}]}"""
+
+    @Test
+    fun `tidy reshapes and keeps the rest`() {
+        val old = existing.copy(
+            title = "Onsen & Sentō in Japan: Kyoto, Hakone", parentId = "p1", hiddenFrom = listOf(GuideTarget(GuideTargetType.STAY, "st")),
+            extraTriggers = listOf(GuideTrigger.AnyStay), links = listOf(de.wanderlogplus.shared.model.GuideLink("Japan Transit", de.wanderlogplus.shared.model.GuideLinkKind.APP)),
+            writtenAt = 7,
+        )
+        val g = GuideWriter(facts, Scripted { tidyAnswer }).tidy(old)
+        assertEquals("Onsen", g.title)
+        assertEquals(listOf("Ablauf", "Tattoos"), g.sections.map { it.heading })
+        assertEquals("Sticker helfen manchmal.", g.sections[1].details)
+        assertEquals(old.copy(title = g.title, summary = g.summary, sections = g.sections, phrases = g.phrases), g)
+    }
+
+    @Test
+    fun `tidy rejects lost phrases`() {
+        val model = Scripted { tidyAnswer.replace("""{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}""", "") }
+        val e = kotlin.runCatching { GuideWriter(facts, model).tidy(existing) }.exceptionOrNull()
+        assertEquals("ai_bad_answer", (e as AiFailed).code)
+    }
+
+    @Test
+    fun `tidy prompt asks to keep all content`() {
+        val model = Scripted { tidyAnswer }
+        GuideWriter(facts, model).tidy(existing)
+        assertTrue("kein Inhalt geht verloren" in model.systems.first())
+        assertTrue(GuideWriter.FORMAT_RULES in model.systems.first())
+        assertTrue("A2" in model.asked.first())
+    }
+
+    @Test
+    fun `tidyKeeps checks phrases sections and summary`() {
+        assertTrue(tidyKeeps(existing, existing))
+        assertTrue(!tidyKeeps(existing, existing.copy(phrases = emptyList())))
+        assertTrue(!tidyKeeps(existing, existing.copy(sections = emptyList())))
+        assertTrue(!tidyKeeps(existing, existing.copy(summary = "")))
+    }
 }

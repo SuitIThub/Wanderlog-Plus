@@ -124,6 +124,30 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
         )
     }
 
+    /**
+     * [existing] reshaped into glance, core and details without new research: only title, summary, sections and phrases
+     * change. Fails with "ai_bad_answer" when the answer loses phrases or sections.
+     */
+    fun tidy(existing: Guide, say: (String) -> Unit = {}): Guide {
+        say("Guide wird gestrafft …")
+        val system = """
+            Du baust einen Guide einer Japan-Reise-App in ein übersichtliches Format um. Es gibt keine neue Recherche:
+            kein Inhalt geht verloren. Was nicht in den Kern eines Abschnitts passt, kommt in dessen details; Doppeltes darfst
+            du zusammenfassen. Behalte alle Sätze zum Zeigen. Kürze einen unnötig langen Titel nach der Titel-Regel.
+            $FORMAT_RULES
+            Antworte nur mit JSON: {"title": "…", "summary": "Zeile 1\nZeile 2\nZeile 3",
+            "sections": [{"heading": "…", "text": "…", "dos": ["…"], "donts": ["…"], "details": "…"}],
+            "phrases": [{"german": "…", "japanese": "…", "romaji": "…", "situation": "…"}]}
+        """.trimIndent()
+        val user = "Guide:\n" + json.encodeToString(
+            Guide.serializer(),
+            existing.copy(pinnedTo = emptyList(), hiddenFrom = emptyList(), extraTriggers = emptyList(), links = emptyList(), sources = emptyList()),
+        )
+        val o = completeJson(model, system, user, GERMAN_PLEASE) { tidyKeeps(existing, parsed(it)) }
+        val p = parsed(o)
+        return existing.copy(title = p.title.ifBlank { existing.title }, summary = p.summary, sections = p.sections, phrases = p.phrases)
+    }
+
     /** The apps and pages [g] mentions, checked; empty without a [LinkCheck]. */
     fun extractLinks(g: Guide, say: (String) -> Unit = {}): List<GuideLink> {
         val check = links ?: return emptyList()
@@ -226,3 +250,7 @@ internal fun keepsContent(before: Guide, after: Guide): Boolean =
         after.sections.sumOf { it.dos.size } >= before.sections.sumOf { it.dos.size } &&
         after.sections.sumOf { it.donts.size } >= before.sections.sumOf { it.donts.size } &&
         after.phrases.size >= before.phrases.size
+
+/** True when a tidied [after] still has sections, a summary that is not mostly Japanese, and every phrase of [before]. */
+internal fun tidyKeeps(before: Guide, after: Guide): Boolean =
+    after.sections.isNotEmpty() && after.summary.isNotBlank() && !mostlyJapanese(after.summary) && after.phrases.size == before.phrases.size
