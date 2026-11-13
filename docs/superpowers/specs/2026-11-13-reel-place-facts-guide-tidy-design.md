@@ -30,15 +30,17 @@ je einem Kernsatz.
 ### Schreibregeln (`GuideWriter`, beide Prompts `write` und `merge`)
 
 Gemeinsamer Regelblock `FORMAT_RULES`:
-- Titel: höchstens 3 Wörter / ~25 Zeichen; keine Orte, Strecken, Städte, kein „in Japan“, kein Untertitel nach „:“.
+- Titel (Richtlinie, keine feste Grenze): kurz und treffend, das Thema benennen; nichts in den Titel, was man aus der
+  Reise ohnehin weiß (Orte, Strecken, „in Japan“) und keine Inhaltsliste als Untertitel. Beispiele im Prompt:
+  „Shinkansen & Suica“ statt „Shinkansen & Suica: Tokyo – Nagoya – Shin-Osaka – Hiroshima“, „Yakiniku & Grill“
+  statt „Yakiniku & Grill in Japan“.
 - summary: 3–5 Zeilen, je eine Kernaussage, das vor Ort Wichtigste zuerst.
 - Höchstens 6 Abschnitte; heading 1–4 Wörter; text 1–2 Sätze; höchstens 4 dos und 4 donts, je ein kurzer Satz.
 - details: alles, was zum Vorbereiten nützt, vor Ort aber nicht gebraucht wird (Hintergrund, Ausnahmen, Beispiele);
   höchstens ~600 Zeichen; sonst leer.
 - Ergänzungen aus Reels: nur die Aussage selbst — nichts über den Beitrag, die Person, die Geschichte drumherum.
 
-Zusätzlich serverseitige Absicherung (`normalizeTitle`): alles ab „:“ oder „ – “/„ - “ entfernen, „in Japan“ am Ende
-entfernen, trimmen; bleibt nichts übrig, gilt der Original-Titel. JSON-Format der Antwort: `sections[].details`.
+Der Titel wird serverseitig nicht hart gekürzt. JSON-Format der Antwort: `sections[].details`.
 
 `keepsContent` (für `merge`) zählt Do's/Don'ts weiter wie bisher; Abschnitte dürfen beim Mergen nicht weniger werden.
 
@@ -47,7 +49,7 @@ entfernen, trimmen; bleibt nichts übrig, gilt der Original-Titel. JSON-Format d
 Neue Methode `tidy(existing: Guide, say): Guide`: das Modell baut den Guide ins neue Format um, ohne neue Recherche.
 Regel: kein Inhalt geht verloren — was nicht in den Kern passt, wandert nach `details`; Doppeltes darf zusammengefasst
 werden. Prüfung `tidyKeeps(before, after)`: Abschnitte nicht leer, Anzahl `phrases` gleich, summary nicht leer und
-nicht überwiegend Japanisch. Titel durch `normalizeTitle`. Pins, Hides, Topic, Trigger, Links, Quellen, parentId bleiben.
+nicht überwiegend Japanisch. Der Titel folgt der Titel-Richtlinie. Pins, Hides, Topic, Trigger, Links, Quellen, parentId bleiben.
 Dos/Don'ts dürfen weniger werden (sie wandern ggf. nach `details`).
 
 ### Job + API
@@ -86,7 +88,7 @@ Dos/Don'ts dürfen weniger werden (sie wandern ggf. nach `details`).
 - Bekommt zusätzlich die gespeicherten Orte der Reise (`id | Name | Stadt`, höchstens 300, nicht DROPPED).
 - Neues mögliches Ziel `placeIds` (1–2 Ids): wenn der Tipp nur diese Orte betrifft. Regel im Prompt: einen neuen Guide
   (title/topic) nur für allgemeine Themen, die viele Orte oder die ganze Reise betreffen; nie für einen einzelnen Ort.
-- Vorgeschlagene Guide-Titel durch `normalizeTitle`.
+- Für vorgeschlagene Guide-Titel gilt dieselbe Titel-Richtlinie (im Prompt).
 - `ReelTip.placeIds: List<String> = emptyList()`; mit placeIds sind guideId/targetTopic/targetTitle null.
 - `verify` bleibt unverändert (auch Ort-Tipps werden geprüft); `text` 1–2 Sätze, nur die Aussage.
 
@@ -121,9 +123,9 @@ Dos/Don'ts dürfen weniger werden (sie wandern ggf. nach `details`).
 
 ## 4. Tests (TDD)
 
-- `GuideWriterTest`: details geparst; normalizeTitle (Doppelpunkt, Gedankenstrich, „in Japan“, leer → Original);
+- `GuideWriterTest`: details geparst; Titel-Richtlinie steht im Prompt;
   tidy behält Phrasen/Pins/Links, lehnt Phrasenverlust ab.
-- `TipCheckTest`: placeIds-Ziel wird übernommen, unbekannte Ids verworfen; Titel normalisiert.
+- `TipCheckTest`: placeIds-Ziel wird übernommen, unbekannte Ids verworfen; Titel-Richtlinie im Prompt.
 - `AssistantTest`: facts je Ort geparst, gekürzt, in evidence der Recherche.
 - `PlaceFactsTest`: Merge behält alte Einträge, lehnt Verlust ab, ohne Dossier neues mit researchedAt 0.
 - `AiJobs`/Route-Tests für `guide-tidy` und `place-facts` wie bei `guide-links`.
