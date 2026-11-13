@@ -89,6 +89,8 @@ fun ChatRoute(
     actions: ChatActions? = null,
     /** Opens what an "@" mention points to; null: mentions are only highlighted. */
     onOpenRef: ((de.wanderlogplus.shared.sync.ChatRef) -> Unit)? = null,
+    /** The chat sits beside the app (unfolded): an "×" closes it instead of a back arrow. */
+    side: Boolean = false,
 ) {
     val chat by vm.chat.collectAsState()
     val chats by vm.chats.collectAsState()
@@ -106,6 +108,7 @@ fun ChatRoute(
         onShowList = vm::refreshList, onSelect = vm::select, onDelete = vm::delete, onConsumeMessage = vm::consumeMessage,
         onOpenPlace = onOpenPlace, onOpenUrl = onOpenUrl, actions = actions, onOpenRef = onOpenRef,
         shareLocation = shareLocation,
+        side = side,
         onToggleLocation = if (!vm.canShareLocation) null else { on ->
             when {
                 !on -> vm.setShareLocation(false)
@@ -144,6 +147,8 @@ fun ChatScreen(
     onToggleLocation: ((Boolean) -> Unit)? = null,
     /** Opens what an "@" mention points to; null: mentions are only highlighted. */
     onOpenRef: ((de.wanderlogplus.shared.sync.ChatRef) -> Unit)? = null,
+    /** The chat sits beside the app (unfolded): an "×" closes it instead of a back arrow. */
+    side: Boolean = false,
 ) {
     var field by rememberSaveable(stateSaver = androidx.compose.ui.text.input.TextFieldValue.Saver) { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue("")) }
     var refs by remember { mutableStateOf(emptyList<de.wanderlogplus.shared.sync.ChatRef>()) }
@@ -169,7 +174,8 @@ fun ChatScreen(
 
     Column(Modifier.fillMaxSize().imePadding().testTag("chat-screen")) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, modifier = Modifier.testTag("chat-back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+            if (side) IconButton(onClick = onBack, modifier = Modifier.testTag("chat-close")) { Icon(Icons.Filled.Close, contentDescription = "Chat schließen") }
+            else IconButton(onClick = onBack, modifier = Modifier.testTag("chat-back")) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
             Text(
                 chat?.title?.ifBlank { null } ?: "Reise-Chat",
                 style = MaterialTheme.typography.titleMedium,

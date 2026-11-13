@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.73.0
+
+- **Chat neben der App (aufgeklappt):** Auf dem aufgeklappten Fold (oder Tablet/quer) öffnet der Chat rechts als eigene Spalte, links läuft die App normal weiter – zum Beispiel, um Hinweise aus dem Chat gleich beim Ort einzutragen. Orte, Tage und Guides aus dem Chat öffnen sich links, der Chat bleibt stehen. Ein Chat-Button auf einem anderen Screen setzt nur den Bezug des Chats dorthin. „×“ schließt die Spalte; die Zurück-Geste wirkt zuerst auf die App.
+- Zuklappen macht aus der Spalte wieder den Vollbild-Chat, Aufklappen umgekehrt – das Gespräch bleibt offen.
+
 ## 0.72.1
 
 - **Bild-Posts und Galerien mit Instagram-Anmeldung:** Auf dem Server reicht jetzt die Session-ID (`WLP_INSTAGRAM_SESSIONID` in `.env`); daraus wird die Cookies-Datei für die Downloader erzeugt. Eine falsch gesetzte `WLP_INSTAGRAM_COOKIES` blockiert Reels nicht mehr, sondern wird mit Warnung ignoriert.
