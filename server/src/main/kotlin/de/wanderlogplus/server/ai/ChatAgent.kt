@@ -64,6 +64,12 @@ class ChatTrip(
     val weather: Map<String, DayWeather> = emptyMap(),
     val guides: List<de.wanderlogplus.shared.model.Guide> = emptyList(),
 ) {
+    /** The trip's saved places a reel tip may go to (not dropped), with their region as city. */
+    fun placeRefs(): List<PlaceRef> = saved.filter { it.status != de.wanderlogplus.shared.model.PlaceStatus.DROPPED }.mapNotNull { s ->
+        val name = places[s.placeId]?.name?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        PlaceRef(s.id, name, regions.firstOrNull { it.id == s.regionId }?.name)
+    }.take(MAX_PLACE_REFS)
+
     fun withWeather(w: TripWeather): ChatTrip =
         ChatTrip(trip, regions, places, saved, stays, days, dayItems, flights, trains, w.days.associateBy { it.date }, guides)
 

@@ -132,4 +132,40 @@ class TipCheckTest {
         assertEquals(MAX_TIP_SOURCES, r.sources.size)
         assertEquals(1000, r.text.length)
     }
+
+    private val places = listOf(PlaceRef("sp1", "Ichiran", "Osaka"), PlaceRef("sp2", "Kura", "Osaka"), PlaceRef("sp3", "Mos", null))
+
+    @Test
+    fun `a tip about one place targets the place`() {
+        val m = model("""{"tips":[{"i":0,"covered":false,"placeIds":["sp1"],"title":"Ichiran in Osaka"}]}""")
+        val r = TipCheck(facts, m).match(listOf(tip), guides, places).single()
+        assertEquals(listOf("sp1"), r.placeIds)
+        assertNull(r.guideId); assertNull(r.targetTopic); assertNull(r.targetTitle)
+    }
+
+    @Test
+    fun `unknown and extra place ids are dropped`() {
+        val m = model("""{"tips":[{"i":0,"placeIds":["x","sp1","sp2","sp3"]},{"i":1,"placeIds":["x"]}]}""")
+        val r = TipCheck(facts, m).match(listOf(tip, tip.copy(claim = "Anderes")), guides, places)
+        assertEquals(listOf("sp1", "sp2"), r[0].placeIds)
+        assertEquals(emptyList(), r[1].placeIds)
+        assertEquals("Geld", r[1].targetTitle)
+    }
+
+    @Test
+    fun `covered wins over a place`() {
+        val m = model("""{"tips":[{"i":0,"covered":true,"guideId":"g1","quote":"q","placeIds":["sp1"]}]}""")
+        val r = TipCheck(facts, m).match(listOf(tip), guides, places).single()
+        assertEquals("g1", r.coveredBy)
+        assertEquals(emptyList(), r.placeIds)
+    }
+
+    @Test
+    fun `the prompt lists the trip's places and the guide rule`() {
+        val m = model()
+        TipCheck(facts, m).match(listOf(tip), guides, places)
+        assertTrue("sp1 | Ichiran | Osaka" in m.users.single())
+        assertTrue("nie für einen einzelnen Ort" in m.systems.single())
+        assertTrue("kein Muster" in m.systems.single())
+    }
 }

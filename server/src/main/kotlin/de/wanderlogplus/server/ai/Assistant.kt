@@ -35,7 +35,13 @@ data class FoundPlace(
     val area: String? = null,
     /** What the reel is about; false for places only named for orientation (stations, landmarks in the background). */
     val main: Boolean = true,
+    /** What the post says about this place (dish, closing day, best time), short German sentences without the post's story. */
+    val facts: List<String> = emptyList(),
 )
+
+/** Facts kept per place found in a reel, and characters per fact. */
+const val MAX_PLACE_FACTS = 4
+const val MAX_PLACE_FACT_CHARS = 200
 
 /** A general travel tip the model found in a reel or post (not tied to one place), before checking. */
 data class FoundTip(val claim: String, val topic: String, val evidence: String)
@@ -109,11 +115,14 @@ class Assistant(
             ein Wahrzeichen in der Kulisse). Stadtviertel nur als area angeben, nicht als eigenen Ort.
             2. Finde allgemeine Reisetipps (Guides, „Tipps und Tricks“): Etikette, Verkehr, Geld und Bezahlen, Apps, Buchen,
             Sparen, Hacks. Jeder Tipp als eigenständige, überprüfbare Aussage auf Deutsch, so wie der Beitrag sie behauptet.
-            Tipps zu einem einzelnen Ort (Öffnungszeit, bestes Gericht dort) sind keine allgemeinen Tipps.
+            Aussagen zu einem oder zwei konkreten Orten (Ruhetag, bestes Gericht, Wartezeit, bester Zeitpunkt, Trick vor Ort)
+            gehören in facts dieser Orte, nicht in tips.
+            3. facts eines Orts: bis zu 4 Aussagen, die der Beitrag über genau diesen Ort macht, je ein kurzer Satz auf Deutsch,
+            nur die Aussage selbst, nichts über den Beitrag, die Person oder die Geschichte drumherum.
             Antworte nur mit JSON: {"summary": "1 Satz auf Deutsch, worum es im Beitrag geht",
             "locations": [{"name": "üblicher Name in lateinischer Schrift", "localName": "japanischer Name oder null",
             "area": "Stadtteil/Viertel oder null", "city": "Stadt", "country": "Land", "kind": "sight|food|shopping|nightlife|other",
-            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst"}],
+            "role": "main|reference", "evidence": "kurz, woran du den Ort erkennst", "facts": ["…"]}],
             "tips": [{"claim": "die Aussage", "topic": "Thema in 1–3 Wörtern", "evidence": "woher (Folie 3, gesprochen, Beschreibung)"}]}
             Die Orte mit role "main" zuerst.
             Wenn kein konkreter Ort erkennbar ist: "locations": []. Ohne allgemeine Tipps: "tips": [].
@@ -131,6 +140,8 @@ class Assistant(
             FoundPlace(
                 name, l.str("localName"), l.str("city"), l.str("country"), l.str("kind") ?: "other", l.str("evidence").orEmpty(),
                 area = l.str("area"), main = l.str("role")?.lowercase() != "reference",
+                facts = (l["facts"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim()?.takeIf { f -> f.isNotEmpty() } }
+                    .take(MAX_PLACE_FACTS).map { it.take(MAX_PLACE_FACT_CHARS) },
             )
         }.distinctBy { (it.name + "|" + it.city).lowercase() }.take(MAX_PLACES)
         val tips = (o["tips"] as? JsonArray).orEmpty().mapNotNull { e ->
@@ -153,12 +164,15 @@ class Assistant(
             return ReelCandidate(
                 name = p.name, city = p.city, lat = hit?.lat, lng = hit?.lng, address = hit?.address, category = categoryOf(p.kind),
                 distanceKm = 0.0, nearestAnchor = s.name, onRoute = true, evidence = p.evidence, positionIssue = issue,
-                main = p.main, googlePlaceId = hit?.googlePlaceId, savedPlaceId = s.savedPlaceId,
+                main = p.main, googlePlaceId = hit?.googlePlaceId, savedPlaceId = s.savedPlaceId, reelFacts = p.facts,
             )
         }
         val r = if (!deep) { say("Nur zur Orientierung genannt, ohne Recherche"); null } else try {
             val trip = near?.let { (a, km) -> "aus einem Reel; " + String.format(java.util.Locale.GERMAN, "%.1f", km) + " km bis " + a.name }.orEmpty()
-            val evidence = listOfNotNull(p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null }).joinToString("; ")
+            val evidence = listOfNotNull(
+                p.area?.let { "Stadtteil: $it" }, p.evidence.ifBlank { null },
+                p.facts.takeIf { it.isNotEmpty() }?.joinToString("; ", "Laut Beitrag: "),
+            ).joinToString("; ")
             researcher.research(ResearchQuery(p.name, p.localName, p.city, p.country, p.kind, evidence, trip, hit?.googlePlaceId), config, say)
         } catch (e: AiFailed) {
             say("Recherche fehlgeschlagen (${e.code})")
@@ -187,6 +201,7 @@ class Assistant(
             positionIssue = issue,
             main = p.main,
             googlePlaceId = hit?.googlePlaceId,
+            reelFacts = p.facts,
         )
     }
 

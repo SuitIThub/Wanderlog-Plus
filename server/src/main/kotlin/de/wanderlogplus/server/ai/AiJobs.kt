@@ -608,7 +608,7 @@ class AiJobs(
                 else -> {
                     t.status("CHECKING")
                     t.step("Tipps werden mit den Guides abgeglichen und geprüft …")
-                    tipCheck.checkAll(analysis.tips, ChatTrip.from(store).guides, t).also { r ->
+                    ChatTrip.from(store).let { trip -> tipCheck.checkAll(analysis.tips, trip.guides, trip.placeRefs(), t) }.also { r ->
                         val covered = r.count { it.coveredBy != null }
                         val wrong = r.count { it.verdict == TipVerdict.FALSE }
                         t.step("Tipps geprüft: ${r.size - covered - wrong} übernehmbar, $covered schon in Guides, $wrong falsch", JobProgress.OK)
