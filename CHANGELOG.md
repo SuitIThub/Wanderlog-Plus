@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.74.0
+
+- **Widgets für den Startbildschirm:** sieben neue Widgets – „Als Nächstes“, „Nächste Fahrt“, „Heute kompakt“, „Unterkunft heute“, „Yen & Budget“, „Wetter“ und „Reise-Chat“. Jedes lässt sich frei in der Größe ziehen (von 1×1 bis 4×4) und zeigt je nach Platz mehr oder weniger: klein nur Uhrzeit oder Kurs, groß ganze Listen. Sie laufen offline mit den Daten auf dem Handy und aktualisieren sich bei Änderungen, alle 15 Minuten und genau dann, wenn der nächste Programmpunkt beginnt.
+- **Antippen öffnet die passende Stelle:** den Tag, die Fahrt (Tickets direkt aus dem Widget), eine neue Ausgabe in Yen, den Chat – und „Adresse zeigen“ zeigt Name und Adresse der Unterkunft groß zum Vorzeigen.
+- **„Was jetzt?“ im Reise-Chat-Widget:** „Sehen“ und „Essen“ fragen den Chat, was gerade gut passt – nach Uhrzeit, Wetter, Öffnungszeiten, Entfernung und der freien Zeit bis zum nächsten Programmpunkt (als Richtwert). Ab mittlerer Größe erscheint die beste Empfehlung mit Entfernung (und Bild) direkt auf dem Widget, groß dazu weitere Vorschläge; kleiner öffnet sich der Chat mit der Frage. „Chat“ öffnet das Gespräch, aus dem die Empfehlung kam.
+
 ## 0.73.0
 
 - **Chat neben der App (aufgeklappt):** Auf dem aufgeklappten Fold (oder Tablet/quer) öffnet der Chat rechts als eigene Spalte, links läuft die App normal weiter – zum Beispiel, um Hinweise aus dem Chat gleich beim Ort einzutragen. Orte, Tage und Guides aus dem Chat öffnen sich links, der Chat bleibt stehen. Ein Chat-Button auf einem anderen Screen setzt nur den Bezug des Chats dorthin. „×“ schließt die Spalte; die Zurück-Geste wirkt zuerst auf die App.

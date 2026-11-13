@@ -114,11 +114,35 @@ fun enqueueQuickAsk(context: Context, kind: String) {
 
 const val QUICK_WORK = "quick-ask"
 
+/**
+ * A tap on „Sehen“/„Essen“: the widget shows „Suche passende Ziele …“ right away ([sink] + [update]), then the
+ * ask itself starts as work ([enqueue]), which may take a few seconds to begin.
+ */
+suspend fun startQuickAsk(
+    kind: String,
+    input: WidgetInput,
+    sink: QuickSink,
+    update: suspend () -> Unit,
+    enqueue: (String) -> Unit,
+    clock: () -> Long = System::currentTimeMillis,
+) {
+    sink.write(QuickResult(kind, null, QuickResult.RUNNING, clock(), input.now.toLocalDate().toString()))
+    update()
+    enqueue(kind)
+}
+
 /** The chat widget's „Sehenswürdigkeit“/„Essen“ button (widget large enough for the result). */
 class AskCallback : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val kind = parameters[KIND] ?: return
-        enqueueQuickAsk(context, kind)
+        val container = (context.applicationContext as WanderlogPlusApp).container
+        val store = quickStore(context)
+        startQuickAsk(
+            kind, container.widgets.input(),
+            sink = { r -> runCatching { store.write(r) } },
+            update = { container.widgets.updateAll() },
+            enqueue = { k -> enqueueQuickAsk(context, k) },
+        )
     }
 
     companion object {

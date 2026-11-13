@@ -114,4 +114,16 @@ class QuickAsksTest {
         broken.run(QuickAsk.KIND_SIGHT)
         assertEquals(QuickResult.FAILED, w2.last().state)
     }
+
+    @Test fun aTapShowsTheSearchAtOnceThenStartsTheWork() = runBlocking {
+        val events = mutableListOf<String>()
+        startQuickAsk(
+            QuickAsk.KIND_SIGHT, WidgetInput(trip, at("2027-04-02T10:00"), null, null, null, null),
+            sink = { r -> events += "write:${r.state}:${r.kind}" },
+            update = { events += "update" },
+            enqueue = { k -> events += "enqueue:$k" },
+            clock = { 7L },
+        )
+        assertEquals(listOf("write:RUNNING:sight", "update", "enqueue:sight"), events)
+    }
 }
