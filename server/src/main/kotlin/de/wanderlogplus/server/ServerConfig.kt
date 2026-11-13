@@ -26,8 +26,10 @@ data class ServerConfig(
     /** Places researched at the same time (WLP_RESEARCH_PARALLELISM, 1–20). */
     val researchParallelism: Int = de.wanderlogplus.server.ai.DEFAULT_RESEARCH_PARALLELISM,
     val parallelProcessor: String = "base",
-    /** Optional Netscape cookies file for yt-dlp (reels that need a login). */
+    /** Optional Netscape cookies file for yt-dlp and gallery-dl (posts that need a login). */
     val instagramCookies: Path? = null,
+    /** Instagram's `sessionid` cookie (WLP_INSTAGRAM_SESSIONID); the server writes a cookies file from it. */
+    val instagramSessionId: String? = null,
     /** gallery-dl for picture posts and galleries (WLP_GALLERY_DL, default "gallery-dl" on the PATH). */
     val galleryDl: String = "gallery-dl",
     /** Manages the access tokens (the /api/admin endpoints); never a sync token. Null: no administration. */
@@ -90,6 +92,7 @@ data class ServerConfig(
                     ?: de.wanderlogplus.server.ai.DEFAULT_RESEARCH_PARALLELISM,
                 parallelProcessor = env["WLP_PARALLEL_PROCESSOR"]?.takeIf { it.isNotBlank() } ?: "base",
                 instagramCookies = env["WLP_INSTAGRAM_COOKIES"]?.takeIf { it.isNotBlank() }?.let { Path.of(it) },
+                instagramSessionId = env["WLP_INSTAGRAM_SESSIONID"]?.trim()?.takeIf { it.isNotBlank() },
                 galleryDl = env["WLP_GALLERY_DL"]?.takeIf { it.isNotBlank() } ?: "gallery-dl",
                 adminToken = env["WLP_ADMIN_TOKEN"]?.trim()?.takeIf { it.isNotBlank() }?.also { admin ->
                     require(admin.length >= MIN_TOKEN_LENGTH) { "WLP_ADMIN_TOKEN must be at least $MIN_TOKEN_LENGTH characters" }

@@ -25,7 +25,8 @@ Dateiablage (Anhänge) und den einmaligen Wanderlog-Import.
 | `WLP_APIFY_TOKEN` | – | Optional; Apify-Token für ÖPNV-Verbindungen in Japan (`POST /api/transit`, Actor „Japan Train Route & Fare Finder“, Daten von Yahoo! 乗換案内). Ohne Token: `transit_not_configured`, die App fällt auf Google zurück. |
 | `WLP_APIFY_TRANSIT_ACTOR` | `FjxdTwrnBwvjDSBe0` | Optional; anderer Apify-Actor mit derselben Ein- und Ausgabe. |
 | `WLP_APIFY_TABELOG_ACTOR` | `huggable_quote~tabelog-scraper` | Optional; Apify-Actor für Tabelog-Daten der Restaurants (mit `WLP_APIFY_TOKEN`; japanische Namen kommen über `WLP_GOOGLE_PLACES_KEY`, ohne ihn findet die Suche kaum etwas). Etwa 1,5–2 Cent pro Restaurant. |
-| `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei für yt-dlp, falls Instagram Reels nur angemeldet zeigt. Die Datei enthält eine Anmeldung, also wie ein Passwort behandeln. |
+| `WLP_INSTAGRAM_SESSIONID` | – | Optional; der Wert des Instagram-Cookies `sessionid` (im Browser angemeldet → Entwicklertools → Cookies von instagram.com). Nötig für Bild-Posts und Galerien, die Instagram nur angemeldet zeigt. Der Server schreibt daraus beim Start eine Cookies-Datei nach `/data`. Wie ein Passwort behandeln, am besten ein Zweitaccount; nach dem Abmelden in Instagram ungültig. |
+| `WLP_INSTAGRAM_COOKIES` | – | Optional; Pfad (im Container) zu einer Cookies-Datei im Netscape-Format für yt-dlp und gallery-dl. Hat Vorrang vor `WLP_INSTAGRAM_SESSIONID`; zeigt er auf keine Datei, wird er mit Warnung ignoriert. |
 | `WLP_DOMAIN` | – | Nur für Caddy: Domain für HTTPS. |
 | `WLP_HOST_PORT` | `8080` | Nur Compose: Port auf dem Host (`127.0.0.1:<port>`), falls 8080 belegt ist. |
 
@@ -116,7 +117,7 @@ Einrichtung:
 
 Teilt man ein Instagram-Reel an die App, läuft die Auswertung als Job auf dem Server. Die App wartet im Hintergrund und meldet sich mit einer Benachrichtigung.
 
-1. **Laden:** yt-dlp lädt das Video samt Beschreibung (`WLP_INSTAGRAM_COOKIES` nur, wenn nötig). Scheitert das, teilt man stattdessen die gespeicherte Videodatei.
+1. **Laden:** yt-dlp lädt das Video samt Beschreibung (`WLP_INSTAGRAM_SESSIONID` bzw. `WLP_INSTAGRAM_COOKIES` nur, wenn nötig; scheitert das Laden, steht der Grund im „Ablauf“). Scheitert das, teilt man stattdessen die gespeicherte Videodatei.
 2. **Erkennen:** ffmpeg zieht bis zu 12 Einzelbilder und den Ton heraus. Das OpenRouter-Modell findet darin und in der Beschreibung die erwähnten Orte.
 3. **Verorten:** Photon (OpenStreetMap) liefert Koordinaten. Liegt ein Ort höchstens 50 km von einer Unterkunft oder einem gespeicherten Ort entfernt, gilt er als „auf der Route“.
 4. **Recherchieren:** Mit `WLP_PARALLEL_KEY` holt die Parallel Search API Quellen, die Task API schreibt daraus Beschreibung, Tipps, Hinweise und die Einschätzung (alles auf Deutsch). Ohne Parallel-Key übernimmt das OpenRouter-Modell mit Websuche.

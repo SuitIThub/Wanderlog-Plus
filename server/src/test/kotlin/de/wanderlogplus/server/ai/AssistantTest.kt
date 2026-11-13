@@ -589,4 +589,18 @@ class AssistantTest {
         assertEquals("s2", c.savedPlaceId)
         assertEquals(listOf("Montags zu"), c.reelFacts)
     }
+
+    @Test fun aLoginWallIsNamedAndTheToolsReasonsAreLogged() {
+        val media = object : ReelMedia {
+            override fun download(url: String, dir: Path): Downloaded = throw DownloadFailed(listOf("gallery-dl: [instagram][error] Redirected to login page", "yt-dlp: ERROR: There is no video in this post"))
+            override fun extract(d: Downloaded, dir: Path) = Media(emptyList(), null)
+        }
+        val j = jobs(media = media)
+        val id = j.startReel(ReelInput.Link("https://www.instagram.com/p/x/")).id
+        j.drain()
+        val job = j.get(id)!!
+        assertEquals("login_required", job.error)
+        assertTrue(job.steps.any { it.text.contains("Redirected to login page") && it.level == "WARN" }, job.steps.joinToString { it.text })
+        assertEquals("Abgebrochen: Instagram verlangt eine Anmeldung", job.steps.last().text)
+    }
 }
