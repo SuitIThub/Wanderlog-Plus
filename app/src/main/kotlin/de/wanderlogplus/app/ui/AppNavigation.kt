@@ -294,6 +294,13 @@ fun AppNavigation(
     }
     val chatToday = rememberMinuteNow(clock).toLocalDate().toString()
     val chatPane = remember { de.wanderlogplus.app.ui.chat.ChatPaneHolder() }
+    // Unfolded (or tablet/landscape): navigation rail on the left and two panes where a screen has list and detail.
+    val wide = de.wanderlogplus.app.ui.design.isWideWindow()
+    // The chat is open beside the app (unfolded); folded it is the chat route instead.
+    var chatSide by rememberSaveable { mutableStateOf(false) }
+    val sideChat = wide && chatSide && chatVm != null && current != SETUP_ROUTE
+    // With the chat beside them the screens get phone width: no list and detail side by side.
+    val paneWide = wide && !sideChat
     val openChat: (() -> Unit)? = chatVm?.takeIf { current != SETUP_ROUTE && current != de.wanderlogplus.app.ui.chat.CHAT_ROUTE }?.let { vm ->
         {
             // A two-pane screen: the detail beside the list is what the user looks at.
@@ -301,11 +308,53 @@ fun AppNavigation(
             val args = backStack?.arguments
             val map = pane?.args ?: listOf("date", "savedPlaceId", "regionKey").associateWith { args?.getString(it) }
             vm.openFrom(de.wanderlogplus.app.ui.chat.chatContextFor(pane?.route ?: current, map, snapshot, chatToday))
-            nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
+            if (wide) chatSide = true
+            else nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
         }
     }
-    // Unfolded (or tablet/landscape): navigation rail on the left and two panes where a screen has list and detail.
-    val wide = isWideLayout()
+    // The chat, as its own route (folded) or beside the app (unfolded, [side]); [onClose] leaves it.
+    val uiScope = rememberCoroutineScope()
+    val chatContent: @Composable (Boolean, () -> Unit) -> Unit = { side, onClose ->
+        if (chatVm != null) {
+            val uri = androidx.compose.ui.platform.LocalUriHandler.current
+            val tripVm: TripViewModel? = tripViewModelFactory?.let { viewModel(factory = it) }
+            val live = tripVm?.snapshot?.collectAsState()?.value ?: snapshot
+            tripVm?.let { TripErrors(it, snackbar) }
+            val liveNow = androidx.compose.runtime.rememberUpdatedState(live)
+            val actions = tripVm?.let { vm -> remember(vm) { chatActions(vm, { liveNow.value }) { msg -> uiScope.launch { snackbar.showSnackbar(msg) } } } }
+            de.wanderlogplus.app.ui.chat.ChatRoute(
+                chatVm, live,
+                actions = actions,
+                onBack = onClose,
+                side = side,
+                onOpenPlace = { id -> nav.navigate(if (placesViewModelFactory != null) placeRoute(id) else tripPlaceRoute(id)) },
+                onOpenUrl = { url -> if (runCatching { uri.openUri(url) }.isFailure) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) } },
+                onOpenRef = { r ->
+                    val R = de.wanderlogplus.shared.sync.ChatRef
+                    when (r.type) {
+                        R.PLACE -> nav.navigate(if (placesViewModelFactory != null) placeRoute(r.id) else tripPlaceRoute(r.id))
+                        R.DAY -> nav.navigate(de.wanderlogplus.app.ui.trip.dayRoute(r.id))
+                        R.STAY -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.STAY, r.id))
+                        R.TRAIN -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.TRAIN, r.id))
+                        R.FLIGHT -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.FLIGHT, r.id))
+                        R.GUIDE -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(r.id))
+                        R.REGION -> if (placesViewModelFactory != null) nav.navigate(regionRoute(r.id))
+                    }
+                },
+            )
+        }
+    }
+    // Folding turns the chat beside the app into the chat route, unfolding the other way round: the talk stays open.
+    LaunchedEffect(wide, chatSide, current) {
+        if (chatVm == null) return@LaunchedEffect
+        if (!wide && chatSide) {
+            chatSide = false
+            nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
+        } else if (wide && current == de.wanderlogplus.app.ui.chat.CHAT_ROUTE) {
+            nav.popBackStack()
+            chatSide = true
+        }
+    }
     val onTab: (Tab) -> Unit = { tab ->
         if (!(current in tab.nestedRoutes && nav.popBackStack(tab.route, inclusive = false))) nav.navigateToTab(tab)
     }
@@ -331,7 +380,6 @@ fun AppNavigation(
         },
     ) { padding ->
         val linkContext = LocalContext.current
-        val uiScope = rememberCoroutineScope()
         val onOpenLink: (ExternalLink) -> Unit = { link ->
             if (!openExternalLink(linkContext, link)) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) }
         }
@@ -488,7 +536,9 @@ fun AppNavigation(
                 }
             }
         }
-        androidx.compose.foundation.layout.Column(Modifier.weight(1f).fillMaxHeight()) {
+        androidx.compose.foundation.layout.Column(Modifier.weight(if (sideChat) 1f - SIDE_CHAT_WEIGHT else 1f).fillMaxHeight()) {
+        // The phone's back acts on the app first; with nothing left to go back to it closes the chat beside it.
+        androidx.activity.compose.BackHandler(enabled = sideChat) { chatSide = false }
         // Tab start screens have no photo header: a slim bar carries their chat button.
         if (openChat != null && current in CHAT_BAR_ROUTES) {
             de.wanderlogplus.app.ui.chat.ChatTopBar(Tab.entries.firstOrNull { it.route == current }?.label.orEmpty(), openChat)
@@ -496,6 +546,7 @@ fun AppNavigation(
         androidx.compose.runtime.CompositionLocalProvider(
             de.wanderlogplus.app.ui.design.LocalOpenChat provides openChat,
             de.wanderlogplus.app.ui.chat.LocalChatPane provides chatPane,
+            de.wanderlogplus.app.ui.design.LocalPaneWide provides paneWide,
             de.wanderlogplus.app.ui.budget.LocalBudgetActions provides budgetVm,
             LocalYenRate provides rememberYenRate(budgetVm?.let { vm -> suspend { vm.rate("JPY", null)?.rate } }),
             de.wanderlogplus.app.ui.guides.LocalGuideActions provides guidesVm,
@@ -509,33 +560,7 @@ fun AppNavigation(
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) {
             if (chatVm != null) {
-                composable(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) {
-                    val uri = androidx.compose.ui.platform.LocalUriHandler.current
-                    val tripVm: TripViewModel? = tripViewModelFactory?.let { viewModel(factory = it) }
-                    val live = tripVm?.snapshot?.collectAsState()?.value ?: snapshot
-                    tripVm?.let { TripErrors(it, snackbar) }
-                    val liveNow = androidx.compose.runtime.rememberUpdatedState(live)
-                    val actions = tripVm?.let { vm -> remember(vm) { chatActions(vm, { liveNow.value }) { msg -> uiScope.launch { snackbar.showSnackbar(msg) } } } }
-                    de.wanderlogplus.app.ui.chat.ChatRoute(
-                        chatVm, live,
-                        actions = actions,
-                        onBack = { nav.popBackStack() },
-                        onOpenPlace = { id -> nav.navigate(if (placesViewModelFactory != null) placeRoute(id) else tripPlaceRoute(id)) },
-                        onOpenUrl = { url -> if (runCatching { uri.openUri(url) }.isFailure) uiScope.launch { snackbar.showSnackbar(MSG_NO_APP) } },
-                        onOpenRef = { r ->
-                            val R = de.wanderlogplus.shared.sync.ChatRef
-                            when (r.type) {
-                                R.PLACE -> nav.navigate(if (placesViewModelFactory != null) placeRoute(r.id) else tripPlaceRoute(r.id))
-                                R.DAY -> nav.navigate(de.wanderlogplus.app.ui.trip.dayRoute(r.id))
-                                R.STAY -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.STAY, r.id))
-                                R.TRAIN -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.TRAIN, r.id))
-                                R.FLIGHT -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(de.wanderlogplus.shared.sync.EntityType.FLIGHT, r.id))
-                                R.GUIDE -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(r.id))
-                                R.REGION -> if (placesViewModelFactory != null) nav.navigate(regionRoute(r.id))
-                            }
-                        },
-                    )
-                }
+                composable(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { chatContent(false) { nav.popBackStack() } }
             }
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
@@ -584,7 +609,7 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            wide -> {
+                            paneWide -> {
                                 val today = rememberMinuteNow(clock).toLocalDate().toString()
                                 var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
                                 val date = selectedDay ?: defaultDayFor(s, today)
@@ -779,7 +804,7 @@ fun AppNavigation(
                     val key = entry.arguments?.getString("regionKey").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let {
-                            if (wide) {
+                            if (paneWide) {
                                 var selectedPlace by rememberSaveable(key) { mutableStateOf<String?>(null) }
                                 TwoPane(
                                     list = { RegionFor(vm, it, key, onOpenPlace = { id -> selectedPlace = id }) },
@@ -829,7 +854,7 @@ fun AppNavigation(
                         when {
                             s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                             s.isEmpty -> EmptyState(onSyncNow = onRefresh)
-                            wide -> {
+                            paneWide -> {
                                 var selected by rememberSaveable { mutableStateOf<String?>(null) } // "TYPE/id"
                                 val sel = selected?.split('/', limit = 2)?.takeIf { it.size == 2 }
                                 TwoPane(
@@ -1298,9 +1323,16 @@ fun AppNavigation(
         }
         }
         }
+        if (sideChat) {
+            androidx.compose.material3.VerticalDivider()
+            Box(Modifier.weight(SIDE_CHAT_WEIGHT).fillMaxHeight().testTag("side-chat")) { chatContent(true) { chatSide = false } }
+        }
         }
     }
 }
+
+/** The part of the window the chat takes beside the app (unfolded). */
+private const val SIDE_CHAT_WEIGHT = 0.45f
 
 /** Routes whose screen has no photo header; they show [de.wanderlogplus.app.ui.chat.ChatTopBar] instead. */
 private val CHAT_BAR_ROUTES = setOf(Tab.REISE.route, Tab.ORTE.route, Tab.LOGISTIK.route, Tab.BUDGET.route, Tab.MEHR.route)

@@ -4,7 +4,6 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -49,7 +48,7 @@ import java.time.LocalDateTime
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w840dp-h740dp")
 class WideLayoutTest {
-    @get:Rule val rule = createComposeRule()
+    @get:Rule val rule = androidx.compose.ui.test.junit4.createAndroidComposeRule<androidx.activity.ComponentActivity>()
     @get:Rule val tmp = TemporaryFolder()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -82,6 +81,9 @@ class WideLayoutTest {
         )
     }
 
+    /** The window width the app sees; lowering it folds the phone. */
+    private val widthDp = androidx.compose.runtime.mutableIntStateOf(840)
+
     private fun launch(hasServer: Boolean = true) {
         val files = AttachmentFiles(tmp.newFolder("att"))
         val imported = files.importStream("not really a jpeg".byteInputStream())
@@ -89,6 +91,9 @@ class WideLayoutTest {
         val snapshot: TripSnapshot = Fixtures.trip().copy(attachments = listOf(ticket))
         val flow = MutableStateFlow<TripSnapshot?>(snapshot)
         rule.setContent {
+            val base = androidx.compose.ui.platform.LocalConfiguration.current
+            val config = android.content.res.Configuration(base).apply { screenWidthDp = widthDp.intValue }
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalConfiguration provides config) {
             WanderlogPlusTheme {
                 AppNavigation(
                     hasServer = hasServer,
@@ -107,6 +112,7 @@ class WideLayoutTest {
                     onReloadMapImages = { mapReloads++ },
                     chatViewModelFactory = factory { chatVm },
                 )
+            }
             }
         }
         rule.waitForIdle()
@@ -191,5 +197,84 @@ class WideLayoutTest {
         tapRail("mehr")
         rule.onNodeWithText("Einstellungen").tap()
         rule.waitForIdle()
+    }
+
+    private fun count(t: String) = rule.onAllNodesWithTag(t).fetchSemanticsNodes().size
+    private fun back() { rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }; rule.waitForIdle() }
+
+    @Test fun chatOpensBesideTheAppWhichGetsPhoneWidth() {
+        launch()
+        tapRail("reise")
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        shows("side-chat")
+        shows("chat-close")
+        shows("nav-rail")
+        shows("trip-list") // the app keeps running on the left
+        assertEquals(0, count("two-pane")) // no list and detail side by side beside the chat
+        assertEquals(0, count("chat-back"))
+    }
+
+    @Test fun theChatStaysWhileTheAppNavigates() {
+        launch()
+        tapRail("reise")
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        tapRail("orte")
+        tag("region-r-berg").tap()
+        rule.waitForIdle()
+        tag("place-s-tempel").tap() // phone width: the place opens on its own on the left
+        rule.waitForIdle()
+        shows("side-chat")
+        assertEquals(0, count("two-pane"))
+        // The place's chat button only moves the chat's context to the place.
+        tag("hero-chat").tap()
+        rule.waitForIdle()
+        assertEquals(1, count("side-chat"))
+        assertEquals("s-tempel", chatVm.context.value?.savedPlaceId)
+    }
+
+    @Test fun closeAndBackLeaveTheSideChat() {
+        launch()
+        tapRail("reise")
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        tag("chat-close").tap()
+        rule.waitForIdle()
+        assertEquals(0, count("side-chat"))
+        shows("two-pane") // list and detail again
+        // Back goes through the app first; with nothing left it closes the chat.
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        tag("trip-list").performScrollToNode(hasTestTag("day-2027-04-03"))
+        tag("day-2027-04-03").tap()
+        rule.waitForIdle()
+        shows("side-chat")
+        back()
+        shows("side-chat")
+        shows("trip-list")
+        back() // Reise -> Heute, the start
+        shows("side-chat")
+        shows("today-header")
+        back()
+        assertEquals(0, count("side-chat"))
+        shows("today-header")
+    }
+
+    @Test fun foldingKeepsTheChatOpen() {
+        launch()
+        tapRail("reise")
+        tag("chat-open").tap()
+        rule.waitForIdle()
+        widthDp.intValue = 400 // folded
+        rule.waitForIdle()
+        assertEquals(0, count("side-chat"))
+        shows("chat-back") // the chat as its own screen
+        widthDp.intValue = 840 // unfolded again
+        rule.waitForIdle()
+        shows("side-chat")
+        shows("trip-list")
+        back()
+        shows("side-chat") // the chat route is gone from the back stack: back acts on the app
     }
 }

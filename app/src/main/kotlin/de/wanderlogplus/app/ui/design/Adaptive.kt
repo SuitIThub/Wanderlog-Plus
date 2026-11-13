@@ -18,7 +18,14 @@ const val WIDE_LAYOUT_MIN_DP = 600
  * or landscape. Follows configuration changes, so folding and unfolding switch the layout live.
  */
 @Composable
-fun isWideLayout(): Boolean = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_MIN_DP
+fun isWideLayout(): Boolean = LocalPaneWide.current ?: isWideWindow()
+
+/** True when the whole window is wide (unfolded foldable, tablet, landscape), whatever sits beside the screens. */
+@Composable
+fun isWideWindow(): Boolean = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_MIN_DP
+
+/** Overrides [isWideLayout] for the screens below, e.g. false while the chat takes the right part of the window. */
+val LocalPaneWide = androidx.compose.runtime.compositionLocalOf<Boolean?> { null }
 
 /** List on the left ([listWeight] of the width), detail on the right, separated by a thin line. Tag `two-pane`. */
 @Composable
