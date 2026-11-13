@@ -63,6 +63,33 @@ object QuickAsks {
         return QuickRequest(question(kind), quick, here?.location())
     }
 
+    /**
+     * The widget's result from the answered [chat]: the place cards of the last answer in their order (saved places
+     * with their first image), distances from [from]; without cards the answer's text; an error answer fails.
+     */
+    fun result(kind: String, chat: de.wanderlogplus.shared.sync.ChatInfo, from: ChatLocation?, s: TripSnapshot?, at: Long, date: String): QuickResult {
+        val last = chat.messages.lastOrNull()
+        if (last == null || last.role != de.wanderlogplus.shared.sync.ChatMessage.ROLE_ASSISTANT) {
+            return QuickResult(kind, chat.id, QuickResult.FAILED, at, date)
+        }
+        val cards = last.cards.filter { it.kind == de.wanderlogplus.shared.sync.ChatCard.KIND_PLACE || it.kind == de.wanderlogplus.shared.sync.ChatCard.KIND_WEB }
+            .map { c ->
+                val saved = c.savedPlaceId?.let { id -> s?.savedPlaces?.firstOrNull { it.id == id } }
+                val place = saved?.let { s?.places?.get(it.placeId) }
+                val lat = c.lat ?: place?.takeIf { it.has() }?.lat
+                val lng = c.lng ?: place?.takeIf { it.has() }?.lng
+                QuickCard(
+                    title = c.title,
+                    subtitle = c.subtitle?.takeIf { it.isNotBlank() },
+                    savedPlaceId = saved?.id,
+                    imageKey = place?.imageKeys?.firstOrNull { it.isNotBlank() },
+                    distanceMeters = if (from != null && lat != null && lng != null) (DayNow.km(from.lat, from.lng, lat, lng) * 1000).toInt() else null,
+                )
+            }
+        val text = if (cards.isEmpty()) last.text.replace("**", "").replace(Regex("""\s+"""), " ").trim().take(160) else null
+        return QuickResult(kind, chat.id, QuickResult.DONE, at, date, cards, text)
+    }
+
     private fun Place.has() = !(lat == 0.0 && lng == 0.0)
     private fun Place.location() = takeIf { it.has() }?.let { ChatLocation(it.lat, it.lng) }
 }
