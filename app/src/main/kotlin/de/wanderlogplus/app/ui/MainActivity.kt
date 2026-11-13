@@ -67,12 +67,18 @@ class MainActivity : ComponentActivity() {
     /** Setup link from the deep link; prefill only (never saved automatically). Held in memory only, never logged. */
     private val pendingSetup = MutableStateFlow<ServerSettings?>(null)
     private val pendingReel = MutableStateFlow<String?>(null)
+    private val pendingWidget = MutableStateFlow<String?>(null)
+
+    private fun handleWidgetIntent(intent: Intent?) {
+        intent?.getStringExtra(de.wanderlogplus.app.widgets.EXTRA_WIDGET_TARGET)?.let { pendingWidget.value = it }
+    }
 
     // launchMode="singleTop": a new wlp:// link reaches the running activity via onNewIntent.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleSetupIntent(intent)
         handleReelIntent(intent)
+        handleWidgetIntent(intent)
     }
 
     private fun handleReelIntent(intent: Intent?) {
@@ -132,6 +138,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             handleSetupIntent(intent)
             handleReelIntent(intent)
+            handleWidgetIntent(intent)
         }
         setContent {
             WanderlogPlusTheme {
@@ -178,6 +185,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val pending by pendingSetup.collectAsState()
                 val reelJob by pendingReel.collectAsState()
+                val widgetTarget by pendingWidget.collectAsState()
                 // Real maps only here: MapLibre is initialized lazily on first use, never in tests (they keep the defaults).
                 val routeMaps = remember { RouteMapRenderer(applicationContext) }
                 val updates: de.wanderlogplus.app.update.UpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = remember { updatesFactory(container) })
@@ -234,6 +242,8 @@ class MainActivity : ComponentActivity() {
                         hasAdminToken = hasAdminToken,
                         pendingReelJob = reelJob,
                         onPendingReelConsumed = { pendingReel.value = null },
+                        pendingWidgetTarget = de.wanderlogplus.app.widgets.WidgetTarget.parse(widgetTarget),
+                        onPendingWidgetConsumed = { pendingWidget.value = null },
                         hasServer = hasServer,
                         placeSearch = { q, near -> container.placeFinder.search(q, near, null).places },
                         geoSearch = container.geoSearch,

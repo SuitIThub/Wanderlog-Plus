@@ -239,6 +239,9 @@ fun AppNavigation(
     onCheckUpdates: (() -> Unit)? = null,
     /** The trip chat (assistant); null hides the chat buttons. */
     chatViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Where a home screen widget tap leads: handled once, then [onPendingWidgetConsumed]. */
+    pendingWidgetTarget: de.wanderlogplus.app.widgets.WidgetTarget? = null,
+    onPendingWidgetConsumed: () -> Unit = {},
     /** The budget (costs, splits); null hides the Kosten sections and leaves the Budget tab read-only. */
     budgetViewModelFactory: ViewModelProvider.Factory? = null,
     /** Travel guides (suggestions, jobs, pins); null: guides are read-only and cannot be created. */
@@ -312,6 +315,12 @@ fun AppNavigation(
             else nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
         }
     }
+    // The chat for a widget: today's context, beside the app when unfolded.
+    val showChat: () -> Unit = {
+        if (wide) chatSide = true
+        else nav.navigate(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { launchSingleTop = true }
+    }
+    var widgetNewExpense by remember { mutableStateOf(false) }
     // The chat, as its own route (folded) or beside the app (unfolded, [side]); [onClose] leaves it.
     val uiScope = rememberCoroutineScope()
     val chatContent: @Composable (Boolean, () -> Unit) -> Unit = { side, onClose ->
@@ -393,6 +402,27 @@ fun AppNavigation(
             } else {
                 null
             }
+        LaunchedEffect(pendingWidgetTarget, graphReady) {
+            val t = pendingWidgetTarget ?: return@LaunchedEffect
+            if (!graphReady) return@LaunchedEffect
+            val todayCtx = { de.wanderlogplus.app.ui.chat.chatContextFor(Tab.HEUTE.route, emptyMap(), snapshot, clock().toLocalDate().toString()) }
+            when (t) {
+                de.wanderlogplus.app.widgets.WidgetTarget.Today -> nav.navigateToTab(Tab.HEUTE)
+                is de.wanderlogplus.app.widgets.WidgetTarget.Day -> { nav.navigateToTab(Tab.REISE); nav.navigate(dayRoute(t.date)) }
+                is de.wanderlogplus.app.widgets.WidgetTarget.Logistics -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(t.type, t.id))
+                is de.wanderlogplus.app.widgets.WidgetTarget.Attachment -> snapshot?.attachments?.firstOrNull { it.id == t.id }?.let { a -> attachmentActions?.onOpen?.invoke(a) }
+                de.wanderlogplus.app.widgets.WidgetTarget.NewExpense -> if (moreViewModelFactory != null && budgetViewModelFactory != null) { widgetNewExpense = true; nav.navigateToTab(Tab.BUDGET) }
+                is de.wanderlogplus.app.widgets.WidgetTarget.StayAddress -> nav.navigate(de.wanderlogplus.app.ui.logistics.stayAddressRoute(t.stayId))
+                is de.wanderlogplus.app.widgets.WidgetTarget.Place -> nav.navigate(if (placesViewModelFactory != null) placeRoute(t.savedPlaceId) else tripPlaceRoute(t.savedPlaceId))
+                is de.wanderlogplus.app.widgets.WidgetTarget.Chat -> chatVm?.let { vm -> vm.openFrom(todayCtx(), t.chatId); showChat() }
+                is de.wanderlogplus.app.widgets.WidgetTarget.Ask -> chatVm?.let { vm ->
+                    val r = de.wanderlogplus.app.widgets.QuickAsks.request(t.kind, snapshot, clock())
+                    vm.ask(r.question, r.quick, r.anchor, todayCtx())
+                    showChat()
+                }
+            }
+            onPendingWidgetConsumed()
+        }
         @Composable
         fun DayDetailFor(vm: TripViewModel, snap: TripSnapshot, date: String, onBack: (() -> Unit)?) {
             val dayFailures by vm.failures.collectAsState()
@@ -561,6 +591,10 @@ fun AppNavigation(
         ) {
             if (chatVm != null) {
                 composable(de.wanderlogplus.app.ui.chat.CHAT_ROUTE) { chatContent(false) { nav.popBackStack() } }
+            }
+            composable(de.wanderlogplus.app.ui.logistics.STAY_ADDRESS_ROUTE) { entry ->
+                val id = entry.arguments?.getString("stayId").orEmpty()
+                de.wanderlogplus.app.ui.logistics.StayAddressScreen(snapshot, id, onBack = { nav.popBackStack() })
             }
             composable(SETUP_ROUTE) {
                 val vm: SetupViewModel = viewModel(factory = requireNotNull(setupViewModelFactory))
@@ -1137,7 +1171,10 @@ fun AppNavigation(
                         s == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                         s.isEmpty -> EmptyState(onSyncNow = onRefresh)
                         budgetVm == null -> EmptyHint("Das Budget ist hier nicht verfügbar", Modifier.padding(24.dp))
-                        else -> de.wanderlogplus.app.ui.budget.BudgetScreen(s, rememberMinuteNow(clock).toLocalDate().toString(), budgetVm)
+                        else -> de.wanderlogplus.app.ui.budget.BudgetScreen(
+                            s, rememberMinuteNow(clock).toLocalDate().toString(), budgetVm,
+                            startNewJpy = widgetNewExpense, onStartConsumed = { widgetNewExpense = false },
+                        )
                     }
                 }
                 composable(Tab.MEHR.route) {

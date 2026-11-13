@@ -92,10 +92,15 @@ class ChatViewModel(
     private var restored = false
     private var polling: Job? = null
 
-    fun openFrom(context: ChatContext?) {
+    /** Opens the chat with [context]; [chatId] picks that conversation (e.g. the one a widget result came from). */
+    fun openFrom(context: ChatContext?, chatId: String? = null) {
         _context.value = context
         viewModelScope.launch {
-            if (!restored) {
+            if (chatId != null) {
+                restored = true
+                polling?.cancel()
+                load(chatId)
+            } else if (!restored) {
                 restored = true
                 last.get()?.let { id -> load(id) }
             } else {
@@ -137,8 +142,25 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * A widget's "Was jetzt?": a new chat with [question], the [quick] block and – unless the position is shared –
+     * [fallback] (the program's place or the stay) as where the user is.
+     */
+    fun ask(question: String, quick: de.wanderlogplus.shared.sync.QuickAsk, fallback: de.wanderlogplus.shared.sync.ChatLocation?, context: ChatContext?) {
+        _context.value = context
+        polling?.cancel()
+        restored = true
+        _chat.value = null
+        send(question, quick = quick, fallback = fallback)
+    }
+
     /** Sends [text]; [refs] are the objects picked with "@" (only those still in the text go out). */
-    fun send(text: String, refs: List<de.wanderlogplus.shared.sync.ChatRef> = emptyList()) {
+    fun send(
+        text: String,
+        refs: List<de.wanderlogplus.shared.sync.ChatRef> = emptyList(),
+        quick: de.wanderlogplus.shared.sync.QuickAsk? = null,
+        fallback: de.wanderlogplus.shared.sync.ChatLocation? = null,
+    ) {
         val t = text.trim()
         if (t.isEmpty() || _sending.value || _chat.value?.pending == true) return
         _sending.value = true
@@ -151,8 +173,8 @@ class ChatViewModel(
                     l
                 } else {
                     null
-                }
-                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext(), location, Mentions.kept(t, refs)))
+                } ?: fallback
+                val sent = backend.send(id, ChatSendRequest(t, _context.value ?: ChatContext(), location, Mentions.kept(t, refs), quick))
                 _chat.value = sent
                 poll(sent.id)
             }
