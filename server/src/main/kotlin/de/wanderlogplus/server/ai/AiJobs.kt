@@ -270,6 +270,51 @@ class AiJobs(
         }
     }
 
+    /** Reshapes guides ([guideIds], empty = all) into glance, core and details, as one guide job; writes each at once. */
+    fun startGuideTidy(guideIds: List<String>): AiJobInfo {
+        val all = ChatTrip.from(store).guides
+        val targets = if (guideIds.isEmpty()) all else all.filter { it.id in guideIds }
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = targets.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, guideIds = targets.map { it.id },
+            ),
+        )
+        executor.execute { runGuideTidy(job, targets) }
+        return job
+    }
+
+    private fun runGuideTidy(start: AiJobInfo, guides: List<de.wanderlogplus.shared.model.Guide>) {
+        val t = Tracker(start)
+        val w = guideWriter ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            t.step((if (guides.size == 1) "1 Guide wird" else "${guides.size} Guides werden") + " gestrafft")
+            t.items(guides.map { JobItem("tidy-${it.id}", it.title.ifBlank { "Guide" }) })
+            guides.forEachIndexed { i, g ->
+                val key = "tidy-${g.id}"
+                t.item(key, state = "RUNNING")
+                try {
+                    val tidied = w.tidy(g, t.sayFor(key, g.title))
+                    writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, EntityCodec.fields(tidied))))
+                    t.item(key, state = "DONE", detail = tidied.title)
+                    t.step("${tidied.title}: gestrafft", JobProgress.OK)
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${g.title}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    log.error("Guide tidy failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide tidy job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
     val translateConfigured: Boolean get() = translator != null
 
     /**

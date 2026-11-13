@@ -332,4 +332,59 @@ Kein Handtuch ins Wasser.","sections":[
         assertTrue(!tidyKeeps(existing, existing.copy(sections = emptyList())))
         assertTrue(!tidyKeeps(existing, existing.copy(summary = "")))
     }
+
+    private fun tidyJobs(model: ChatModel) = AiJobs(
+        store, null, object : ReelMedia {
+            override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
+            override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
+        },
+        tmp.resolve("work-t"), executor = Executors.newSingleThreadExecutor(),
+        writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+        guideWriter = GuideWriter(facts, model),
+    )
+
+    private fun storeTwoGuides(): Guide {
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g1", EntityCodec.fields(existing.copy(writtenAt = 7)), create = true)))
+        val other = existing.copy(id = "g2", title = "Rolltreppen in Japan: Tokyo und Osaka", pinnedTo = emptyList())
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g2", EntityCodec.fields(other), create = true)))
+        return other
+    }
+
+    @Test
+    fun `guide tidy writes each guide`() {
+        storeTwoGuides()
+        val j = tidyJobs(Scripted { tidyAnswer })
+        val started = j.startGuideTidy(emptyList())
+        assertEquals("guides", started.kind)
+        assertEquals(setOf("g1", "g2"), started.guideIds.toSet())
+        j.drain()
+        assertEquals("DONE", j.get(started.id)!!.status)
+        val stored = storedGuides().associateBy { it.id }
+        assertEquals(setOf("Onsen"), stored.values.map { it.title }.toSet())
+        assertEquals(7, stored.getValue("g1").writtenAt)
+        assertEquals(existing.pinnedTo, stored.getValue("g1").pinnedTo)
+    }
+
+    @Test
+    fun `guide tidy keeps going after one failure`() {
+        val other = storeTwoGuides()
+        val noPhrases = tidyAnswer.replace("""{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}""", "")
+        val j = tidyJobs(Scripted { user -> if ("Rolltreppen" in user) noPhrases else tidyAnswer })
+        val started = j.startGuideTidy(emptyList())
+        j.drain()
+        val job = j.get(started.id)!!
+        assertEquals("DONE", job.status)
+        assertEquals(setOf("DONE", "FAILED"), job.items.map { it.state }.toSet())
+        assertEquals(other, storedGuides().single { it.id == "g2" })
+        assertEquals("Onsen", storedGuides().single { it.id == "g1" }.title)
+    }
+
+    @Test
+    fun `only the given guide is tidied`() {
+        val other = storeTwoGuides()
+        val j = tidyJobs(Scripted { tidyAnswer })
+        j.startGuideTidy(listOf("g1")); j.drain()
+        assertEquals(other, storedGuides().single { it.id == "g2" })
+        assertEquals("Onsen", storedGuides().single { it.id == "g1" }.title)
+    }
 }

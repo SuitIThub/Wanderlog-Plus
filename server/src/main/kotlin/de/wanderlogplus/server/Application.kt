@@ -429,6 +429,12 @@ fun Application.module(services: Services) {
                 if (req.guideIds.size > 200) throw BadInput()
                 call.respond(withContext(Dispatchers.IO) { services.ai.startGuideLinks(req.guideIds.distinct()) })
             }
+            post("/api/ai/guide-tidy") {
+                if (!services.ai.guidesConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.GuideTidyRequest>()
+                if (req.guideIds.size > 200) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startGuideTidy(req.guideIds.distinct()) })
+            }
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()

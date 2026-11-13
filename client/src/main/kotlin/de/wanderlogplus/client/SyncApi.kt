@@ -427,6 +427,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Reshapes guides ([guideIds], empty = all) into glance, core and details, as one guide job. */
+    suspend fun startGuideTidy(guideIds: List<String> = emptyList()): AiJobInfo = call {
+        client.post("$base/api/ai/guide-tidy") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.GuideTidyRequest(guideIds))
+        }
+    }
+
     /** Translates every non-German place description and the Japanese Tabelog texts into German, as one job. */
     suspend fun startTranslate(): AiJobInfo = call {
         client.post("$base/api/ai/translate") { auth() }
