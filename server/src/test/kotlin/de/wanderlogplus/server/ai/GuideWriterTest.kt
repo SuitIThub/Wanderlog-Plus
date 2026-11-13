@@ -387,4 +387,11 @@ Kein Handtuch ins Wasser.","sections":[
         assertEquals(other, storedGuides().single { it.id == "g2" })
         assertEquals("Onsen", storedGuides().single { it.id == "g1" }.title)
     }
+
+    @Test
+    fun `merge prompt lets long old guides keep everything`() {
+        val model = Scripted { withLinks("Onsen", sections = 3) }
+        GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
+        assertTrue("auch über die Grenzen hinaus" in model.systems.single(), model.systems.single())
+    }
 }

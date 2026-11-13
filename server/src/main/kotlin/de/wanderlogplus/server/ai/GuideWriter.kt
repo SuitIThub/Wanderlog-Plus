@@ -99,6 +99,8 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
             Behalte alle Abschnitte, Do's, Don'ts und Sätze inhaltlich bei; arbeite die Ergänzungen in passende Abschnitte ein
             oder lege einen neuen Abschnitt an. Knapp, praktisch, auf Deutsch. Gib den ganzen Guide zurück.
             $FORMAT_RULES
+            Die Grenzen für Abschnitte, Do's und Don'ts gelten für Neues: Bisheriges bleibt vollständig, auch über die Grenzen hinaus
+            (zum Kürzen gibt es das Straffen).
             Antworte nur mit JSON: {"title": "…", "summary": "Zeile 1\nZeile 2\nZeile 3",
             "sections": [{"heading": "…", "text": "…", "dos": ["…"], "donts": ["…"], "details": "…"}],
             "phrases": [{"german": "…", "japanese": "…", "romaji": "…", "situation": "…"}],
