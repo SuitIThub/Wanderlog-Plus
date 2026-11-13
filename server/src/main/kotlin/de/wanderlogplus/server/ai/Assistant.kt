@@ -298,7 +298,12 @@ class Assistant(
                 .mapNotNull { o -> data.places[o.placeId]?.name?.takeIf { n -> n.isNotBlank() }?.let { n -> if (o.status == PlaceStatus.PLANNED) "$n (eingeplant)" else n } }
                 .take(15)
             val trip = listOfNotNull(region?.let { "Region $it" }, others.takeIf { it.isNotEmpty() }?.joinToString(", ", "dort auch hinterlegt: ")).joinToString("; ")
-            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), p?.description?.take(300).orEmpty(), trip, p?.googlePlaceId?.takeIf { it.isNotBlank() })
+            val reelFacts = s.dossier?.reelFacts.orEmpty()
+            val evidence = listOfNotNull(
+                p?.description?.take(300)?.takeIf { it.isNotBlank() },
+                reelFacts.takeIf { it.isNotEmpty() }?.joinToString("; ", "Laut Reel: "),
+            ).joinToString("; ").take(600)
+            val query = ResearchQuery(p?.name ?: "?", null, region, "Japan", s.category.name.lowercase(), evidence, trip, p?.googlePlaceId?.takeIf { it.isNotBlank() })
             val r = try {
                 researcher.research(query, config, say)
             } catch (e: AiFailed) {
@@ -308,7 +313,7 @@ class Assistant(
             val result = r?.let {
                 val pois = locatePois(it.dossier.pois, p?.lat, p?.lng, p?.name.orEmpty(), region, geocoder, placeFinder)
                 say(poiLine(it.dossier.pois.size, pois.size))
-                DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois))
+                DossierResult(s.id, parseWorth(it.worth), it.description, it.dossier.copy(researchedAt = now(), pois = pois, reelFacts = reelFacts))
             }
             result?.let(onResult)
             if (result == null) {

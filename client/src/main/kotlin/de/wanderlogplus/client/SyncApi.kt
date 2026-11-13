@@ -427,6 +427,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Works reel facts into the research of saved places, as one job (kind "place-facts"). */
+    suspend fun startPlaceFacts(items: List<de.wanderlogplus.shared.sync.PlaceFactsItem>): AiJobInfo = call {
+        client.post("$base/api/ai/place-facts") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.PlaceFactsRequest(items))
+        }
+    }
+
     /** Reshapes guides ([guideIds], empty = all) into glance, core and details, as one guide job. */
     suspend fun startGuideTidy(guideIds: List<String> = emptyList()): AiJobInfo = call {
         client.post("$base/api/ai/guide-tidy") {
