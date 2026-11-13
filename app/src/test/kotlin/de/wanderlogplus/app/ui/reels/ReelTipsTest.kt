@@ -104,7 +104,7 @@ class ReelTipsTest {
         }, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
         vm.import("j2", emptyList(), listOf(trueTip, newGuide), null)
         val deadline = System.currentTimeMillis() + 5_000
-        while (bodies.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        while ("j2" !in imported && System.currentTimeMillis() < deadline) Thread.sleep(10)
         val req = Json { ignoreUnknownKeys = true }.decodeFromString(GuideRequest.serializer(), bodies.single())
         assertEquals(2, req.asks.size)
         assertTrue("j2" in imported)

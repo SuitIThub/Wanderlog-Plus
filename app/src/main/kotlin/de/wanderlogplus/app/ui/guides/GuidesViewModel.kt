@@ -32,6 +32,9 @@ interface GuideActions {
 
     /** Lets the server find and check the apps and pages all guides mention. */
     fun addLinks() {}
+
+    /** Lets the server reshape guides ([guideIds], empty = all) into glance, core and details. */
+    fun tidy(guideIds: List<String>) {}
 }
 
 /** The guide actions for detail screens and the today card; null hides hiding/pinning there. */
@@ -55,6 +58,8 @@ class GuidesViewModel(
     private val pollMs: Long = POLL_MS,
     /** Starts the "Links ergänzen" job for all guides; null when no server is set up. */
     private val startGuideLinks: suspend () -> AiJobInfo? = { null },
+    /** Starts the "Straffen" job for the given guides (empty = all); null when no server is set up. */
+    private val startGuideTidy: suspend (List<String>) -> AiJobInfo? = { null },
 ) : ViewModel(), GuideActions {
     private val _jobs = MutableStateFlow<List<AiJobInfo>>(emptyList())
 
@@ -98,20 +103,33 @@ class GuidesViewModel(
         }
     }
 
-    override fun addLinks() {
+    override fun tidy(guideIds: List<String>) = startJob(
+        start = { startGuideTidy(guideIds) },
+        failed = "Guides lassen sich gerade nicht straffen (Server nicht erreichbar?).",
+        running = "Guides werden gestrafft …",
+    )
+
+    override fun addLinks() = startJob(
+        start = { startGuideLinks() },
+        failed = "Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?).",
+        running = "Links werden ergänzt …",
+    )
+
+    /** Starts a guide job, follows it and says so; [failed] when it could not start. */
+    private fun startJob(start: suspend () -> AiJobInfo?, failed: String, running: String) {
         scope.launch {
             val started = try {
-                startGuideLinks()
+                start()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 null
             }
             if (started == null) {
-                _message.value = "Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?)."
+                _message.value = failed
                 return@launch
             }
-            _message.value = "Links werden ergänzt …"
+            _message.value = running
             _jobs.value = listOf(started) + _jobs.value.filter { it.id != started.id }
             refreshJobs()
         }

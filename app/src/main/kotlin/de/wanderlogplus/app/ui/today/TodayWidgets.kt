@@ -710,7 +710,7 @@ internal fun TodayGuidesWidget(
     }
     preview?.let { g ->
         de.wanderlogplus.app.ui.design.EditSheet(g.title, onDismiss = { preview = null }) {
-            if (g.summary.isNotBlank()) Text(g.summary, style = MaterialTheme.typography.bodyLarge)
+            de.wanderlogplus.app.ui.guides.glanceLines(g.summary).forEach { Text("• $it", style = MaterialTheme.typography.bodyLarge) }
             g.sections.flatMap { it.dos }.take(3).forEach { Text("✓ $it", style = MaterialTheme.typography.bodyMedium) }
             g.sections.flatMap { it.donts }.take(3).forEach { Text("✗ $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
             androidx.compose.material3.Button(onClick = { onOpenGuide(g.id); preview = null }, modifier = Modifier.testTag("today-guide-open")) { Text("Ganzen Guide öffnen") }

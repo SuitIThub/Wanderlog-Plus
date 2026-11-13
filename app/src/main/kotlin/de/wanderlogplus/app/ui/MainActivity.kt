@@ -339,6 +339,7 @@ class MainActivity : ComponentActivity() {
             recentJobs = { container.syncApi()?.aiJobs("guides", 5) },
             syncNow = container.syncScheduler::requestNow,
             startGuideLinks = { container.syncApi()?.startGuideLinks() },
+            startGuideTidy = { ids -> container.syncApi()?.startGuideTidy(ids) },
         ) as T
     }
 
