@@ -34,6 +34,9 @@ Gemeinsamer Regelblock `FORMAT_RULES`:
   Reise ohnehin weiß (Orte, Strecken, „in Japan“) und keine Inhaltsliste als Untertitel. Beispiele im Prompt:
   „Shinkansen & Suica“ statt „Shinkansen & Suica: Tokyo – Nagoya – Shin-Osaka – Hiroshima“, „Yakiniku & Grill“
   statt „Yakiniku & Grill in Japan“.
+  Die Beispiele zeigen nur, was weg soll; sie sind keine Vorlage für die Form. Der Prompt sagt ausdrücklich, dass
+  „A & B“ kein Muster ist, und nennt Titel in anderen Formen („Trinkgeld“, „Onsen-Etikette“, „Bezahlen mit Karte“,
+  „Nachtzüge“). Ein Titel ist so lang, wie das Thema es braucht.
 - summary: 3–5 Zeilen, je eine Kernaussage, das vor Ort Wichtigste zuerst.
 - Höchstens 6 Abschnitte; heading 1–4 Wörter; text 1–2 Sätze; höchstens 4 dos und 4 donts, je ein kurzer Satz.
 - details: alles, was zum Vorbereiten nützt, vor Ort aber nicht gebraucht wird (Hintergrund, Ausnahmen, Beispiele);
