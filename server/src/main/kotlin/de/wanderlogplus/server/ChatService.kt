@@ -76,7 +76,8 @@ class ChatService(
             )
         }
         val location = req.location?.takeIf { it.lat in -90.0..90.0 && it.lng in -180.0..180.0 }
-        executor.execute { runAnswer(id, location) }
+        val quick = de.wanderlogplus.server.ai.validQuick(req.quick)
+        executor.execute { runAnswer(id, location, quick) }
         return started
     }
 
@@ -99,11 +100,11 @@ class ChatService(
         store.chats(200).map { decode(it) }.filter { it.pending }.forEach { finish(it.id, errorMessage("interrupted")) }
     }
 
-    private fun runAnswer(id: String, location: de.wanderlogplus.shared.sync.ChatLocation? = null) {
+    private fun runAnswer(id: String, location: de.wanderlogplus.shared.sync.ChatLocation? = null, quick: de.wanderlogplus.shared.sync.QuickAsk? = null) {
         val a = agent ?: return
         val chat = get(id) ?: return
         val reply = try {
-            val answer = a.answer(chat.messages, ChatTrip.from(store), location) { line -> status(id, line) }
+            val answer = a.answer(chat.messages, ChatTrip.from(store), location, quick) { line -> status(id, line) }
             ChatMessage(UUID.randomUUID().toString(), ChatMessage.ROLE_ASSISTANT, answer.text, now().toEpochMilli(), cards = answer.cards)
         } catch (e: AiFailed) {
             errorMessage(e.code)
