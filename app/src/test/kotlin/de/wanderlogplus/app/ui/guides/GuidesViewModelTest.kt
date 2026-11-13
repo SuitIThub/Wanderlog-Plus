@@ -120,4 +120,26 @@ class GuidesViewModelTest {
         links.addLinks()
         assertEquals("Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?).", links.message.value)
     }
+
+    @Test
+    fun tidyStartsTheJobForOneGuide() {
+        val asked = mutableListOf<List<String>>()
+        val running = AiJobInfo("t1", "guides", 5, "RESEARCHING", guideIds = listOf("g1"))
+        val vm = GuidesViewModel(
+            edit, CoroutineScope(Dispatchers.Unconfined),
+            startGuides = { null }, recentJobs = { listOf(running.copy(status = "DONE")) },
+            startGuideTidy = { ids -> asked += ids; running }, pollMs = 0,
+        )
+        vm.tidy(listOf("g1"))
+        assertEquals(listOf(listOf("g1")), asked)
+        assertTrue(vm.jobs.value.any { it.id == "t1" })
+        assertEquals("Guides werden gestrafft …", vm.message.value)
+    }
+
+    @Test
+    fun tidyWithoutServerSaysSo() {
+        val vm = GuidesViewModel(edit, CoroutineScope(Dispatchers.Unconfined), startGuides = { null }, recentJobs = { null }, startGuideTidy = { null }, pollMs = 0)
+        vm.tidy(emptyList())
+        assertEquals("Guides lassen sich gerade nicht straffen (Server nicht erreichbar?).", vm.message.value)
+    }
 }

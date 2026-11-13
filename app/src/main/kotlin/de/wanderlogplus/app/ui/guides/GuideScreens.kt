@@ -98,6 +98,11 @@ fun GuidesScreen(
                             onClick = { menu = false; actions.addLinks() },
                             modifier = Modifier.testTag("guides-add-links"),
                         )
+                        DropdownMenuItem(
+                            text = { Text("Guides straffen") },
+                            onClick = { menu = false; actions.tidy(emptyList()) },
+                            modifier = Modifier.testTag("guides-tidy"),
+                        )
                     }
                 }
             }
@@ -169,7 +174,7 @@ private fun GuideRow(g: Guide, sub: Boolean, onClick: () -> Unit) {
     SurfaceCard(onClick = onClick, modifier = Modifier.padding(start = if (sub) 24.dp else 0.dp)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Text(g.title.ifBlank { "Guide" }, fontWeight = FontWeight.SemiBold)
-            if (g.summary.isNotBlank()) Text(g.summary, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+            if (g.summary.isNotBlank()) Text(glanceLines(g.summary).take(2).joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 2)
         }
     }
 }
@@ -203,6 +208,7 @@ fun GuideScreen(
                     DropdownMenu(menu, onDismissRequest = { menu = false }) {
                         if (actions != null) DropdownMenuItem(text = { Text("Bearbeiten") }, onClick = { menu = false; editing = true })
                         if (onImprove != null) DropdownMenuItem(text = { Text("Im Chat verbessern") }, onClick = { menu = false; onImprove() })
+                        if (actions != null) DropdownMenuItem(text = { Text("Straffen") }, onClick = { menu = false; actions.tidy(listOf(g.id)) }, modifier = Modifier.testTag("guide-tidy"))
                         if (actions != null) DropdownMenuItem(text = { Text("Löschen") }, onClick = { menu = false; confirmDelete = true })
                     }
                 }
@@ -215,28 +221,30 @@ fun GuideScreen(
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(g.title, style = de.wanderlogplus.app.ui.HeroTitle, color = MaterialTheme.colorScheme.onSurface)
             GuideJobs.stateOf(g, jobs)?.let { GuideJobBanner(it) }
-            if (g.summary.isNotBlank()) SurfaceCard { Text(de.wanderlogplus.app.ui.euroed(g.summary), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge) }
+            val glance = glanceLines(g.summary)
+            if (glance.isNotEmpty()) SurfaceCard(Modifier.testTag("guide-glance")) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Auf einen Blick", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
+                    glance.forEach { Text("• " + de.wanderlogplus.app.ui.euroed(it), style = MaterialTheme.typography.bodyLarge) }
+                }
+            }
             if (g.links.isNotEmpty()) {
                 Text("Apps & Links", fontWeight = FontWeight.SemiBold)
                 GuideLinkChips(g.links, showNotes = true)
             }
-            g.sections.forEach { s ->
-                SurfaceCard {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(s.heading, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
-                        if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(s.text))
-                        s.dos.forEach { DoLine(it, good = true) }
-                        s.donts.forEach { DoLine(it, good = false) }
-                    }
-                }
-            }
+            g.sections.forEachIndexed { i, s -> GuideSectionCard(s, Modifier.testTag("guide-section-$i")) }
             val children = snapshot.guides.filter { it.parentId == g.id }.sortedBy { it.title.lowercase() }
             if (children.isNotEmpty()) {
                 Text("Unterthemen", fontWeight = FontWeight.SemiBold)
                 GuideChips(children, onOpen = onOpenGuide)
             }
+            var showPhrases by remember(g.id) { mutableStateOf(false) }
             if (g.phrases.isNotEmpty()) {
-                Text("Sätze zum Zeigen", fontWeight = FontWeight.SemiBold)
+                TextButton(onClick = { showPhrases = !showPhrases }, modifier = Modifier.testTag("guide-phrases-toggle")) {
+                    Text((if (showPhrases) "▾ " else "▸ ") + "Sätze zum Zeigen (${g.phrases.size})", fontWeight = FontWeight.SemiBold)
+                }
+            }
+            if (g.phrases.isNotEmpty() && showPhrases) {
                 if (speaker.checked && !speaker.ready) {
                     Text("Vorlesen braucht eine japanische Stimme (Android-Einstellungen → Sprachausgabe).", style = MaterialTheme.typography.bodySmall)
                 }
@@ -290,7 +298,7 @@ fun GuideScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(title, { title = it }, label = { Text("Titel") }, singleLine = true)
-                    OutlinedTextField(summary, { summary = it }, label = { Text("Das Wichtigste") }, minLines = 3)
+                    OutlinedTextField(summary, { summary = it }, label = { Text("Auf einen Blick (eine Zeile pro Punkt)") }, minLines = 3)
                 }
             },
             confirmButton = { TextButton(onClick = { actions.save(g.copy(title = title.trim().ifBlank { g.title }, summary = summary.trim())); editing = false }) { Text("Speichern") } },
@@ -305,6 +313,29 @@ fun GuideScreen(
             confirmButton = { TextButton(onClick = { confirmDelete = false; actions.delete(g.id); onBack() }) { Text("Löschen") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
         )
+    }
+}
+
+/** A section, folded to heading and first sentence; open: core, dos and don'ts, and "Mehr dazu" for the details. */
+@Composable
+private fun GuideSectionCard(s: de.wanderlogplus.shared.model.GuideSection, modifier: Modifier = Modifier) {
+    var open by remember(s) { mutableStateOf(false) }
+    var more by remember(s) { mutableStateOf(false) }
+    SurfaceCard(onClick = { open = !open }, modifier = modifier) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text((if (open) "▾ " else "▸ ") + s.heading, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+            if (!open) {
+                if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(coreLine(s.text)), style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+            } else {
+                if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(s.text))
+                s.dos.forEach { DoLine(it, good = true) }
+                s.donts.forEach { DoLine(it, good = false) }
+                if (s.details.isNotBlank()) {
+                    TextButton(onClick = { more = !more }) { Text(if (more) "Weniger" else "Mehr dazu") }
+                    if (more) Text(de.wanderlogplus.app.ui.euroed(s.details), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
     }
 }
 

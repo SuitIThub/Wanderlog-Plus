@@ -429,10 +429,24 @@ fun Application.module(services: Services) {
                 if (req.guideIds.size > 200) throw BadInput()
                 call.respond(withContext(Dispatchers.IO) { services.ai.startGuideLinks(req.guideIds.distinct()) })
             }
+            post("/api/ai/place-facts") {
+                if (!services.ai.placeFactsConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.PlaceFactsRequest>()
+                val bad = req.items.isEmpty() || req.items.size > de.wanderlogplus.server.ai.MAX_FACT_PLACES ||
+                    req.items.any { it.savedPlaceId.isBlank() || it.facts.isEmpty() || it.facts.size > de.wanderlogplus.server.ai.MAX_FACTS_PER_PLACE }
+                if (bad) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startPlaceFacts(req.items) })
+            }
+            post("/api/ai/guide-tidy") {
+                if (!services.ai.guidesConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.GuideTidyRequest>()
+                if (req.guideIds.size > 200) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startGuideTidy(req.guideIds.distinct()) })
+            }
             get("/api/ai/jobs") {
                 val limit = call.request.queryParameters["limit"]?.let { it.toIntOrNull() ?: throw BadInput() } ?: 20
                 if (limit !in 1..100) throw BadInput()
-                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research", "guides", "stay", "translate") }
+                val kind = call.request.queryParameters["kind"]?.takeIf { it in setOf("reel", "assess", "research", "guides", "stay", "translate", "place-facts") }
                 call.respond(withContext(Dispatchers.IO) { services.ai.list(kind, limit) })
             }
             get("/api/ai/jobs/{id}") {

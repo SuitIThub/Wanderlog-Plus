@@ -547,4 +547,46 @@ class AssistantTest {
         assertTrue(dossier.contains("Geheimtipp bleibt") && dossier.contains("crowds") && dossier.contains("Schön, aber voll."))
         assertTrue(job.steps.any { it.text == "1 Ort mit der Einschätzung aktualisiert" })
     }
+
+    private class FactsModel : ChatModel {
+        val research = mutableListOf<String>()
+        val systems = mutableListOf<String>()
+        override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String = when {
+            system.contains("Instagram-Reel") -> {
+                systems += system
+                val long = "x".repeat(300)
+                """{"summary":"Ramen.","locations":[{"name":"Ichiran Shibuya","city":"Tokyo","country":"Japan","kind":"food",
+                "facts":["Montags zu","Bestes Gericht: Tonkotsu","a","b","c"]},
+                {"name":"Lang","city":"Tokyo","kind":"food","facts":["$long"]}]}"""
+            }
+            else -> {
+                research += parts.joinToString("\n") { (it as? AiPart.Text)?.text.orEmpty() }
+                """{"description":"Ramen.","worth":"WORTH","verdict":"Gut."}"""
+            }
+        }
+    }
+
+    @Test fun placesCarryTheReelsFacts() {
+        val m = FactsModel()
+        val a = Assistant(m, FakeGeocoder()).analyze(null, Media(emptyList(), null), TripContext(emptyList(), emptyList()))
+        assertEquals(listOf("Montags zu", "Bestes Gericht: Tonkotsu", "a", "b"), a.places[0].facts)
+        assertEquals(200, a.places[1].facts.single().length)
+        assertTrue("facts" in m.systems.single() && "nicht in tips" in m.systems.single())
+    }
+
+    @Test fun reelFactsGoIntoTheResearchAndTheCandidate() {
+        val m = FactsModel()
+        val p = FoundPlace("Ichiran Shibuya", null, "Tokyo", "Japan", "food", "Gesprochen", facts = listOf("Montags zu"))
+        val c = Assistant(m, FakeGeocoder()).research(p, TripContext(emptyList(), emptyList()))
+        assertTrue(m.research.any { "Laut Beitrag: Montags zu" in it }, m.research.joinToString())
+        assertEquals(listOf("Montags zu"), c.reelFacts)
+    }
+
+    @Test fun anAlreadySavedCandidateKeepsReelFacts() {
+        val ctx = TripContext(emptyList(), emptyList(), listOf(SavedRef("s2", "Ichiran Shibuya", 35.6612, 139.7016)))
+        val p = FoundPlace("Ichiran Shibuya", null, "Tokyo", "Japan", "food", "", facts = listOf("Montags zu"))
+        val c = Assistant(FactsModel(), FakeGeocoder()).research(p, ctx)
+        assertEquals("s2", c.savedPlaceId)
+        assertEquals(listOf("Montags zu"), c.reelFacts)
+    }
 }

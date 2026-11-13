@@ -120,8 +120,8 @@ fun ReelJobScreen(
     job: AiJobInfo?,
     snapshot: TripSnapshot?,
     imported: Boolean,
-    /** The picked places and the picked tips (with their chosen guide). */
-    onImport: (List<ReelPick>, List<ReelTip>) -> Unit,
+    /** The picked places, the picked tips (with their chosen guide or place) and the saved places whose reel facts go into their research. */
+    onImport: (List<ReelPick>, List<ReelTip>, List<de.wanderlogplus.shared.sync.ReelCandidate>) -> Unit,
     onOpenPlaces: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -143,6 +143,16 @@ fun ReelJobScreen(
     val tips = remember(job?.id, job?.tips) { mutableStateMapOf<Int, ReelTip>().apply { job?.tips.orEmpty().forEachIndexed { i, t -> put(i, t) } } }
     val tipPicked = remember(job?.id, job?.tips?.size) {
         mutableStateMapOf<Int, Boolean>().apply { job?.tips.orEmpty().forEachIndexed { i, t -> put(i, tipPreselected(t)) } }
+    }
+    // Saved places with facts from the reel: "Zum Ort hinzufügen", picked from the start.
+    val factsPicked = remember(job?.id, candidates.size) {
+        mutableStateMapOf<Int, Boolean>().apply { candidates.forEachIndexed { i, c -> if (c.savedPlaceId != null && c.reelFacts.isNotEmpty()) put(i, true) } }
+    }
+    // Places a tip may go to: the reel's saved places and the ones the check suggested.
+    val placeOptions = buildMap<String, String> {
+        candidates.forEach { c -> c.savedPlaceId?.let { put(it, c.name) } }
+        val names = snapshot?.let { s -> s.savedPlaces.associate { it.id to (s.places[it.placeId]?.name ?: "Ort") } }.orEmpty()
+        job?.tips.orEmpty().flatMap { it.placeIds }.forEach { id -> if (id !in this) put(id, names[id] ?: "Ort") }
     }
     val placedByHand = candidates.mapIndexedNotNull { i, c -> i.takeIf { c.positionSetByHand } }
     LaunchedEffect(placedByHand) {
@@ -212,6 +222,19 @@ fun ReelJobScreen(
                                 if (forced[i] == true && !imported) {
                                     Text("Wird als eigener Ort übernommen und danach recherchiert.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
+                                if (c.savedPlaceId != null && c.reelFacts.isNotEmpty() && forced[i] != true) {
+                                    Text("Neu aus dem Reel", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                                    c.reelFacts.forEach { Text("• " + de.wanderlogplus.app.ui.euroed(it), style = MaterialTheme.typography.bodyMedium) }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Checkbox(
+                                            checked = factsPicked[i] == true,
+                                            onCheckedChange = { factsPicked[i] = it },
+                                            enabled = !imported,
+                                            modifier = Modifier.testTag("reel-facts-$i"),
+                                        )
+                                        Text("Zum Ort hinzufügen", style = MaterialTheme.typography.bodyMedium)
+                                    }
+                                }
                                 if (c.description.isNotBlank()) Text(c.description, style = MaterialTheme.typography.bodyMedium)
                                 if (c.worthReason.isNotBlank()) Text(c.worthReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 val note = reelNote(c, null)
@@ -248,6 +271,7 @@ fun ReelJobScreen(
                                 checked = tipPicked[i] == true,
                                 enabled = !imported && tipSelectable(t),
                                 snapshot = snapshot,
+                                places = placeOptions,
                                 onCheck = { tipPicked[i] = it },
                                 onTarget = { tips[i] = it },
                             )
@@ -255,12 +279,13 @@ fun ReelJobScreen(
                     }
                 }
                 val count = picked.count { it.value }
-                val tipCount = tipPicked.count { it.value && tips[it.key]?.let(::tipSelectable) == true }
+                val tipCount = tipPicked.count { it.value && tips[it.key]?.let(::tipSelectable) == true } +
+                    factsPicked.count { it.value && forced[it.key] != true }
                 if (imported) {
                     if (candidates.isNotEmpty()) {
                         Button(onClick = onOpenPlaces, modifier = Modifier.fillMaxWidth().padding(16.dp).testTag("reel-imported")) { Text("Übernommen – zu den Orten") }
                     } else {
-                        Text("Übernommen – die Guides werden ergänzt.", Modifier.padding(16.dp).testTag("reel-imported"), style = MaterialTheme.typography.bodyMedium)
+                        Text("Übernommen – Guides und Orte werden ergänzt.", Modifier.padding(16.dp).testTag("reel-imported"), style = MaterialTheme.typography.bodyMedium)
                     }
                 } else {
                     Button(
@@ -268,6 +293,7 @@ fun ReelJobScreen(
                             onImport(
                                 candidates.indices.filter { picked[it] == true }.map { ReelPick(candidates[it], regions[it], research = forced[it] == true) },
                                 tips.keys.sorted().filter { tipPicked[it] == true }.map { tips.getValue(it) }.filter(::tipSelectable),
+                                candidates.indices.filter { factsPicked[it] == true && forced[it] != true }.map { candidates[it] },
                             )
                         },
                         enabled = count + tipCount > 0,
@@ -310,6 +336,8 @@ private fun ReelTipCard(
     checked: Boolean,
     enabled: Boolean,
     snapshot: TripSnapshot?,
+    /** Saved places the tip may go to instead of a guide: id to name. */
+    places: Map<String, String>,
     onCheck: (Boolean) -> Unit,
     onTarget: (ReelTip) -> Unit,
 ) {
@@ -343,27 +371,30 @@ private fun ReelTipCard(
                 val newTitle = tip.targetTitle ?: tip.topic.ifBlank { "Reisetipps" }
                 val catalog = tip.targetTopic?.let { de.wanderlogplus.shared.guide.GuideTopics.byKey(it) }
                 val options = buildList<Pair<String, String>> {
+                    places.forEach { (id, name) -> add("p:$id" to "In Recherche: $name") }
                     guides.sortedBy { it.title.lowercase() }.forEach { add("g:" + it.id to it.title) }
                     if (catalog != null) add("t:" + catalog.key to "Neuer Guide: " + catalog.name)
                     add("n:$newTitle" to "Neuer Guide: $newTitle")
                 }
                 val current = when {
+                    tip.placeIds.isNotEmpty() -> "p:" + tip.placeIds.first()
                     tip.guideId != null -> "g:" + tip.guideId
                     tip.targetTopic != null -> "t:" + tip.targetTopic
                     else -> "n:$newTitle"
                 }
                 LabeledDropdown(
                     tag = "reel-tip-target-$index",
-                    label = "In Guide",
+                    label = "Ziel",
                     value = options.firstOrNull { it.first == current }?.second ?: "Neuer Guide: $newTitle",
                     options = options,
                     onSelect = { key ->
                         val v = key.substring(2)
                         onTarget(
                             when (key[0]) {
-                                'g' -> tip.copy(guideId = v, targetTopic = null, targetTitle = null)
-                                't' -> tip.copy(guideId = null, targetTopic = v, targetTitle = null)
-                                else -> tip.copy(guideId = null, targetTopic = null, targetTitle = v)
+                                'p' -> tip.copy(placeIds = listOf(v), guideId = null, targetTopic = null, targetTitle = null)
+                                'g' -> tip.copy(placeIds = emptyList(), guideId = v, targetTopic = null, targetTitle = null)
+                                't' -> tip.copy(placeIds = emptyList(), guideId = null, targetTopic = v, targetTitle = null)
+                                else -> tip.copy(placeIds = emptyList(), guideId = null, targetTopic = null, targetTitle = v)
                             },
                         )
                     },

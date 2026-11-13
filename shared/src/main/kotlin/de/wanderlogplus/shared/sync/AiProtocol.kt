@@ -47,6 +47,18 @@ data class GuideAddition(val text: String, val sources: List<String> = emptyList
 @Serializable
 data class GuideLinksRequest(val guideIds: List<String> = emptyList())
 
+/** `POST /api/ai/guide-tidy`: reshape guides into glance, core and details without losing content (empty = all). */
+@Serializable
+data class GuideTidyRequest(val guideIds: List<String> = emptyList())
+
+/** Facts for one saved place's research, from a reel; [sources] back them. */
+@Serializable
+data class PlaceFactsItem(val savedPlaceId: String, val facts: List<String>, val sources: List<String> = emptyList())
+
+/** `POST /api/ai/place-facts`: work reel facts into the research of saved places. */
+@Serializable
+data class PlaceFactsRequest(val items: List<PlaceFactsItem>)
+
 /** How true a tip from a reel turned out. */
 enum class TipVerdict { TRUE, PARTLY, FALSE, UNVERIFIED }
 
@@ -68,6 +80,8 @@ data class ReelTip(
     val guideId: String? = null,
     val targetTopic: String? = null,
     val targetTitle: String? = null,
+    /** Saved places (one or two) the tip is only about: it goes into their research instead of a guide. */
+    val placeIds: List<String> = emptyList(),
 )
 
 /** `POST /api/ai/stay`: research the room and amenities of a stay; [fresh] also replaces what was changed by hand. */
@@ -117,6 +131,8 @@ data class ReelCandidate(
     val googlePlaceId: String? = null,
     /** The saved place of the trip this already is (research skipped); null for a new place. */
     val savedPlaceId: String? = null,
+    /** What the reel itself says about this place, short sentences without the post's story. */
+    val reelFacts: List<String> = emptyList(),
 )
 
 /** The judgement for one saved place. */

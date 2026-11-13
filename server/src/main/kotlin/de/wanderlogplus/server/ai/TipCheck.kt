@@ -22,6 +22,12 @@ const val MAX_TIP_SOURCES = 8
 /** Characters of a tip's guide text at most (the guide job takes at most 1000). */
 const val MAX_TIP_TEXT = 1000
 
+/** Saved places of the trip the match may point a tip to. */
+const val MAX_PLACE_REFS = 300
+
+/** A saved place of the trip, as the tip match sees it; [city] is the region's name. */
+data class PlaceRef(val savedPlaceId: String, val name: String, val city: String?)
+
 /** Characters of one guide in the digest at most. */
 private const val DIGEST_PER_GUIDE = 1500
 
@@ -32,20 +38,25 @@ private const val DIGEST_PER_GUIDE = 1500
 class TipCheck(private val facts: FactSource, private val model: ChatModel, private val parallelism: Int = 3) {
 
     /** Each tip covered by a guide or with exactly one target; a failed answer makes every tip a new one. */
-    fun match(tips: List<FoundTip>, guides: List<Guide>, say: (String) -> Unit = {}): List<ReelTip> {
+    fun match(tips: List<FoundTip>, guides: List<Guide>, places: List<PlaceRef> = emptyList(), say: (String) -> Unit = {}): List<ReelTip> {
         val fresh = tips.map { ReelTip(it.claim, it.topic, it.evidence, targetTitle = it.topic.ifBlank { DEFAULT_TIP_GUIDE }) }
         if (tips.isEmpty()) return fresh
         val system = """
             Du gleichst Reisetipps aus einem Instagram-Beitrag mit vorhandenen Guides einer Japan-Reise-App ab.
             Für jeden Tipp: Steht die Aussage inhaltlich schon in einem Guide? Dann covered true, guideId und ein kurzes Zitat (quote).
-            Sonst covered false und genau ein Ziel: guideId eines passenden vorhandenen Guides, oder topic (key aus dem Themenkatalog,
-            für den es noch keinen Guide gibt), oder title (Titel eines neuen Guides, kurz, auf Deutsch).
-            Antworte nur mit JSON: {"tips":[{"i":0,"covered":false,"guideId":null,"quote":"","topic":null,"title":null}]}
+            Sonst covered false und genau ein Ziel: placeIds (ein oder zwei Ids aus „Orte der Reise“), wenn der Tipp nur diese
+            Orte betrifft; sonst guideId eines passenden vorhandenen Guides, oder topic (key aus dem Themenkatalog, für den es noch
+            keinen Guide gibt), oder title (Titel eines neuen Guides, auf Deutsch).
+            Einen neuen Guide (topic oder title) nur für allgemeine Themen, die viele Orte oder die ganze Reise betreffen;
+            nie für einen einzelnen Ort.
+            ${GuideWriter.TITLE_RULE}
+            Antworte nur mit JSON: {"tips":[{"i":0,"covered":false,"placeIds":[],"guideId":null,"quote":"","topic":null,"title":null}]}
         """.trimIndent()
         val user = buildString {
             append("Tipps:\n")
             tips.forEachIndexed { i, t -> append(i).append(". ").append(t.claim).append(" (Thema: ").append(t.topic.ifBlank { "?" }).append(")\n") }
             append("\nVorhandene Guides:\n").append(guideDigest(guides).ifBlank { "(keine)" })
+            append("\n\nOrte der Reise:\n").append(places.take(MAX_PLACE_REFS).joinToString("\n") { "${it.savedPlaceId} | ${it.name} | ${it.city ?: "-"}" }.ifBlank { "(keine)" })
             append("\n\nThemenkatalog:\n").append(GuideTopics.all.joinToString("\n") { "${it.key}: ${it.name}" })
         }
         val o = try {
@@ -55,13 +66,16 @@ class TipCheck(private val facts: FactSource, private val model: ChatModel, priv
             return fresh
         }
         val byId = guides.associateBy { it.id }
+        val placeIds = places.map { it.savedPlaceId }.toSet()
         val answers = (o["tips"] as JsonArray).mapNotNull { it as? JsonObject }.associateBy { (it["i"] as? JsonPrimitive)?.intOrNull ?: -1 }
         return fresh.mapIndexed { i, t ->
             val a = answers[i] ?: return@mapIndexed t
             val guideId = a.text("guideId")?.takeIf { it in byId }
             val covered = (a["covered"] as? JsonPrimitive)?.booleanOrNull == true
+            val toPlaces = (a["placeIds"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.takeIf { id -> id in placeIds } }.distinct().take(2)
             when {
                 covered && guideId != null -> t.copy(coveredBy = guideId, coveredQuote = a.text("quote").orEmpty(), targetTitle = null)
+                toPlaces.isNotEmpty() -> t.copy(placeIds = toPlaces, targetTitle = null)
                 guideId != null -> t.copy(guideId = guideId, targetTitle = null)
                 a.text("topic")?.let { GuideTopics.byKey(it) } != null -> t.copy(targetTopic = a.text("topic"), targetTitle = null)
                 a.text("title") != null -> t.copy(targetTitle = a.text("title"))
@@ -103,8 +117,8 @@ class TipCheck(private val facts: FactSource, private val model: ChatModel, priv
     }
 
     /** [match], then [verify] for every tip not covered yet, [parallelism] at a time, keeping the order. */
-    fun checkAll(tips: List<FoundTip>, guides: List<Guide>, progress: JobProgress = JobProgress.NONE): List<ReelTip> {
-        val matched = match(tips, guides) { progress.step(it, JobProgress.WARN) }
+    fun checkAll(tips: List<FoundTip>, guides: List<Guide>, places: List<PlaceRef> = emptyList(), progress: JobProgress = JobProgress.NONE): List<ReelTip> {
+        val matched = match(tips, guides, places) { progress.step(it, JobProgress.WARN) }
         val keyed = matched.mapIndexed { i, t -> "tip-$i" to t }
         progress.items(keyed.map { (k, t) -> JobItem(k, t.claim.take(60)) })
         keyed.filter { it.second.coveredBy != null }.forEach { (k, t) ->

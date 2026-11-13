@@ -27,9 +27,11 @@ class GuideWriterTest {
 
     private class Scripted(private val answer: (String) -> String) : ChatModel {
         val asked = mutableListOf<String>()
+        val systems = mutableListOf<String>()
         override fun complete(system: String, parts: List<AiPart>, webSearch: Boolean): String {
             val user = (parts.single() as AiPart.Text).text
             asked += user
+            systems += system
             return answer(user)
         }
     }
@@ -250,5 +252,146 @@ class GuideWriterTest {
         assertEquals(listOf(first.id), again.guideIds)
         j.drain()
         assertTrue(storedGuides().single().writtenAt >= first.writtenAt)
+    }
+
+    @Test
+    fun `sections carry details`() {
+        val model = Scripted { """{"title":"Onsen","summary":"Erst waschen.
+Leise sein.","sections":[{"heading":"Ablauf","text":"So.","details":"Hintergrund"}]}""" }
+        val g = GuideWriter(facts, model).write(GuideAsk(topic = "onsen"), "", null)
+        assertEquals("Hintergrund", g.sections.single().details)
+    }
+
+    @Test
+    fun `prompts carry the format rules and the title is taken as it is`() {
+        val model = Scripted { answer("Shinkansen & Suica: Tokyo – Nagoya") }
+        val g = GuideWriter(facts, model).write(GuideAsk(title = "Shinkansen"), "", null)
+        assertEquals("Shinkansen & Suica: Tokyo – Nagoya", g.title)
+        val merging = Scripted { withLinks("Onsen", sections = 3) }
+        GuideWriter(facts, merging).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
+        for (system in listOf(model.systems.single(), merging.systems.single())) {
+            for (needle in listOf("Shinkansen & Suica", "Onsen-Etikette", "kein Muster", "Auf einen Blick", "details")) {
+                assertTrue(needle in system, "$needle fehlt")
+            }
+        }
+    }
+
+    @Test
+    fun `merge keeps details`() {
+        val old = existing.copy(sections = existing.sections.map { it.copy(details = "Hintergrund") })
+        val model = Scripted { """{"title":"Onsen","summary":"Kurz.","sections":[
+            {"heading":"A1","text":"t","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Hintergrund"},
+            {"heading":"A2","text":"t","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Hintergrund"}],
+            "phrases":[{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}]}""" }
+        val g = GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", old)
+        assertTrue("Hintergrund" in model.asked.single())
+        assertEquals(listOf("Hintergrund", "Hintergrund"), g.sections.map { it.details })
+    }
+
+    private val tidyAnswer = """{"title":"Onsen","summary":"Erst waschen.
+Leise sein.
+Kein Handtuch ins Wasser.","sections":[
+        {"heading":"Ablauf","text":"Waschen, dann baden.","dos":["Waschen"],"donts":["Handtuch ins Wasser"],"details":"Früher …"},
+        {"heading":"Tattoos","text":"Oft verboten.","details":"Sticker helfen manchmal."}],
+        "phrases":[{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}]}"""
+
+    @Test
+    fun `tidy reshapes and keeps the rest`() {
+        val old = existing.copy(
+            title = "Onsen & Sentō in Japan: Kyoto, Hakone", parentId = "p1", hiddenFrom = listOf(GuideTarget(GuideTargetType.STAY, "st")),
+            extraTriggers = listOf(GuideTrigger.AnyStay), links = listOf(de.wanderlogplus.shared.model.GuideLink("Japan Transit", de.wanderlogplus.shared.model.GuideLinkKind.APP)),
+            writtenAt = 7,
+        )
+        val g = GuideWriter(facts, Scripted { tidyAnswer }).tidy(old)
+        assertEquals("Onsen", g.title)
+        assertEquals(listOf("Ablauf", "Tattoos"), g.sections.map { it.heading })
+        assertEquals("Sticker helfen manchmal.", g.sections[1].details)
+        assertEquals(old.copy(title = g.title, summary = g.summary, sections = g.sections, phrases = g.phrases), g)
+    }
+
+    @Test
+    fun `tidy rejects lost phrases`() {
+        val model = Scripted { tidyAnswer.replace("""{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}""", "") }
+        val e = kotlin.runCatching { GuideWriter(facts, model).tidy(existing) }.exceptionOrNull()
+        assertEquals("ai_bad_answer", (e as AiFailed).code)
+    }
+
+    @Test
+    fun `tidy prompt asks to keep all content`() {
+        val model = Scripted { tidyAnswer }
+        GuideWriter(facts, model).tidy(existing)
+        assertTrue("kein Inhalt geht verloren" in model.systems.first())
+        assertTrue(GuideWriter.FORMAT_RULES in model.systems.first())
+        assertTrue("A2" in model.asked.first())
+    }
+
+    @Test
+    fun `tidyKeeps checks phrases sections and summary`() {
+        assertTrue(tidyKeeps(existing, existing))
+        assertTrue(!tidyKeeps(existing, existing.copy(phrases = emptyList())))
+        assertTrue(!tidyKeeps(existing, existing.copy(sections = emptyList())))
+        assertTrue(!tidyKeeps(existing, existing.copy(summary = "")))
+    }
+
+    private fun tidyJobs(model: ChatModel) = AiJobs(
+        store, null, object : ReelMedia {
+            override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
+            override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
+        },
+        tmp.resolve("work-t"), executor = Executors.newSingleThreadExecutor(),
+        writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+        guideWriter = GuideWriter(facts, model),
+    )
+
+    private fun storeTwoGuides(): Guide {
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g1", EntityCodec.fields(existing.copy(writtenAt = 7)), create = true)))
+        val other = existing.copy(id = "g2", title = "Rolltreppen in Japan: Tokyo und Osaka", pinnedTo = emptyList())
+        sync.writeAsServer(ASSISTANT_AUTHOR, listOf(de.wanderlogplus.server.ServerEdit(EntityType.GUIDE, "g2", EntityCodec.fields(other), create = true)))
+        return other
+    }
+
+    @Test
+    fun `guide tidy writes each guide`() {
+        storeTwoGuides()
+        val j = tidyJobs(Scripted { tidyAnswer })
+        val started = j.startGuideTidy(emptyList())
+        assertEquals("guides", started.kind)
+        assertEquals(setOf("g1", "g2"), started.guideIds.toSet())
+        j.drain()
+        assertEquals("DONE", j.get(started.id)!!.status)
+        val stored = storedGuides().associateBy { it.id }
+        assertEquals(setOf("Onsen"), stored.values.map { it.title }.toSet())
+        assertEquals(7, stored.getValue("g1").writtenAt)
+        assertEquals(existing.pinnedTo, stored.getValue("g1").pinnedTo)
+    }
+
+    @Test
+    fun `guide tidy keeps going after one failure`() {
+        val other = storeTwoGuides()
+        val noPhrases = tidyAnswer.replace("""{"german":"Wo ist das Bad?","japanese":"お風呂はどこですか？","romaji":"ofuro wa doko desu ka?"}""", "")
+        val j = tidyJobs(Scripted { user -> if ("Rolltreppen" in user) noPhrases else tidyAnswer })
+        val started = j.startGuideTidy(emptyList())
+        j.drain()
+        val job = j.get(started.id)!!
+        assertEquals("DONE", job.status)
+        assertEquals(setOf("DONE", "FAILED"), job.items.map { it.state }.toSet())
+        assertEquals(other, storedGuides().single { it.id == "g2" })
+        assertEquals("Onsen", storedGuides().single { it.id == "g1" }.title)
+    }
+
+    @Test
+    fun `only the given guide is tidied`() {
+        val other = storeTwoGuides()
+        val j = tidyJobs(Scripted { tidyAnswer })
+        j.startGuideTidy(listOf("g1")); j.drain()
+        assertEquals(other, storedGuides().single { it.id == "g2" })
+        assertEquals("Onsen", storedGuides().single { it.id == "g1" }.title)
+    }
+
+    @Test
+    fun `merge prompt lets long old guides keep everything`() {
+        val model = Scripted { withLinks("Onsen", sections = 3) }
+        GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
+        assertTrue("auch über die Grenzen hinaus" in model.systems.single(), model.systems.single())
     }
 }

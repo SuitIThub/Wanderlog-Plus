@@ -57,6 +57,8 @@ data class PlaceDossier(
     val pois: List<PlacePoi> = emptyList(),
     /** Whether and when to reserve, as the research found it; null for older research. */
     val reservation: ReservationAdvice? = null,
+    /** What reels said about the place and was taken over (short sentences); kept when the place is researched again. */
+    val reelFacts: List<String> = emptyList(),
 )
 
 enum class ReservationNeed { REQUIRED, RECOMMENDED, NOT_NEEDED, UNKNOWN }

@@ -63,6 +63,7 @@ fun jobKindLabel(kind: String): String = when (kind) {
     "research" -> "Recherche"
     "assess" -> "Einschätzung"
     "translate" -> "Übersetzung"
+    "place-facts" -> "Orte ergänzen"
     else -> "KI-Auftrag"
 }
 

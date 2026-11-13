@@ -214,6 +214,9 @@ class AppNavigationSmokeTest {
         rule.onNodeWithText("Japanisch für unterwegs").assertExists()
         rule.onNodeWithText("Onsen-Knigge").tap(); rule.waitForIdle()
         shows("guide-detail")
+        rule.onNodeWithText("Auf einen Blick").assertExists()
+        rule.onNodeWithText("お風呂はどこですか？").assertDoesNotExist()
+        rule.onNodeWithTag("guide-phrases-toggle").tap(); rule.waitForIdle()
         rule.onNodeWithText("お風呂はどこですか？").assertExists()
     }
 

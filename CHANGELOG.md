@@ -3,6 +3,14 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.72.0
+
+- **Reel-Infos zum Ort statt eigener Guide:** Was ein Reel über einen oder zwei bestimmte Orte sagt (Ruhetag, bestes Gericht, Wartezeit), schlägt die Auswertung jetzt als „In Recherche: <Ort>“ vor statt als neuen Guide. Neue Guides gibt es nur noch für allgemeine Themen.
+- **Bereits gespeicherte Orte:** Zeigt ein Reel einen Ort, den ihr schon habt, stehen seine Aussagen unter „Neu aus dem Reel“; mit „Zum Ort hinzufügen“ landen sie knapp in der Recherche des Orts – je ein Satz, ohne die Geschichte drumherum, ohne Doppeltes. Eine spätere Neu-Recherche behält sie.
+- **Kürzere Guide-Titel:** Titel benennen das Thema, ohne Orte, Strecken oder „in Japan“ („Shinkansen & Suica“ statt „Shinkansen & Suica: Tokyo – Nagoya – …“).
+- **Guides zum Nachschlagen:** Oben „Auf einen Blick“ mit den wichtigsten Punkten; Abschnitte sind eingeklappt und zeigen ihren Kernsatz, aufgeklappt Do's und Don'ts und „Mehr dazu“ für die Hintergründe. Die Sätze zum Zeigen sind eingeklappt. Aus Reels kommt nur noch die Aussage selbst in den Guide.
+- **Guides straffen:** In der Guide-Übersicht baut „Guides straffen“ alle Guides ins neue Format um, im Menü eines Guides „Straffen“ nur diesen – ohne dass Inhalt verloren geht.
+
 ## 0.71.0
 
 - **Logistik mit „Bearbeiten“:** wie beim Tagesprogramm. In der Liste ersetzt „Bearbeiten“ den schwebenden „Hinzufügen“-Knopf; im Bearbeiten-Modus steht „＋ Fahrt hinzufügen“ bzw. „＋ Unterkunft hinzufügen“ ganz oben und ganz unten. In einer Reise erscheinen „＋ Teilstrecke“, die Pfeile, „Aus Reise entfernen“, „Vorhandene Fahrt hinzufügen“ und „Reise auflösen“ nur noch im Bearbeiten-Modus – sonst nur Fahrten und Umstiege.

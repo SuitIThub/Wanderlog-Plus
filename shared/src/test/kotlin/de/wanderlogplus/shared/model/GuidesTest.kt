@@ -55,4 +55,24 @@ class GuidesTest {
         val tip = de.wanderlogplus.shared.sync.ReelTip("Trinkgeld ist unüblich", verdict = de.wanderlogplus.shared.sync.TipVerdict.TRUE, guideId = "g1")
         assertEquals(tip, j.decodeFromString(de.wanderlogplus.shared.sync.ReelTip.serializer(), j.encodeToString(de.wanderlogplus.shared.sync.ReelTip.serializer(), tip)))
     }
+
+    @Test
+    fun `old guide json without details still decodes`() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val s = json.decodeFromString(GuideSection.serializer(), """{"heading":"Ablauf","text":"So."}""")
+        assertEquals("", s.details)
+        val g = Guide(id = "g2", title = "T", sections = listOf(GuideSection("A", "Kern.", details = "Hintergrund")))
+        val back = EntityCodec.decode<Guide>(roundTrip(EntityType.GUIDE, "g2", EntityCodec.fields(g)))
+        assertEquals("Hintergrund", back.sections.single().details)
+    }
+
+    @Test
+    fun `new reel and dossier fields have defaults`() {
+        assertEquals(emptyList(), PlaceDossier().reelFacts)
+        assertEquals(emptyList(), de.wanderlogplus.shared.sync.ReelTip("x").placeIds)
+        assertEquals(emptyList(), de.wanderlogplus.shared.sync.ReelCandidate("x").reelFacts)
+        assertEquals(emptyList(), de.wanderlogplus.shared.sync.GuideTidyRequest().guideIds)
+        val r = de.wanderlogplus.shared.sync.PlaceFactsRequest(listOf(de.wanderlogplus.shared.sync.PlaceFactsItem("sp1", listOf("Montags zu"))))
+        assertEquals(emptyList(), r.items.single().sources)
+    }
 }

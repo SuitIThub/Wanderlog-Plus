@@ -42,7 +42,7 @@ class TodayGuidesTest {
         rule.onAllNodesWithTag("today-guide").assertCountEquals(2)
         rule.onNodeWithText("11:33 · Shinkansen").performClick()
         rule.waitForIdle()
-        rule.onNodeWithText("Reservierte Plätze, Gepäck anmelden.").assertExists()
+        rule.onNodeWithText("• Reservierte Plätze, Gepäck anmelden.").assertExists()
         rule.onNodeWithText("✓ Leise telefonieren").assertExists()
         // Robolectric does not lay the sheet out on screen, so a touch misses it: trigger the button's click action.
         rule.onNodeWithTag("today-guide-open").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)

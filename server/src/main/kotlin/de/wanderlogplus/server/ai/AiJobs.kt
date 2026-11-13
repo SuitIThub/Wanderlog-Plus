@@ -69,6 +69,8 @@ class AiJobs(
     private val tipCheck: TipCheck? = null,
     /** Translates texts into German ("Texte auf Deutsch übersetzen"); null: that job fails with `ai_not_configured`. */
     private val translator: Translator? = null,
+    /** Works reel facts into the research of saved places; null: those jobs fail with `ai_not_configured`. */
+    private val placeFacts: PlaceFacts? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -266,6 +268,101 @@ class AiJobs(
             t.done { it.copy(progress = it.total) }
         } catch (e: Exception) {
             log.error("Guide links job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
+    /** Reshapes guides ([guideIds], empty = all) into glance, core and details, as one guide job; writes each at once. */
+    fun startGuideTidy(guideIds: List<String>): AiJobInfo {
+        val all = ChatTrip.from(store).guides
+        val targets = if (guideIds.isEmpty()) all else all.filter { it.id in guideIds }
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = targets.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, guideIds = targets.map { it.id },
+            ),
+        )
+        executor.execute { runGuideTidy(job, targets) }
+        return job
+    }
+
+    private fun runGuideTidy(start: AiJobInfo, guides: List<de.wanderlogplus.shared.model.Guide>) {
+        val t = Tracker(start)
+        val w = guideWriter ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            t.step((if (guides.size == 1) "1 Guide wird" else "${guides.size} Guides werden") + " gestrafft")
+            t.items(guides.map { JobItem("tidy-${it.id}", it.title.ifBlank { "Guide" }) })
+            guides.forEachIndexed { i, g ->
+                val key = "tidy-${g.id}"
+                t.item(key, state = "RUNNING")
+                try {
+                    val tidied = w.tidy(g, t.sayFor(key, g.title))
+                    writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, EntityCodec.fields(tidied))))
+                    t.item(key, state = "DONE", detail = tidied.title)
+                    t.step("${tidied.title}: gestrafft", JobProgress.OK)
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${g.title}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    log.error("Guide tidy failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide tidy job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
+    val placeFactsConfigured: Boolean get() = placeFacts != null
+
+    /** Works reel facts into the research (dossier) of saved places, one item per place (kind "place-facts"). */
+    fun startPlaceFacts(items: List<de.wanderlogplus.shared.sync.PlaceFactsItem>): AiJobInfo {
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "place-facts", now().toEpochMilli(), "QUEUED", total = items.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, savedPlaceIds = items.map { it.savedPlaceId },
+            ),
+        )
+        executor.execute { runPlaceFacts(job, items) }
+        return job
+    }
+
+    private fun runPlaceFacts(start: AiJobInfo, items: List<de.wanderlogplus.shared.sync.PlaceFactsItem>) {
+        val t = Tracker(start)
+        val pf = placeFacts ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            val trip = TripData.from(store)
+            t.items(items.map { i -> JobItem(i.savedPlaceId, trip.saved.firstOrNull { it.id == i.savedPlaceId }?.let { trip.places[it.placeId]?.name } ?: "Ort") })
+            items.forEachIndexed { n, item ->
+                val key = item.savedPlaceId
+                t.item(key, state = "RUNNING")
+                try {
+                    val saved = trip.saved.firstOrNull { it.id == key }
+                    if (saved == null) {
+                        t.item(key, state = "FAILED", detail = "Ort nicht gefunden")
+                    } else {
+                        val name = trip.places[saved.placeId]?.name ?: "Ort"
+                        val d = pf.merge(saved.dossier, name, item.facts, item.sources, t.sayFor(key, name))
+                        writeResults?.invoke(listOf(ServerEdit(EntityType.SAVED_PLACE, key, mapOf("dossier" to json.encodeToJsonElement(PlaceDossier.serializer(), d)))))
+                        t.item(key, state = "DONE", detail = countText(item.facts.size, "Info", "Infos"))
+                        t.step("$name: ergänzt", JobProgress.OK)
+                    }
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                } catch (e: Exception) {
+                    log.error("Place facts failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = n + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Place facts job failed: {}", e.javaClass.simpleName)
             t.fail("internal")
         }
     }
@@ -563,7 +660,7 @@ class AiJobs(
                 else -> {
                     t.status("CHECKING")
                     t.step("Tipps werden mit den Guides abgeglichen und geprüft …")
-                    tipCheck.checkAll(analysis.tips, ChatTrip.from(store).guides, t).also { r ->
+                    ChatTrip.from(store).let { trip -> tipCheck.checkAll(analysis.tips, trip.guides, trip.placeRefs(), t) }.also { r ->
                         val covered = r.count { it.coveredBy != null }
                         val wrong = r.count { it.verdict == TipVerdict.FALSE }
                         t.step("Tipps geprüft: ${r.size - covered - wrong} übernehmbar, $covered schon in Guides, $wrong falsch", JobProgress.OK)
