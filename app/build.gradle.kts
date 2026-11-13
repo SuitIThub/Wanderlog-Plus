@@ -103,6 +103,9 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.datastore.preferences)
+    // Home screen widgets.
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
 
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
@@ -113,6 +116,7 @@ dependencies {
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.glance.appwidget.testing)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
     // Fixtures.realOrNull() runs the importer on the private real export when present.
