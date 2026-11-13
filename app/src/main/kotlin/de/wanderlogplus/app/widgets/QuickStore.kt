@@ -32,3 +32,17 @@ data class QuickCard(
     val imageKey: String? = null,
     val distanceMeters: Int? = null,
 )
+
+/** Keeps the last [QuickResult] in [file]; unreadable or missing gives null. */
+class QuickStore(private val file: java.io.File) {
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+    fun read(): QuickResult? = runCatching { json.decodeFromString(QuickResult.serializer(), file.readText()) }.getOrNull()
+
+    fun write(r: QuickResult) {
+        file.parentFile?.mkdirs()
+        val tmp = java.io.File(file.path + ".tmp")
+        tmp.writeText(json.encodeToString(QuickResult.serializer(), r))
+        if (!tmp.renameTo(file)) { file.delete(); tmp.renameTo(file) }
+    }
+}

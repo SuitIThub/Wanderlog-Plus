@@ -19,6 +19,14 @@ class WanderlogPlusApp : Application() {
         // A throw here (e.g. WorkManager unavailable) must never crash the process; log the class name only.
         val handler = CoroutineExceptionHandler { _, e -> Log.w("WanderlogPlusApp", "Startup sync scheduling failed: ${e.javaClass.simpleName}") }
         container.scope.launch(handler) { container.syncScheduler.scheduleReminders() }
+        // Home screen widgets: redraw after changes to the trip, the weather or the yen rate, and every 15 minutes.
+        container.scope.launch(handler) {
+            de.wanderlogplus.app.widgets.scheduleWidgetRefresh(this@WanderlogPlusApp)
+            container.widgets.watch(
+                container.scope,
+                kotlinx.coroutines.flow.merge(container.snapshots().snapshot, container.weather.weather, container.settings.lastJpyRate),
+            )
+        }
         // Automatic daily media scan (Mehr → Scan shows its state); a no-op without the media permission.
         // Plus one catch-up run right away when no scan has ever happened: the periodic registration alone would
         // wait up to a full day for its first execution, looking like "auto-scan does not run".

@@ -6,7 +6,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 
 class NextRideWidget : TripWidget() {
     @Composable
-    override fun Content(context: Context, bucket: Bucket) = Hint("…")
+    override fun Content(context: Context, m: WidgetModels, bucket: Bucket) = Hint("…")
 }
 
 class NextRideReceiver : GlanceAppWidgetReceiver() {

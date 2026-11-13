@@ -35,6 +35,9 @@ class WeatherRepository(
         _weather.value = runCatching { json.decodeFromString(TripWeather.serializer(), file.readText()) }.getOrNull()
     }
 
+    /** The stored weather without asking the server (loads the file once). */
+    suspend fun stored(): TripWeather? = withContext(Dispatchers.IO) { lock.withLock { load(); _weather.value } }
+
     /** Loads the stored weather and asks the server when it is old (or [force]). Errors keep the stored one. */
     suspend fun refresh(force: Boolean = false) = withContext(Dispatchers.IO) {
         lock.withLock {
