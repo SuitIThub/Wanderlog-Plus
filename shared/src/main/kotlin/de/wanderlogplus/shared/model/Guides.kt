@@ -50,7 +50,15 @@ data class GuideLink(
 )
 
 @Serializable
-data class GuideSection(val heading: String, val text: String = "", val dos: List<String> = emptyList(), val donts: List<String> = emptyList())
+data class GuideSection(
+    val heading: String,
+    /** The core, one or two sentences: always shown. */
+    val text: String = "",
+    val dos: List<String> = emptyList(),
+    val donts: List<String> = emptyList(),
+    /** Background for preparing (exceptions, examples), folded away as "Mehr dazu"; empty when there is none. */
+    val details: String = "",
+)
 
 /** A phrase to say or show: German, Japanese, romaji and when it helps. */
 @Serializable
