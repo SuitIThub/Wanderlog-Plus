@@ -37,7 +37,7 @@ class ReelPositionTest {
         var asked: Int? = null
         val job = AiJobInfo("j", "reel", 0, "DONE", candidates = listOf(missing))
         rule.setContent {
-            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { _, _ -> }, onOpenPlaces = {}, onBack = {}, onFindPosition = { asked = it }) }
+            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { _, _, _ -> }, onOpenPlaces = {}, onBack = {}, onFindPosition = { asked = it }) }
         }
         rule.onNodeWithTag("reel-no-position-0").assertExists()
         rule.onNodeWithTag("reel-find-position-0").performSemanticsAction(SemanticsActions.OnClick)
@@ -53,7 +53,7 @@ class ReelPositionTest {
         var job by mutableStateOf(AiJobInfo("j", "reel", 0, "DONE", candidates = listOf(missing)))
         var picks: List<ReelPick>? = null
         rule.setContent {
-            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { p, _ -> picks = p }, onOpenPlaces = {}, onBack = {}, onFindPosition = {}) }
+            WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { p, _, _ -> picks = p }, onOpenPlaces = {}, onBack = {}, onFindPosition = {}) }
         }
         job = job.copy(candidates = listOf(placed)) // back from the search
         rule.waitForIdle()

@@ -114,7 +114,7 @@ fun tipPreselected(t: de.wanderlogplus.shared.sync.ReelTip) =
 
 /** One guide job request per target (existing guide, catalog topic or new guide), with the tips' checked texts and sources. */
 fun tipAsks(picked: List<de.wanderlogplus.shared.sync.ReelTip>): List<de.wanderlogplus.shared.sync.GuideAsk> =
-    picked.groupBy { Triple(it.guideId, it.targetTopic, it.targetTitle) }.map { (target, tips) ->
+    picked.filter { it.placeIds.isEmpty() }.groupBy { Triple(it.guideId, it.targetTopic, it.targetTitle) }.map { (target, tips) ->
         de.wanderlogplus.shared.sync.GuideAsk(
             topic = target.second,
             title = if (target.first == null && target.second == null) target.third.orEmpty().ifBlank { "Reisetipps" } else "",
@@ -123,6 +123,35 @@ fun tipAsks(picked: List<de.wanderlogplus.shared.sync.ReelTip>): List<de.wanderl
             additions = tips.take(20).map { de.wanderlogplus.shared.sync.GuideAddition(it.text.ifBlank { it.claim }.take(1000), it.sources.take(20)) },
         )
     }
+
+/**
+ * The place-facts request items: tips that go to a place (their checked text and sources) and the reel's own facts of
+ * already saved places ([savedFacts]), one item per place, within the server's limits (12 facts per place, 20 places).
+ */
+fun placeFactItems(tips: List<de.wanderlogplus.shared.sync.ReelTip>, savedFacts: List<ReelCandidate>): List<de.wanderlogplus.shared.sync.PlaceFactsItem> {
+    val facts = linkedMapOf<String, MutableList<String>>()
+    val sources = linkedMapOf<String, MutableList<String>>()
+    tips.filter { it.placeIds.isNotEmpty() }.forEach { t ->
+        t.placeIds.forEach { id ->
+            facts.getOrPut(id) { mutableListOf() } += t.text.ifBlank { t.claim }.take(1000)
+            sources.getOrPut(id) { mutableListOf() } += t.sources
+        }
+    }
+    savedFacts.forEach { c -> c.savedPlaceId?.let { id -> facts.getOrPut(id) { mutableListOf() } += c.reelFacts } }
+    return facts.filterValues { it.isNotEmpty() }.entries.take(20).map { (id, f) ->
+        de.wanderlogplus.shared.sync.PlaceFactsItem(id, f.distinct().take(12), sources[id].orEmpty().distinct().take(20))
+    }
+}
+
+/** The note after an import: tips into guides and/or infos into places; null when neither. */
+fun importMessage(guideTips: Int, places: Int): String? = when {
+    guideTips > 0 && places > 0 -> "Die Tipps werden in Guides und Orte übernommen"
+    guideTips == 1 -> "Der Tipp wird in die Guides übernommen"
+    guideTips > 1 -> "$guideTips Tipps werden in die Guides übernommen"
+    places == 1 -> "Die Infos werden in die Recherche des Orts übernommen"
+    places > 1 -> "Die Infos werden in die Recherche von $places Orten übernommen"
+    else -> null
+}
 
 /** A candidate chosen for import and the region it goes into. */
 data class ReelPick(val candidate: ReelCandidate, val regionId: String?, val research: Boolean = false)

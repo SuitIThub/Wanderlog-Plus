@@ -77,7 +77,7 @@ class ReelTipsTest {
     @Test fun tipsOnlyJobCanBeImported() {
         val job = AiJobInfo("j2", "reel", 0, "DONE", summary = "Tipps", tips = listOf(trueTip, wrong, unverified))
         var got: Pair<List<ReelPick>, List<ReelTip>>? = null
-        rule.setContent { WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { p, t -> got = p to t }, onOpenPlaces = {}, onBack = {}) } }
+        rule.setContent { WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { p, t, _ -> got = p to t }, onOpenPlaces = {}, onBack = {}) } }
         rule.onNodeWithTag("reel-tip-0").assertIsOn()
         rule.onNodeWithTag("reel-tip-1").assertIsNotEnabled()
         rule.onNodeWithTag("reel-tip-2").assertIsOff()
@@ -134,5 +134,57 @@ class ReelTipsTest {
         assertFalse("j3" in imported)
         assertEquals(0, edits)
         assertTrue(vm.message.value!!.startsWith("Die Tipps konnten nicht übernommen werden"))
+    }
+
+    private val placeTip = ReelTip("Bei Ichiran montags zu.", verdict = TipVerdict.TRUE, text = "Montags geschlossen.", sources = listOf("https://c.jp"), placeIds = listOf("sp1"))
+    private val savedCandidate = de.wanderlogplus.shared.sync.ReelCandidate("Ichiran", savedPlaceId = "sp1", reelFacts = listOf("Tonkotsu nehmen", "Früh kommen"))
+
+    @Test fun placeTipsDoNotGoIntoGuides() {
+        assertEquals(listOf("g1"), tipAsks(listOf(placeTip, trueTip)).map { it.guideId })
+    }
+
+    @Test fun placeFactsAreGroupedPerPlace() {
+        val other = placeTip.copy(text = "Kura: Teller zählen.", placeIds = listOf("sp2"), sources = emptyList())
+        val items = placeFactItems(listOf(placeTip, trueTip, other), listOf(savedCandidate))
+        assertEquals(listOf("sp1", "sp2"), items.map { it.savedPlaceId })
+        assertEquals(listOf("Montags geschlossen.", "Tonkotsu nehmen", "Früh kommen"), items[0].facts)
+        assertEquals(listOf("https://c.jp"), items[0].sources)
+    }
+
+    @Test fun factsPerPlaceAreCapped() {
+        val many = savedCandidate.copy(reelFacts = (1..15).map { "f$it" })
+        assertEquals(12, placeFactItems(emptyList(), listOf(many)).single().facts.size)
+    }
+
+    @Test fun savedPlaceFactsCanBeImported() {
+        val job = AiJobInfo("j5", "reel", 0, "DONE", summary = "Ramen", candidates = listOf(savedCandidate.copy(lat = 35.0, lng = 135.0)))
+        var got: List<de.wanderlogplus.shared.sync.ReelCandidate>? = null
+        rule.setContent { WanderlogPlusTheme { ReelJobScreen(job, Fixtures.trip(), imported = false, onImport = { _, _, f -> got = f }, onOpenPlaces = {}, onBack = {}) } }
+        rule.onNodeWithText("Neu aus dem Reel").assertExists()
+        rule.onNodeWithTag("reel-facts-0").assertIsOn()
+        rule.onNodeWithTag("reel-import").assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf("sp1"), got!!.map { it.savedPlaceId })
+    }
+
+    @Test fun importStartsPlaceFactsJob() {
+        val paths = mutableListOf<String>()
+        val bodies = mutableListOf<String>()
+        val json = headersOf(HttpHeaders.ContentType, "application/json")
+        val api = SyncApi(HttpClient(MockEngine { req ->
+            paths += req.url.encodedPath
+            bodies += String(req.body.toByteArray())
+            respond("""{"id":"x","kind":"place-facts","createdAt":0,"status":"QUEUED"}""", HttpStatusCode.OK, json)
+        }), "https://s", "tok")
+        val imported = mutableSetOf<String>()
+        val vm = ReelsViewModel({ MutableStateFlow<TripSnapshot?>(Fixtures.trip()) }, { _ -> error("no write") }, { api }, object : ImportedJobs {
+            override fun contains(id: String) = id in imported
+            override fun add(id: String) { imported += id }
+        }, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
+        vm.import("j6", emptyList(), listOf(placeTip, trueTip), null, listOf(savedCandidate))
+        val deadline = System.currentTimeMillis() + 5_000
+        while ("j6" !in imported && System.currentTimeMillis() < deadline) Thread.sleep(10)
+        assertEquals(listOf("/api/ai/guides", "/api/ai/place-facts"), paths)
+        val req = Json { ignoreUnknownKeys = true }.decodeFromString(de.wanderlogplus.shared.sync.PlaceFactsRequest.serializer(), bodies[1])
+        assertEquals(3, req.items.single().facts.size)
     }
 }

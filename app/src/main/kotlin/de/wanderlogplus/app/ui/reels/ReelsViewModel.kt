@@ -121,19 +121,27 @@ class ReelsViewModel(
      * Takes the picks over (once per job) as saved places, and the picked [tips] into guides: one guide job on the
      * server that merges them into existing guides or writes new ones.
      */
-    fun import(jobId: String, picks: List<ReelPick>, tips: List<de.wanderlogplus.shared.sync.ReelTip>, source: String?) {
-        if (imported.contains(jobId) || (picks.isEmpty() && tips.isEmpty())) return
+    fun import(
+        jobId: String,
+        picks: List<ReelPick>,
+        tips: List<de.wanderlogplus.shared.sync.ReelTip>,
+        source: String?,
+        /** Already saved places whose reel facts go into their research. */
+        savedFacts: List<de.wanderlogplus.shared.sync.ReelCandidate> = emptyList(),
+    ) {
+        if (imported.contains(jobId) || (picks.isEmpty() && tips.isEmpty() && savedFacts.isEmpty())) return
+        val guideTips = tips.filter { it.placeIds.isEmpty() }
+        val factItems = placeFactItems(tips, savedFacts)
         writeScope.launch {
             try {
                 // Tips first: when the guide job cannot start, nothing is taken over and the user can try again.
-                if (tips.isNotEmpty() && !startTips(tips)) return@launch
+                if (guideTips.isNotEmpty() && !startTips(guideTips)) return@launch
+                if (factItems.isNotEmpty() && !startPlaceFacts(factItems)) return@launch
                 var ids: List<String> = emptyList()
                 if (picks.isNotEmpty()) edit { e, _ -> ids = importPicks(e, picks, source); Unit }
                 imported.add(jobId)
                 _importedNow.value = true
-                if (tips.isNotEmpty()) {
-                    _message.value = if (tips.size == 1) "Der Tipp wird in die Guides übernommen" else "${tips.size} Tipps werden in die Guides übernommen"
-                }
+                importMessage(guideTips.size, factItems.size)?.let { _message.value = it }
                 // "Trotzdem importieren": the place was skipped as a duplicate, so it is researched now (the server
                 // waits until the sync has brought it over).
                 val kept = picks.filter { importable(it.candidate) }
@@ -147,6 +155,24 @@ class ReelsViewModel(
             } catch (e: Exception) {
                 _message.value = "Übernehmen fehlgeschlagen"
             }
+        }
+    }
+
+    /** Starts the job that works reel facts into places' research; false (with a message) when that did not work. */
+    private suspend fun startPlaceFacts(items: List<de.wanderlogplus.shared.sync.PlaceFactsItem>): Boolean {
+        val a = api() ?: run { _message.value = "Die Infos zu Orten konnten nicht übernommen werden: kein Server eingerichtet"; return false }
+        return try {
+            a.startPlaceFacts(items)
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _message.value = "Die Infos zu Orten konnten nicht übernommen werden: " + when ((e as? ApiException)?.kind) {
+                ApiErrorKind.NOT_CONFIGURED -> "auf dem Server nicht eingerichtet"
+                ApiErrorKind.NETWORK -> "Server nicht erreichbar"
+                else -> "Anfrage fehlgeschlagen"
+            } + ". Bitte später noch einmal."
+            false
         }
     }
 

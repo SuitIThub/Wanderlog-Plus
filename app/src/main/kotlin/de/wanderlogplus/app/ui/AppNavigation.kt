@@ -1028,7 +1028,7 @@ fun AppNavigation(
                                 },
                                 snapshot = snap,
                                 imported = imported,
-                                onImport = { picks, tips -> vm.import(id, picks, tips, job?.source) },
+                                onImport = { picks, tips, facts -> vm.import(id, picks, tips, job?.source, facts) },
                                 onOpenPlaces = { nav.navigateToTab(Tab.ORTE) },
                                 onBack = { nav.popBackStack() },
                                 onShowProgress = { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(id)) },
