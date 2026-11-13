@@ -348,6 +348,7 @@ class MainActivity : ComponentActivity() {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = de.wanderlogplus.app.ui.budget.BudgetViewModel(
             { block -> container.edit(block) }, container.scope, { container.syncApi() },
             today = { kotlinx.coroutines.runBlocking { container.settings.tripZone.first() }.now().toLocalDate().toString() },
+            onRate = { currency, r -> if (currency.equals("JPY", ignoreCase = true)) container.settings.setLastJpyRate(r.rate, r.date) },
         ) as T
     }
 
