@@ -58,16 +58,25 @@ fun voteEdits(snapshot: TripSnapshot, savedPlaceId: String, me: String, value: I
     }
 }
 
-/** Buttons 👍 / 👍👍 / 👎 (tapping one's own vote again withdraws it), the score and who voted how. */
+/** Vote value, label and test tag of each vote button, in display order. */
+private val VOTE_CHOICES = listOf(
+    Triple(Votes.DISLIKE, "👎", "vote-dislike"),
+    Triple(0, "Neutral", "vote-neutral"),
+    Triple(Votes.LIKE, "👍", "vote-like"),
+    Triple(Votes.DOUBLE, "👍👍", "vote-double"),
+)
+
+/** Buttons 👎 / Neutral / 👍 / 👍👍 (tapping one's own vote again makes it neutral), the score and who voted how. */
 @Composable
 fun VoteBar(votes: List<Vote>, me: String?, onVote: (Int) -> Unit, modifier: Modifier = Modifier) {
     val shown = votes.filter { it.value != 0 }
-    val mine = me?.let { m -> votes.firstOrNull { it.voter == m }?.value } ?: 0
+    // null: I have not rated this place yet; 0: neutral (also a withdrawn vote).
+    val mine = me?.let { m -> votes.firstOrNull { it.voter == m }?.value }
     val score = shown.sumOf { it.value }
     Column(modifier.fillMaxWidth().testTag("vote-bar"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (me != null) {
-                listOf(Triple(Votes.LIKE, "👍", "vote-like"), Triple(Votes.DOUBLE, "👍👍", "vote-double"), Triple(Votes.DISLIKE, "👎", "vote-dislike")).forEach { (v, label, tag) ->
+                VOTE_CHOICES.forEach { (v, label, tag) ->
                     FilterChip(selected = mine == v, onClick = { onVote(if (mine == v) 0 else v) }, label = { Text(label) }, modifier = Modifier.testTag(tag))
                 }
             }

@@ -3,6 +3,8 @@ package de.wanderlogplus.app.ui.places
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -105,5 +107,22 @@ class VoteBarTest {
         assertEquals(listOf("s-nudel" to Votes.LIKE), cast)
         page = "list"
         rule.onNodeWithTag("vote-score-s-nudel", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun neutralChipSelectedForZeroVote() {
+        val cast = mutableListOf<Int>()
+        rule.setContent { WanderlogPlusTheme { VoteBar(listOf(vote("s1", "daniel", 0)), me = "daniel", onVote = { cast += it }) } }
+        rule.onNodeWithTag("vote-neutral").assertIsSelected()
+        rule.onNodeWithTag("vote-like").assertIsNotSelected()
+        rule.onNodeWithTag("vote-like").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("vote-neutral").performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf(Votes.LIKE, 0), cast)
+    }
+
+    @Test
+    fun neutralNotSelectedWithoutVote() {
+        rule.setContent { WanderlogPlusTheme { VoteBar(emptyList(), me = "daniel", onVote = {}) } }
+        rule.onNodeWithTag("vote-neutral").assertIsNotSelected()
     }
 }
