@@ -30,6 +30,13 @@ class WidgetDataTest {
         assertEquals(listOf("Alter Bergtempel", "Nudelküche Weizenhalm"), m.nextUp.upcoming.map { it.title })
     }
 
+    @Test fun oldTimesAreIgnored() {
+        val legacy = trip.copy(dayItems = trip.dayItems.map { if (it.id == "i-2") it.copy(fixedTime = null, time = "07:00") else it })
+        val first = WidgetData.build(input("2027-04-02T06:00", legacy)).nextUp.upcoming.first()
+        assertEquals("Alter Bergtempel", first.title)
+        assertTrue(first.time.toString(), first.time != "07:00" && first.time.orEmpty() > "09:00")
+    }
+
     @Test fun aRunningStepIsCurrentNotUpcoming() {
         val m = build("2027-04-02T09:30")
         assertEquals("Alter Bergtempel", m.nextUp.current?.title)

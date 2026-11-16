@@ -103,6 +103,10 @@ internal fun DayProgramTab(
         }
         val places = items.count { it.kind == DayItemKind.PLACE }
         val flow = remember(snapshot, date, items, movements, stay) { dayFlowFor(snapshot, date) }
+        // Durations of the ways loaded by the way rows, by leg key: they replace the straight-line estimates.
+        val known = remember(date) { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+        val knownNow = known.toMap()
+        val schedule = remember(snapshot, date, items, movements, stay, knownNow) { scheduleFor(snapshot, date) { knownNow[it] } }
         val legsSwitch = onShowLegs != null && flow.legs.isNotEmpty()
         val mapButton = onOpenMap != null && places >= 1
         val historyButton = onRestoreVersion != null && history.isNotEmpty()
@@ -161,7 +165,7 @@ internal fun DayProgramTab(
             },
             insertSlot = onInsert?.takeIf { editing }?.let { insert -> { pos -> InsertButton(pos.encode(), onClick = { insert(pos) }) } },
             legs = if (!showLegs) null else { leg ->
-                val way = remember(snapshot, date, flow, leg) { dayWay(snapshot, date, flow, leg) }
+                val way = remember(snapshot, date, flow, leg, schedule) { dayWay(snapshot, date, flow, leg, schedule) }
                 LegRow(
                     tag = way.key,
                     from = way.from,
@@ -170,14 +174,16 @@ internal fun DayProgramTab(
                     onMode = { m -> onLegMode(way.key, m) },
                     accent = accent,
                     onOpenLink = onOpenLink,
-                    datetime = de.wanderlogplus.app.ui.transit.transitDateTime(date, way.fromTime),
+                    datetime = de.wanderlogplus.app.ui.transit.transitDateTime(date, way.fromMinutes?.let(::legQueryTime)),
                     chosen = way.chosen,
                     onTransitDetails = onTransitDetails?.let { open -> { open(way.key) } },
                     startTime = way.fromTime,
                     deadline = way.deadline,
+                    onMinutes = { m -> if (known[way.key] != m) known[way.key] = m },
                 )
             },
             modifier = Modifier.testTag("program-list"),
+            schedule = schedule,
         )
     }
 }

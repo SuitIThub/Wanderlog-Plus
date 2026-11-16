@@ -7,7 +7,8 @@ import de.wanderlogplus.shared.model.DayItemKind
 import de.wanderlogplus.shared.sync.TravelMode
 
 /** A place of the day's program on the map: [number] is its 1-based position among the places; [time] as planned. */
-data class RouteStop(val itemId: String, val number: Int, val name: String, val at: LatLngD, val time: String? = null)
+/** [time] the shown start ("~13:00" or fixed "13:00"), [leaves] when one leaves it (estimated, minutes of the day). */
+data class RouteStop(val itemId: String, val number: Int, val name: String, val at: LatLngD, val time: String? = null, val leaves: Int? = null)
 
 /**
  * The way between two consecutive stops in the mode chosen for it; [result] null while loading. Public transport
@@ -32,10 +33,11 @@ data class RouteSegment(
 /** The program's places with coordinates, in program order (notes and places without position are skipped). */
 fun routeStops(snapshot: TripSnapshot, date: String): List<RouteStop> {
     val day = snapshot.queries()?.dayFor(date) ?: return emptyList()
+    val schedule = scheduleFor(snapshot, date)
     return snapshot.dayItemsFor(day.id)
         .filter { it.kind == DayItemKind.PLACE }
         .mapNotNull { item -> snapshot.places[item.placeId]?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) }?.let { item to it } }
-        .mapIndexed { i, (item, place) -> RouteStop(item.id, i + 1, place.name.ifBlank { "Ort" }, LatLngD(place.lat, place.lng), item.time) }
+        .mapIndexed { i, (item, place) -> RouteStop(item.id, i + 1, place.name.ifBlank { "Ort" }, LatLngD(place.lat, place.lng), schedule.startText(item.id), schedule.stops[item.id]?.end) }
 }
 
 /** Segments between consecutive stops; each uses the mode stored on its destination item (default on foot). */
@@ -44,7 +46,7 @@ fun routeSegments(snapshot: TripSnapshot, stops: List<RouteStop>, date: String? 
         val item = snapshot.dayItems.firstOrNull { it.id == b.itemId }
         RouteSegment(
             a, b, item?.legMode ?: TravelMode.WALK,
-            datetime = date?.let { de.wanderlogplus.app.ui.transit.transitDateTime(it, a.time) },
+            datetime = date?.let { de.wanderlogplus.app.ui.transit.transitDateTime(it, a.leaves?.let(::legQueryTime)) },
             chosen = item?.legTransit,
         )
     }

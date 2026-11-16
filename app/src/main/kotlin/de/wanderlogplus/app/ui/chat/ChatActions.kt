@@ -202,7 +202,7 @@ internal fun PlanDialog(
                     add(ItemPosition.Start.encode() to "Am Anfang")
                     items.forEach { i ->
                         val name = if (i.kind == DayItemKind.PLACE) snapshot.places[i.placeId]?.name ?: "Ort" else i.text.lineSequence().firstOrNull().orEmpty().take(40).ifBlank { "Notiz" }
-                        add(ItemPosition.After(i.id).encode() to "Nach " + (i.time?.let { "$it " } ?: "") + name)
+                        add(ItemPosition.After(i.id).encode() to "Nach " + (i.fixedTime?.let { "$it " } ?: "") + name)
                     }
                     add(ItemPosition.End.encode() to "Am Ende")
                 }.distinctBy { it.first }

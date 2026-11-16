@@ -32,7 +32,7 @@ object QuickAsks {
         if (during == null || s == null) return QuickRequest(question(kind), base, stayPlace?.location())
         val nowMin = now.hour * 60 + now.minute
         val items = during.day.day?.let { s.dayItemsFor(it.id) }.orEmpty()
-        val view = DayNow.layout(items, s.places, s.savedPlaces, during.movements, stayPlace, nowMin)
+        val view = DayNow.layout(items, s.places, s.savedPlaces, during.movements, de.wanderlogplus.app.ui.trip.scheduleFor(s, now.toLocalDate().toString()), nowMin)
         val next = view.steps.firstOrNull { it !is DayStep.Note && it.state != StepState.DONE && it.state != StepState.CURRENT && (it.start ?: -1) > nowMin }
         val nextPlace: Place? = when (next) {
             is DayStep.Visit -> next.place

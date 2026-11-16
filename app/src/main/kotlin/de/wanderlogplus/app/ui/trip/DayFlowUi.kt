@@ -24,12 +24,22 @@ fun dayFlowFor(snapshot: TripSnapshot, date: String): DayFlowView {
     ) { e -> e.point(snapshot)?.let { it.lat to it.lng } }
 }
 
+/** The estimated day [date] (times, ways, warnings); [known] durations of loaded ways by leg key win over estimates. */
+fun scheduleFor(snapshot: TripSnapshot, date: String, known: (String) -> Int? = { null }): de.wanderlogplus.shared.query.DayScheduleView {
+    val day = snapshot.queries()?.dayFor(date)
+    val items = day?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
+    return de.wanderlogplus.shared.query.DaySchedule.forDate(
+        date, day, items, snapshot.flights, snapshot.trains, snapshot.stays, snapshot.savedPlaces, snapshot.places, snapshot.regions,
+        endpoint = { e -> e.point(snapshot)?.let { it.lat to it.lng } }, known = known,
+    )
+}
+
 private fun Endpoint.point(snapshot: TripSnapshot): LatLngD? = coords(snapshot) ?: airportCoords()
 
 /**
  * One way of the day with what the way row needs: both ends ([from]/[to] null without position), the time it starts
- * at ([fromTime]: the place's planned time or the ride's arrival), mode and picked connection, and [deadline]: the
- * departure the way leads to.
+ * at ([fromTime]/[fromMinutes]: when one leaves the place before by the estimated day, the day's start at the stay, or
+ * the ride's arrival), mode and picked connection, and [deadline]: the departure the way leads to.
  */
 data class DayWay(
     val key: String,
@@ -41,6 +51,7 @@ data class DayWay(
     val mode: TravelMode,
     val chosen: TransitResult?,
     val deadline: String? = null,
+    val fromMinutes: Int? = null,
 )
 
 private fun ends(m: Movement) = when (m) {
@@ -50,17 +61,24 @@ private fun ends(m: Movement) = when (m) {
 
 private fun endName(e: Endpoint) = e.name.takeIf { it.isNotBlank() } ?: e.code ?: "Bahnhof"
 
-fun dayWay(snapshot: TripSnapshot, date: String, flow: DayFlowView, leg: FlowLeg): DayWay {
+fun dayWay(
+    snapshot: TripSnapshot,
+    date: String,
+    flow: DayFlowView,
+    leg: FlowLeg,
+    schedule: de.wanderlogplus.shared.query.DayScheduleView = scheduleFor(snapshot, date),
+): DayWay {
     fun placePoint(placeId: String?): LatLngD? = placeId?.let { snapshot.places[it] }?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) }?.let { LatLngD(it.lat, it.lng) }
     fun placeName(placeId: String?) = placeId?.let { snapshot.places[it] }?.name?.takeIf { it.isNotBlank() } ?: "Ort"
     val a = flow.entries[leg.from]
     val b = flow.entries[leg.to]
-    val (from, fromName, fromTime) = when (a) {
-        is FlowEntry.Start -> Triple(placePoint(a.stay.placeId), placeName(a.stay.placeId), null)
-        is FlowEntry.Item -> Triple(placePoint(a.item.placeId), placeName(a.item.placeId), a.item.time)
-        is FlowEntry.Ride -> ends(a.movement).second.let { Triple(it.point(snapshot), endName(it), it.time) }
+    val (from, fromName, fromMinutes) = when (a) {
+        is FlowEntry.Start -> Triple(placePoint(a.stay.placeId), placeName(a.stay.placeId), schedule.dayStart)
+        is FlowEntry.Item -> Triple(placePoint(a.item.placeId), placeName(a.item.placeId), schedule.stops[a.item.id]?.end)
+        is FlowEntry.Ride -> ends(a.movement).second.let { Triple(it.point(snapshot), endName(it), DayFlow.mins(it.time)) }
         is FlowEntry.Night -> Triple(placePoint(a.stay.placeId), placeName(a.stay.placeId), null)
     }
+    val fromTime = fromMinutes?.let { de.wanderlogplus.shared.query.DayNow.hhmm(it) }
     val (to, toName) = when (b) {
         is FlowEntry.Start -> placePoint(b.stay.placeId) to placeName(b.stay.placeId)
         is FlowEntry.Item -> placePoint(b.item.placeId) to placeName(b.item.placeId)
@@ -74,6 +92,7 @@ fun dayWay(snapshot: TripSnapshot, date: String, flow: DayFlowView, leg: FlowLeg
         mode = item?.legMode ?: stored?.mode ?: TravelMode.WALK,
         chosen = item?.legTransit ?: stored?.transit,
         deadline = (b as? FlowEntry.Ride)?.movement?.time?.takeIf { it.isNotBlank() },
+        fromMinutes = fromMinutes,
     )
 }
 
@@ -90,3 +109,7 @@ fun deadlineWarning(fromTime: String?, seconds: Long?, deadline: String?): Strin
     val way = seconds?.let { ((it + 59) / 60).toInt() } ?: return null
     return if (start + way > end) "Reicht nicht bis zur Abfahrt um $deadline" else null
 }
+
+/** The time a way's connection is searched for: [minutes] rounded down to the full hour ("13:00"), so that small
+ * changes of the estimate do not trigger new searches (which would change the estimate again). */
+fun legQueryTime(minutes: Int): String = "%02d:00".format((minutes / 60).mod(24))

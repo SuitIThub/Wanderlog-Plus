@@ -47,6 +47,31 @@ class DayTimelineTest {
         }
     }
 
+    private fun withItems(f: (de.wanderlogplus.shared.model.DayItem) -> de.wanderlogplus.shared.model.DayItem): TripSnapshot =
+        Fixtures.trip().let { b -> b.copy(dayItems = b.dayItems.map(f)) }
+
+    @Test fun estimatedTimesHaveATilde() {
+        show(withItems { it.copy(fixedTime = null) }, "2027-04-02")
+        rule.onAllNodes(hasText("~", substring = true), useUnmergedTree = true).fetchSemanticsNodes().let { assertTrue("an estimated time", it.isNotEmpty()) }
+        rule.onNodeWithTag("time-fixed-i-2", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun fixedTimeShowsPin() {
+        show(Fixtures.trip(), "2027-04-02")
+        rule.onNodeWithTag("timeline-label-12:30", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("time-fixed-i-3", useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun lateWarning() {
+        show(withItems { if (it.id == "i-3") it.copy(fixedTime = "09:10") else it }, "2027-04-02")
+        rule.onNode(hasText("Min zu spät", substring = true) and hasAnyAncestor(hasTestTag("time-warning-i-3")), useUnmergedTree = true).assertExists()
+    }
+
+    @Test fun startCardShowsDayStart() {
+        show(Fixtures.trip(), "2027-04-02")
+        rule.onNode(hasText("ab 09:00", substring = true) and hasAnyAncestor(hasTestTag("timeline-start")), useUnmergedTree = true).assertExists()
+    }
+
     @Test fun noNightOnCheckOutDay() {
         val snap = Fixtures.trip()
         // 2027-04-06 is the last stay's check-out day: the query still reports the stay, but nobody sleeps there.
@@ -78,7 +103,7 @@ class DayTimelineTest {
                 }
             }
         }
-        rule.onNode(hasText("Check-out bis 10:00") and hasAnyAncestor(hasTestTag("timeline-start")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Check-out bis 10:00", substring = true) and hasAnyAncestor(hasTestTag("timeline-start")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Check-in ab 15:00 · Übernachtung") and hasAnyAncestor(hasTestTag("timeline-night")), useUnmergedTree = true).assertExists()
         val top = { tag: String -> rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.top }
         assertTrue("temple before the train", top("row-m-2") < top("movement-0"))

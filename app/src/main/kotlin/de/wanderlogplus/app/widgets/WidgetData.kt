@@ -227,9 +227,8 @@ object WidgetData {
     }
 
     private fun dayNow(s: TripSnapshot, st: TodayState.During, now: LocalDateTime): DayNowView {
-        val stayPlace = st.day.stay?.let { s.places[it.placeId] }
         val items = st.day.day?.let { s.dayItemsFor(it.id) }.orEmpty()
-        return DayNow.layout(items, s.places, s.savedPlaces, st.movements, stayPlace, now.hour * 60 + now.minute)
+        return DayNow.layout(items, s.places, s.savedPlaces, st.movements, de.wanderlogplus.app.ui.trip.scheduleFor(s, now.toLocalDate().toString()), now.hour * 60 + now.minute)
     }
 
     private fun hhmm(minutes: Int): String = "%02d:%02d".format(minutes / 60 % 24, minutes % 60)

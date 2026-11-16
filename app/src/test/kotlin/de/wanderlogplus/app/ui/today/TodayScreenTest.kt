@@ -51,7 +51,7 @@ class TodayScreenTest {
         )
         seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", "Tempeltag"))
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma"))
-        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", time = "10:00", fixedTime = "10:00"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", fixedTime = "10:00"))
         seed(
             EntityType.TRAIN, "tr1",
             Train("tr1", "JR", depart = Endpoint("Kyoto", date = "2027-05-09", time = "08:15"), arrive = Endpoint("Osaka")),
@@ -138,7 +138,7 @@ class TodayScreenTest {
         seed(EntityType.PLACE, "pc", Place("pc", name = "Museum Gamma", lat = 35.0, lng = 135.77, minMinutes = 120, maxMinutes = 120))
         seed(EntityType.PLACE, "pd", Place("pd", name = "Teehaus Delta", lat = 35.003, lng = 135.772))
         seed(EntityType.SAVED_PLACE, "sd", SavedPlace("sd", "pd", "r1", tags = listOf("Nur mit Reservierung")))
-        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", time = "13:00", fixedTime = "13:00"))
+        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", fixedTime = "13:00"))
         show("2027-05-09T11:00")
         rule.onNode(hasText("JETZT · bis ca. 12:00") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("Museum Gamma") and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
@@ -153,7 +153,7 @@ class TodayScreenTest {
         seedTrip()
         seed(EntityType.PLACE, "pd", Place("pd", name = "Teehaus Delta"))
         seed(EntityType.SAVED_PLACE, "sd", SavedPlace("sd", "pd", "r1", tags = listOf("Nur mit Reservierung")))
-        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", time = "13:00", fixedTime = "13:00"))
+        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pd", fixedTime = "13:00"))
         show("2027-05-09T12:00")
         rule.onNode(hasText("ALS NÄCHSTES · 13:00", substring = true) and hasAnyAncestor(hasTestTag("now-card")), useUnmergedTree = true).assertExists()
         rule.onNode(hasTestTag("now-reservation"), useUnmergedTree = true).assertExists()

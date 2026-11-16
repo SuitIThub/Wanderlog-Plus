@@ -136,6 +136,8 @@ fun LegRow(
     /** Planned start ("HH:mm") and the departure the way leads to: warns when it does not reach it. */
     startTime: String? = null,
     deadline: String? = null,
+    /** Called with the way's duration in minutes once it is known (for the day's estimated times). */
+    onMinutes: ((Int) -> Unit)? = null,
 ) {
     var expanded by rememberSaveable(tag) { mutableStateOf(false) }
     if (from == null || to == null) {
@@ -151,6 +153,8 @@ fun LegRow(
     LaunchedEffect(from, to, mode, repository, datetime, chosen) {
         if (repository != null && result == null) result = repository.way(from, to, mode, datetime, chosen)
     }
+    val minutes = (result as? LegResult.Route)?.let { ((it.durationSeconds + 59) / 60).toInt() }
+    LaunchedEffect(minutes) { if (minutes != null) onMinutes?.invoke(minutes) }
     Surface(
         modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("leg-$tag"),
         shape = RoundedCornerShape(14.dp),

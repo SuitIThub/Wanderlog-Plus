@@ -98,7 +98,7 @@ object GuideMatch {
      * money) have no time. Upcoming by time first, then the timeless, then the passed ones.
      */
     fun forDay(date: String, flow: DayFlowView, w: GuideWorld, nowMinutes: Int?): List<DayGuide> {
-        val stamps = flowStamps(flow, w)
+        val stamps = flowStamps(date, flow, w)
         val items = guidesFor(GuideTarget(GuideTargetType.DAY, date), w).map { g ->
             val own = stamps.filter { (th, _, _) -> th.target !in g.hiddenFrom && (th.target in g.pinnedTo || triggersOf(g).any { fires(it, th) }) }
             val open = own.filter { (_, min, lasting) -> lasting || nowMinutes == null || min >= nowMinutes }
@@ -113,15 +113,16 @@ object GuideMatch {
         )
     }
 
-    /** Every flow entry as (thing, minutes, lasts the evening); entries without a time take the time before them. */
-    private fun flowStamps(flow: DayFlowView, w: GuideWorld): List<Triple<GuideThing, Int, Boolean>> {
+    /** Every flow entry as (thing, minutes, lasts the evening); places at their estimated time, others without one take the time before them. */
+    private fun flowStamps(date: String, flow: DayFlowView, w: GuideWorld): List<Triple<GuideThing, Int, Boolean>> {
+        val schedule = de.wanderlogplus.shared.query.DaySchedule.build(flow, w.places, w.saved, w.days.firstOrNull { it.date == date }, null)
         var clock = 0
         fun at(t: String?, fallback: Int = clock) = (DayFlow.mins(t) ?: fallback).also { clock = maxOf(clock, it) }
         return flow.entries.flatMap { e ->
             when (e) {
                 is FlowEntry.Start -> listOf(Triple(GuideThing.AtStay(e.stay, w.places[e.stay.placeId]) as GuideThing, at(e.stay.checkOutTime, 0), false))
                 is FlowEntry.Item -> {
-                    val min = at(e.item.time)
+                    val min = at(null, schedule.stops[e.item.id]?.start ?: clock)
                     listOfNotNull(
                         w.saved.firstOrNull { it.placeId == e.item.placeId && it.status != PlaceStatus.DROPPED }?.let { Triple(GuideThing.AtPlace(it, w.places[it.placeId]) as GuideThing, min, false) },
                         e.checkIn?.let { Triple(GuideThing.AtStay(it, w.places[it.placeId]) as GuideThing, at(it.checkInTime, min), true) },

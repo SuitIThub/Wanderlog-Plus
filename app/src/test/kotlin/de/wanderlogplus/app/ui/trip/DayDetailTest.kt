@@ -63,7 +63,7 @@ class DayDetailTest {
         seed(EntityType.SAVED_PLACE, "sv-star", SavedPlace("sv-star", "pa", "r1", PlaceCategory.SIGHT, tags = listOf("⭐ Muss man sehen")))
         seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", "Tempeltag", "**Wichtig:** früh los"))
         seed(EntityType.SAVED_PLACE, "sv-plan", SavedPlace("sv-plan", "pc", "r1", PlaceCategory.SIGHT, status = PlaceStatus.PLANNED))
-        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", time = "10:00", fixedTime = "10:00"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", fixedTime = "10:00"))
     }
 
     @androidx.compose.runtime.Composable
@@ -149,6 +149,20 @@ class DayDetailTest {
         assertTrue(top("program-row-i1") < top("program-row-$newRow"))
         menu(newRow, "up")
         assertTrue(top("program-row-$newRow") < top("program-row-i1"))
+    }
+
+    @Test fun movingAnItemRecomputesTimes() {
+        seedTrip()
+        // Two places without fixed times: the first one gets the day's start, the second one later.
+        store.put(store.all().first { it.id == "i1" }.let { r -> r.apply(FieldChange(EntityType.DAY_ITEM, "i1", "fixedTime", kotlinx.serialization.json.JsonNull, Hlc(2, 0, "importer").encode()))!! })
+        seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pa"))
+        show("2027-05-09")
+        rule.onNodeWithTag("timeline-label-~09:00", useUnmergedTree = true).assertExists()
+        assertTrue(top("timeline-label-~09:00") < top("program-row-i2"))
+        menu("i1", "down")
+        // The time stays with the position, not with the place: now the other place starts at 09:00.
+        assertTrue(top("program-row-i2") < top("timeline-label-~10:00"))
+        rule.onNodeWithTag("timeline-label-~10:00", useUnmergedTree = true).assertExists()
     }
 
     @Test fun itemMenuMovesAndRemoves() {
