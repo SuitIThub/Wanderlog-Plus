@@ -41,7 +41,7 @@ data class DayFlowView(val entries: List<FlowEntry>, val legs: List<FlowLeg>) {
 /**
  * The day as one flow: last night's stay (with "Check-out" on its day), the program and the day's rides, tonight's stay
  * (with "Check-in"). Rides stand at their time; a program item goes before or after a ride by its region (the region of
- * the stay before vs. the one after), else by its time, else by which end of the ride it is closer to, else with the
+ * the stay before vs. the one after), else by its fixed time, else by which end of the ride it is closer to, else with the
  * item before it. Ways link every two points of the flow; none between two rides (a change, see journeys) or between
  * two entries at the same place.
  */
@@ -151,7 +151,7 @@ object DayFlow {
                 savedPlaces.filter { it.placeId == item.placeId }.minByOrNull { if (it.status == PlaceStatus.DROPPED) 1 else 0 }?.regionId
                     ?: stays.firstOrNull { it.placeId == item.placeId }?.regionId,
             )
-            val time = mins(item.time)
+            val time = mins(item.fixedTime)
             val located = place?.takeIf { !(it.lat == 0.0 && it.lng == 0.0) }
             val seg = when {
                 item.kind != DayItemKind.PLACE -> previous

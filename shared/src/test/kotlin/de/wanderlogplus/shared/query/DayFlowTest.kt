@@ -26,7 +26,7 @@ class DayFlowTest {
     private val date = "2027-05-14"
 
     private fun item(id: String, placeId: String?, time: String? = null, kind: DayItemKind = DayItemKind.PLACE) =
-        DayItem(id, "d", id, kind = kind, placeId = placeId, time = time)
+        DayItem(id, "d", id, kind = kind, placeId = placeId, fixedTime = time)
 
     private fun flow(items: List<DayItem>, stays: List<Stay> = listOf(tokyo, kiso), rides: List<Movement> = listOf(Movement.TrainMove(train)), on: String = date) =
         DayFlow.build(on, items, rides, stays, saved, places, regions)
@@ -56,6 +56,14 @@ class DayFlowTest {
         val f = flow(listOf(item("late", "p-cafe", time = "16:00"), item("near", "p-free"), item("note", null, kind = DayItemKind.NOTE)))
         assertEquals(listOf("start:st1!", "ride", "late", "near", "note", "night:st2+in"), f.names())
         assertEquals("night", f.legs.last().key)
+    }
+
+    @Test fun onlyFixedTimeSortsAroundRides() {
+        // The legacy time is no longer read: without a fixed time the café falls back to the item before it (start).
+        val legacy = flow(listOf(DayItem("late", "d", "late", placeId = "p-cafe", time = "16:00"), item("note", null, kind = DayItemKind.NOTE)))
+        assertEquals(listOf("start:st1!", "late", "note", "ride", "night:st2+in"), legacy.names())
+        val fixed = flow(listOf(item("late", "p-cafe", time = "16:00"), item("note", null, kind = DayItemKind.NOTE)))
+        assertEquals(listOf("start:st1!", "ride", "late", "note", "night:st2+in"), fixed.names())
     }
 
     @Test fun aQuietDayRunsFromTheStayBackToIt() {
