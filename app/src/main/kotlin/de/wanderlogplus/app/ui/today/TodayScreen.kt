@@ -97,6 +97,10 @@ fun TodayScreen(
     onOpenLogistics: ((EntityType, String) -> Unit)? = null,
     /** "Verpasst? Spätere Fahrt" on the next train; null hides it. */
     onReplaceTrain: ((String) -> Unit)? = null,
+    /** Who rates places from this phone; null hides the „Orte bewerten“ card. */
+    me: String? = null,
+    /** Starts the Bewerten mode; null hides the „Orte bewerten“ card. */
+    onRate: (() -> Unit)? = null,
 ) {
     val openDeadline: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)? =
         if (onOpenPlace == null && onOpenLogistics == null) null else { t, id ->
@@ -116,7 +120,7 @@ fun TodayScreen(
     androidx.compose.runtime.CompositionLocalProvider(LocalReplaceTrain provides onReplaceTrain) {
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
-        is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, openDeadline, modifier)
+        is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, openDeadline, modifier, me?.takeIf { onRate != null }, onRate ?: {})
         TodayState.After -> Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Willkommen zurück", style = MaterialTheme.typography.headlineMedium)
             Button(onClick = onOpenTrip) { Text("Zur Reise") }
@@ -139,9 +143,14 @@ private fun Before(
     available: (String) -> Boolean,
     onOpenPlace: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)?,
     modifier: Modifier,
+    me: String?,
+    onRate: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val today = now.toLocalDate().toString()
+    val rating = remember(snapshot, me) {
+        me?.takeIf { state.daysUntilStart >= RATE_CARD_MIN_DAYS }?.let { de.wanderlogplus.app.ui.places.ratingSummary(snapshot, it) }?.takeIf { it.open > 0 }
+    }
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
     val deadlines = remember(snapshot, today) { deadlineRows(snapshot, today) }
     val ideaDeadlines = remember(snapshot, today) { ideaDeadlineRows(snapshot, today) }
@@ -165,6 +174,7 @@ private fun Before(
             }
         }
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            rating?.let { RateCard(it, accent, onRate) }
             move?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available, onReplaceTrain = LocalReplaceTrain.current) }
             // Within the forecast range: the weather of the first trip day.
             snapshot.trip?.startDate?.let { start -> LocalTripWeather.current?.forDate(start) }?.takeIf { it.isForecast }?.let { w ->
@@ -178,6 +188,29 @@ private fun Before(
                 onOpenPlace?.let { open -> { id: String -> open(de.wanderlogplus.shared.query.DeadlineTarget.PLACE, id) } },
             )
         }
+    }
+}
+
+/** The „Orte bewerten“ card shows until this many days before the start. */
+private const val RATE_CARD_MIN_DAYS = 30L
+
+/** „Orte bewerten“ before the trip: how many places are still open (in total and per region) and a big start button. */
+@Composable
+private fun RateCard(summary: de.wanderlogplus.app.ui.places.RatingSummary, accent: Color, onRate: () -> Unit) {
+    Widget("Orte bewerten", "today-rate", accent = accent) {
+        Text(
+            "${summary.open} von ${summary.total} Orten noch offen",
+            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("today-rate-count"),
+        )
+        androidx.compose.material3.LinearProgressIndicator(
+            progress = { if (summary.total == 0) 0f else (summary.total - summary.open).toFloat() / summary.total },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            summary.byRegion.take(3).joinToString(" · ") { (name, n) -> "$name $n" },
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(onClick = onRate, modifier = Modifier.fillMaxWidth().testTag("today-rate-start")) { Text("Jetzt bewerten") }
     }
 }
 

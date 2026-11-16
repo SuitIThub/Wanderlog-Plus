@@ -257,6 +257,7 @@ class MainActivity : ComponentActivity() {
                         setupViewModelFactory = remember { setupFactory(container) { serverRef.value } },
                         tripViewModelFactory = remember { tripFactory(container) },
                         placesViewModelFactory = remember { placesFactory(container) },
+                        myName = remember { { myName(container) } },
                         moreViewModelFactory = remember { moreFactory(container) },
                         importViewModelFactory = remember { importFactory(container) },
                         settingsInfo = SettingsInfo(server?.url, server?.token, nodeId.orEmpty()),
@@ -387,9 +388,13 @@ class MainActivity : ComponentActivity() {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             PlacesViewModel({ container.snapshots().snapshot }, { block -> container.edit(block) }, container.scope, api = { container.syncApi() }, config = { container.settings.assessConfig.first() }, syncNow = container.syncScheduler::requestNow,
-                myName = { container.settings.myName() ?: container.syncApi()?.whoami()?.also { container.settings.setMyName(it) } },
+                myName = { myName(container) },
             ) as T
     }
+
+    /** Who votes from this phone: stored, else asked from the server once. */
+    private suspend fun myName(container: AppContainer): String? =
+        container.settings.myName() ?: container.syncApi()?.whoami()?.also { container.settings.setMyName(it) }
 
     private fun moreFactory(container: AppContainer) = object : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

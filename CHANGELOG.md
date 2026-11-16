@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.75.0
+
+- **Orte bewerten:** „Bewerten (n)“ im Orte-Tab führt nacheinander durch alle Orte, die du noch nicht bewertet hast – Region für Region in Reise-Reihenfolge. Pro Ort eine kompakte Karte mit Fotos, Bewertungen, Kurzbeschreibung, KI-Einschätzung und den Stimmen der anderen; unten 👎 / Neutral / 👍 / 👍👍, danach kommt sofort der nächste. „Überspringen“ lässt einen Ort für später offen, „Mehr“ öffnet die ganze Seite.
+- **Auf „Heute“ vor der Reise:** Bis einen Monat vor dem Start steht dort groß „Orte bewerten“ – wie viele Orte noch offen sind, ein Fortschrittsbalken, die offenen Orte je Region und „Jetzt bewerten“.
+- **Entfernung zur Unterkunft:** Auf der Karte steht, wie weit (Luftlinie) der Ort von der Unterkunft entfernt ist – bei Tagesausflügen wie Kyoto oder Nara von der Unterkunft in der Ausgangsregion, dazu die Entfernung vom Zentrum des Ausflugsziels.
+- **Neutral:** Neue Stimme für „weder noch“ – zählt als bewertet, ändert aber weder Punkte noch Status. Gibt es auch auf der Seite jedes Orts; eine zurückgenommene Stimme gilt jetzt als neutral.
+
 ## 0.74.0
 
 - **Widgets für den Startbildschirm:** sieben neue Widgets – „Als Nächstes“, „Nächste Fahrt“, „Heute kompakt“, „Unterkunft heute“, „Yen & Budget“, „Wetter“ und „Reise-Chat“. Jedes lässt sich frei in der Größe ziehen (von 1×1 bis 4×4) und zeigt je nach Platz mehr oder weniger: klein nur Uhrzeit oder Kurs, groß ganze Listen. Sie laufen offline mit den Daten auf dem Handy und aktualisieren sich bei Änderungen, alle 15 Minuten und genau dann, wenn der nächste Programmpunkt beginnt.
