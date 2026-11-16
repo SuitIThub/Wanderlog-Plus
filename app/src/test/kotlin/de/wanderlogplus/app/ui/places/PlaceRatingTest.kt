@@ -68,4 +68,10 @@ class PlaceRatingTest {
         assertNull(stayDistance(snap, saved("s-ufer")))
         assertNull(centreDistance(snap, saved("s-ufer")))
     }
+
+    @Test
+    fun summaryCountsPerRegion() {
+        val snap = Fixtures.trip().copy(votes = listOf(vote("s-garten", "daniel", Votes.LIKE)))
+        assertEquals(RatingSummary(4, 5, listOf("Bergstadt" to 2, "Seenland" to 1, "Küstenort" to 1)), ratingSummary(snap, "daniel"))
+    }
 }

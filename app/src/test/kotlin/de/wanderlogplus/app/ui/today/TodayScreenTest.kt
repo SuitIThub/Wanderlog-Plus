@@ -290,4 +290,34 @@ class TodayScreenTest {
         show("2027-05-09T12:00")
         rule.onNodeWithText("Noch keine Daten", substring = true).assertIsDisplayed()
     }
+
+    private fun showRate(snap: TripSnapshot, now: String, me: String?, onRate: () -> Unit = {}) {
+        rule.setContent {
+            WanderlogPlusTheme { TodayScreen(snap, LocalDateTime.parse(now), onOpenDay = {}, onOpenTrip = {}, onSyncNow = {}, me = me, onRate = onRate) }
+        }
+    }
+
+    @Test fun rateCardBeforeTripFarAway() {
+        var rated = false
+        showRate(de.wanderlogplus.app.testing.Fixtures.trip(), "2027-01-31T10:00", "daniel") { rated = true }
+        rule.onNodeWithTag("today-rate-count", useUnmergedTree = true).assertTextEquals("5 von 5 Orten noch offen")
+        rule.onNodeWithTag("today-rate-start").performClick()
+        assertEquals(true, rated)
+    }
+
+    @Test fun noRateCardCloseToTrip() {
+        showRate(de.wanderlogplus.app.testing.Fixtures.trip(), "2027-03-03T10:00", "daniel")
+        rule.onNodeWithTag("today-rate").assertDoesNotExist()
+    }
+
+    @Test fun noRateCardWithoutMe() {
+        showRate(de.wanderlogplus.app.testing.Fixtures.trip(), "2027-01-31T10:00", null)
+        rule.onNodeWithTag("today-rate").assertDoesNotExist()
+    }
+
+    @Test fun noRateCardWhenAllRated() {
+        val t = de.wanderlogplus.app.testing.Fixtures.trip()
+        showRate(t.copy(votes = t.savedPlaces.map { Vote(Votes.id(it.id, "daniel"), it.id, "daniel", 0) }), "2027-01-31T10:00", "daniel")
+        rule.onNodeWithTag("today-rate").assertDoesNotExist()
+    }
 }

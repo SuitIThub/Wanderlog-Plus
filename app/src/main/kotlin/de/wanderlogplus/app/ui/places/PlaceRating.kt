@@ -64,3 +64,15 @@ fun centreDistance(snapshot: TripSnapshot, saved: SavedPlace): StayDistance? {
     val centre = regionCentres(snapshot)[region.id] ?: return null
     return StayDistance(distanceKm(at, centre), region.name)
 }
+
+/** How much [me] still has to rate: open of all rateable places, open count per region name (region order, „Ohne Region“ last). */
+data class RatingSummary(val open: Int, val total: Int, val byRegion: List<Pair<String, Int>>)
+
+fun ratingSummary(snapshot: TripSnapshot, me: String): RatingSummary {
+    val all = rateablePlaces(snapshot)
+    val open = all.filter { !isRated(snapshot, it.id, me) }
+    val names = snapshot.regions.associate { it.id to it.name }
+    // rateablePlaces is already in region order, so grouping keeps that order.
+    val byRegion = open.groupBy { names[it.regionId] ?: "Ohne Region" }.map { (name, list) -> name to list.size }
+    return RatingSummary(open.size, all.size, byRegion)
+}

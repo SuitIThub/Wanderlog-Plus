@@ -188,6 +188,8 @@ fun AppNavigation(
     setupViewModelFactory: ViewModelProvider.Factory? = null,
     tripViewModelFactory: ViewModelProvider.Factory? = null,
     placesViewModelFactory: ViewModelProvider.Factory? = null,
+    /** Who rates places from this phone (for the „Orte bewerten“ card on Heute); null hides it. */
+    myName: (suspend () -> String?)? = null,
     /** Logistik and Mehr (notes, conflicts); without it these tabs show placeholders. */
     moreViewModelFactory: ViewModelProvider.Factory? = null,
     importViewModelFactory: ViewModelProvider.Factory? = null,
@@ -609,6 +611,9 @@ fun AppNavigation(
                 composable(Tab.HEUTE.route) {
                     val s = snapshot
                     val now = rememberMinuteNow(clock)
+                    val me by androidx.compose.runtime.produceState<String?>(null, myName) {
+                        value = myName?.let { load -> try { load() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null } }
+                    }
                     SyncedScreen(syncStatus, onRefresh, scrollable = s?.isEmpty == true) {
                         if (s == null) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -629,6 +634,8 @@ fun AppNavigation(
                                 onOpenPlace = { id -> nav.navigateToTab(Tab.ORTE); nav.navigate(placeRoute(id)) },
                                 onOpenLogistics = { t, id -> nav.navigate(de.wanderlogplus.app.ui.logistics.logisticsDetailRoute(t, id)) },
                                 onReplaceTrain = transitApi?.let { { tid: String -> nav.navigate(de.wanderlogplus.app.ui.transit.transitReplaceRoute(tid)) } },
+                                me = me,
+                                onRate = if (placesViewModelFactory != null) { { nav.navigateToTab(Tab.ORTE); nav.navigate(de.wanderlogplus.app.ui.places.PLACE_RATING_ROUTE) } } else null,
                             )
                             }
                         }
