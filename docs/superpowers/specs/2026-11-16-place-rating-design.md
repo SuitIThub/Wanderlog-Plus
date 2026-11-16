@@ -25,6 +25,7 @@ Nur einer sinnvoll: reine App-Funktion im `places`-Paket, Logik als reine Funkti
 - **Entfernung zur Unterkunft:** Unterkünfte (`Stay.regionId`) der Region des Orts; bei Tagesausflug-Regionen (`dayTripFromRegionId`) die der Ausgangsregion. Mehrere → die nächstgelegene. Anzeige „🏨 38 km zur Unterkunft (Osaka)“, unter 1 km in Metern. Keine Unterkunft → Zeile entfällt.
 - **Entfernung vom Zentrum:** nur bei Tagesausflug-Regionen, Zentrum = `regionCentres` (Mittel der gespeicherten Orte). „4 km vom Zentrum Kyoto“.
 - **VoteBar:** bekommt einen Neutral-Chip (ausgewählt, wenn mein Eintrag den Wert 0 hat). Erneutes Tippen auf die eigene Stimme setzt weiterhin auf 0 = neutral.
+- **Heute-Screen:** vor der Reise, solange noch mindestens 30 Tage bis zum Start sind, eine große Karte „Orte bewerten“: „23 von 87 Orten noch offen“, Fortschrittsbalken, die offenen Orte je Region (bis zu 3), Button „Jetzt bewerten“ → Bewerten-Modus im Orte-Tab. Nur wenn ich bekannt bin und etwas offen ist.
 - Version 0.75.0 + CHANGELOG.
 
 ## Dem Builder überlassen
