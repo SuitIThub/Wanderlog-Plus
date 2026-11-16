@@ -140,7 +140,7 @@ private sealed interface RowPhoto {
     data class Google(val photo: PlacePhoto) : RowPhoto
 }
 
-private fun wanderlogUrl(key: String, large: Boolean) =
+internal fun wanderlogUrl(key: String, large: Boolean) =
     if (large) PLACE_IMAGE_BASE.replace("freeImageMedium", "freeImage") + key else PLACE_IMAGE_BASE + key
 
 /**
