@@ -54,7 +54,7 @@ class ChatAgentTest {
         ),
         stays = listOf(Stay("st", "p-hotel", "r-kyoto", "2027-05-18", "2027-05-22", confirmationNumber = "SECRET-123", travelerNames = listOf("Erika Muster"))),
         days = listOf(Day("d1", "2027-05-19", title = "Tempeltag")),
-        dayItems = listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00")),
+        dayItems = listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00", fixedTime = "12:00")),
         trains = listOf(Train("tr", carrier = "JR", depart = Endpoint("Kyoto", date = "2027-05-22", time = "09:10"), arrive = Endpoint("Tokyo", date = "2027-05-22", time = "11:20"), confirmationNumber = "SECRET-TRAIN")),
     )
 

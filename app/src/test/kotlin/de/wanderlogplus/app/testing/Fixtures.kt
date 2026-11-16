@@ -88,10 +88,10 @@ object Fixtures {
         )
         val items = listOf(
             DayItem("i-1", "d-2", "a0", DayItemKind.NOTE, text = "Tickets am Eingang kaufen"),
-            DayItem("i-2", "d-2", "a1", DayItemKind.PLACE, "p-tempel", time = "09:00"),
-            DayItem("i-3", "d-2", "a2", DayItemKind.PLACE, "p-nudel", time = "12:30"),
+            DayItem("i-2", "d-2", "a1", DayItemKind.PLACE, "p-tempel", time = "09:00", fixedTime = "09:00"),
+            DayItem("i-3", "d-2", "a2", DayItemKind.PLACE, "p-nudel", time = "12:30", fixedTime = "12:30"),
             DayItem("i-4", "d-3", "a0", DayItemKind.PLACE, "p-ufer"),
-            DayItem("i-5", "d-5", "a0", DayItemKind.PLACE, "p-markt", time = "07:00"),
+            DayItem("i-5", "d-5", "a0", DayItemKind.PLACE, "p-markt", time = "07:00", fixedTime = "07:00"),
         )
         val notes = listOf(
             Note("n-1", "Packliste", "- Adapter\n- Regenjacke", "a0"),

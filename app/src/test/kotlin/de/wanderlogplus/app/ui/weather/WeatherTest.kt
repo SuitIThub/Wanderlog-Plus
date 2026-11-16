@@ -60,7 +60,7 @@ class WeatherTest {
         seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", "Tempeltag"))
         seed(EntityType.PLACE, "pg", Place("pg", name = "Moosgarten"))
         seed(EntityType.PLACE, "pm", Place("pm", name = "Museum Gamma"))
-        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pg", time = "10:00"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pg", time = "10:00", fixedTime = "10:00"))
         seed(EntityType.DAY_ITEM, "i2", DayItem("i2", "d1", "a1", DayItemKind.PLACE, "pm"))
         return TripSnapshot.from(store.all())
     }

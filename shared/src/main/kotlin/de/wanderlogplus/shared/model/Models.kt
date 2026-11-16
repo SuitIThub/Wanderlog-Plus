@@ -209,6 +209,8 @@ data class Day(
     val links: List<CustomLink> = emptyList(),
     /** Ways of the day that end at no program item: "ride:<TYPE>:<id>" (to a departure) and "night" (to the stay). */
     val legs: Map<String, DayLeg> = emptyMap(),
+    /** When the day starts at the stay ("HH:mm"); null: 09:00. */
+    val startTime: String? = null,
 )
 
 /** How a way of the day is travelled; [transit] is a connection picked in "Verbindung abfragen". */
@@ -230,6 +232,8 @@ data class DayVersionItem(
     val time: String? = null,
     val kind: DayItemKind = DayItemKind.PLACE,
     val placeId: String? = null,
+    val fixedTime: String? = null,
+    val stayMinutes: Int? = null,
 )
 
 enum class DayItemKind { PLACE, NOTE }
@@ -242,7 +246,12 @@ data class DayItem(
     val kind: DayItemKind = DayItemKind.PLACE,
     val placeId: String? = null,
     val text: String = "",
+    /** Legacy planned time (Wanderlog import, old chat plans); no longer read anywhere – see [fixedTime]. */
     val time: String? = null,
+    /** A fixed time "HH:mm" (reservation, tour): it stays with the item; null: the time is estimated. */
+    val fixedTime: String? = null,
+    /** How long one stays, overriding the place's typical duration; null: typical duration. */
+    val stayMinutes: Int? = null,
     /** How to get here from the previous place of the day; null = on foot. */
     val legMode: TravelMode? = null,
     /** The public-transport connection chosen for that way ("Verbindung abfragen"); null = found automatically. */

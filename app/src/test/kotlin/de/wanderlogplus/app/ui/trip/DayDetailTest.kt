@@ -63,7 +63,7 @@ class DayDetailTest {
         seed(EntityType.SAVED_PLACE, "sv-star", SavedPlace("sv-star", "pa", "r1", PlaceCategory.SIGHT, tags = listOf("⭐ Muss man sehen")))
         seed(EntityType.DAY, "d1", Day("d1", "2027-05-09", "Tempeltag", "**Wichtig:** früh los"))
         seed(EntityType.SAVED_PLACE, "sv-plan", SavedPlace("sv-plan", "pc", "r1", PlaceCategory.SIGHT, status = PlaceStatus.PLANNED))
-        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", time = "10:00"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "pc", time = "10:00", fixedTime = "10:00"))
     }
 
     @androidx.compose.runtime.Composable

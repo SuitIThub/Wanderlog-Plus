@@ -20,10 +20,10 @@ class DayNowTest {
         Place("c", name = "Nara-Park", lat = 34.6851, lng = 135.8430),
     ).associateBy { it.id }
     private val items = listOf(
-        DayItem("i1", "d", "a", placeId = "a", time = "09:00"),
+        DayItem("i1", "d", "a", placeId = "a", time = "09:00", fixedTime = "09:00"),
         DayItem("n", "d", "b", DayItemKind.NOTE, text = "Geld abheben"),
         DayItem("i2", "d", "c", placeId = "b"),
-        DayItem("i3", "d", "d", placeId = "c", time = "15:00"),
+        DayItem("i3", "d", "d", placeId = "c", time = "15:00", fixedTime = "15:00"),
     )
     private val train = Movement.TrainMove(Train("t", "JR", depart = Endpoint("Kyoto", date = "2027-05-20", time = "13:00"), arrive = Endpoint("Nara", date = "2027-05-20", time = "13:45")))
 

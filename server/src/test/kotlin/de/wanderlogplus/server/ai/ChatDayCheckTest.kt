@@ -37,10 +37,10 @@ class ChatDayCheckTest {
         stays = listOf(Stay("st", "p-hotel", "r-kyoto", "2027-05-20", "2027-05-22")),
         days = listOf(Day("d21", "2027-05-21"), Day("d22", "2027-05-22")),
         dayItems = listOf(
-            DayItem("i1", "d21", "a", placeId = "p-kiyo", time = "09:00"),
+            DayItem("i1", "d21", "a", placeId = "p-kiyo", time = "09:00", fixedTime = "09:00"),
             DayItem("i2", "d21", "b", placeId = "p-garden"),
-            DayItem("i3", "d21", "c", placeId = "p-deer", time = "10:30"),
-            DayItem("i4", "d22", "a", placeId = "p-kiyo", time = "10:00"),
+            DayItem("i3", "d21", "c", placeId = "p-deer", time = "10:30", fixedTime = "10:30"),
+            DayItem("i4", "d22", "a", placeId = "p-kiyo", time = "10:00", fixedTime = "10:00"),
             DayItem("i5", "d22", "b", placeId = "p-museum"),
         ),
         trains = listOf(Train("tr", carrier = "JR", depart = Endpoint("Kyoto", placeId = "p-station", date = "2027-05-22", time = "12:00"), arrive = Endpoint("Tokyo", date = "2027-05-22", time = "14:15"))),

@@ -41,7 +41,8 @@ class DayPlanTest {
         val names = items.map { i -> if (i.kind == DayItemKind.NOTE) "Notiz" else snap.places[i.placeId]?.name }
         // The note was not in the plan: it stays, after the plan.
         assertEquals(listOf("Garten", "Tempel", "Onsen am Fluss", "Notiz"), names)
-        assertEquals(listOf("08:30", "10:00", "17:00", null), items.map { it.time })
+        assertEquals(listOf("08:30", "10:00", "17:00", null), items.map { it.fixedTime })
+        assertEquals(listOf(null, null, null, null), items.map { it.time }, "plan times are fixed times, never the old field")
         assertEquals(PlaceStatus.PLANNED, snap.savedPlaces.first { it.id == "s3" }.status)
         assertEquals(PlaceStatus.IDEA, snap.savedPlaces.first { it.id == "s2" }.status, "removed: back to an idea")
         val found = snap.savedPlaces.first { snap.places[it.placeId]?.name == "Onsen am Fluss" }
@@ -54,7 +55,7 @@ class DayPlanTest {
         f.editor.restoreDayVersion(f.snapshot(), date, at = 1000, now = 2000)
         val back = f.snapshot()
         assertEquals(listOf(temple, note, market), back.dayItemsFor(dayId).map { it.id })
-        assertEquals(listOf(null, null, null), back.dayItemsFor(dayId).map { it.time })
+        assertEquals(listOf(null, null, null), back.dayItemsFor(dayId).map { it.fixedTime })
         assertEquals(PlaceStatus.PLANNED, back.savedPlaces.first { it.id == "s2" }.status)
         assertEquals(PlaceStatus.IDEA, back.savedPlaces.first { it.id == "s3" }.status)
         // Restoring is a version too: the plan can come back.
@@ -62,6 +63,19 @@ class DayPlanTest {
         assertEquals(listOf("Vor Chat-Plan", "Vor dem Wiederherstellen"), h.map { it.label })
         f.editor.restoreDayVersion(back, date, at = 2000, now = 3000)
         assertEquals(listOf("Garten", "Tempel", "Onsen am Fluss", "Notiz"), f.snapshot().let { s -> s.dayItemsFor(dayId).map { i -> if (i.kind == DayItemKind.NOTE) "Notiz" else s.places[i.placeId]?.name } })
+    }
+
+    @Test fun versionsKeepFixedTimeAndDuration() {
+        val f = fx()
+        val temple = f.editor.addSuggestionToDay(f.snapshot(), date, "s1")
+        f.editor.set(EntityType.DAY_ITEM, temple, mapOf("fixedTime" to kotlinx.serialization.json.JsonPrimitive("18:00"), "stayMinutes" to kotlinx.serialization.json.JsonPrimitive(90)))
+        val at = f.editor.applyDayPlan(f.snapshot(), date, ops = listOf(PlanOp.Keep(temple, "")), remove = emptySet(), label = "Vorher", now = 1000)
+        f.editor.set(EntityType.DAY_ITEM, temple, mapOf("stayMinutes" to kotlinx.serialization.json.JsonPrimitive(30)))
+        assertNull(f.snapshot().dayItemsFor(dayId).single().fixedTime, "an empty plan time clears the fixed time")
+        f.editor.restoreDayVersion(f.snapshot(), date, at = at, now = 2000)
+        val item = f.snapshot().dayItemsFor(dayId).single()
+        assertEquals("18:00", item.fixedTime)
+        assertEquals(90, item.stayMinutes)
     }
 
     @Test fun restoringPlansShortlistedPlacesToo() {
@@ -88,7 +102,7 @@ class DayPlanTest {
         )
         val snap = f.snapshot()
         assertEquals(4, snap.savedPlaces.size, "no new saved place")
-        assertEquals(listOf("p4" to "10:00", "p1" to "14:00"), snap.dayItemsFor(dayId).map { it.placeId to it.time })
+        assertEquals(listOf("p4" to "10:00", "p1" to "14:00"), snap.dayItemsFor(dayId).map { it.placeId to it.fixedTime })
         assertEquals(temple, snap.dayItemsFor(dayId).last().id)
         assertEquals(PlaceStatus.PLANNED, snap.savedPlaces.first { it.id == "s4" }.status)
     }
