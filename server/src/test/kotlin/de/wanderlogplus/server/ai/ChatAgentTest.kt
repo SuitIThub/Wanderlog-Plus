@@ -290,6 +290,13 @@ class ChatAgentTest {
     }
 
     @Test
+    fun `the prompt asks for times only for real appointments`() {
+        val system = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }.systemPrompt(trip, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertFalse("mit sinnvollen Uhrzeiten" in system, system)
+        assertTrue("Uhrzeit nur bei festen Terminen" in system, system)
+    }
+
+    @Test
     fun `a plan time on an item without a fixed time is a change`() {
         val t = trip.copyItems(listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00")))
         val tools = ChatTools(t, null, t.dayAnchor("2027-05-19")) {}

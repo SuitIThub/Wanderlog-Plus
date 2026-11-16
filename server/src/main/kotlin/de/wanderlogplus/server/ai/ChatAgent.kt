@@ -1482,8 +1482,9 @@ class ChatAgent(
               ohne das zu sagen. Für andere Tage nutzt du get_day.
             - Wünscht sich der Nutzer einen Tagesablauf („plan mir den Tag“, „füll die Lücke“, „bau den Tag regenfest um“), stellst du ihn
               aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
-              als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
-              steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
+              als keep (in neuer Reihenfolge) oder remove, neue als add. Eine Uhrzeit nur bei festen Terminen (Reservierung, Führung,
+              Ticket mit Zeitfenster) – alle anderen Zeiten schätzt die App aus Reihenfolge, Wegen und Aufenthalt („~“ im Programm).
+              Entferne nur, was dem Wunsch im Weg steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
             - Das Wetter der Reisetage steht unten unter „Wetter der Reisetage“ (Vorhersage des japanischen Wetterdienstes JMA für die nächsten Tage,
               sonst das Mittel der letzten Jahre – das ist keine Vorhersage, sag das). Bei Regen schlägst du von dir aus Orte
               für drinnen vor und weist darauf hin, wenn Wanderungen, Gärten oder Aussichtspunkte geplant sind; ist ein anderer
