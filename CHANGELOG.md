@@ -3,6 +3,15 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.76.0
+
+- **Geschätzte Uhrzeiten im Tagesplan:** Die Zeiten in der Zeitleiste hängen nicht mehr am Ort, sondern werden aus Reihenfolge, Wegen und Aufenthaltsdauer geschätzt („~13:00“) – beim Umsortieren rechnen sie sofort neu. Bekannte Wegzeiten (eingeblendete Wege, gewählte Verbindungen) zählen, sonst die Luftlinie.
+- **Feste Zeiten:** Über ⋮ → „Zeit & Dauer“ bekommt ein Ort eine feste Uhrzeit (Reservierung, Führung) – sie bleibt beim Ort (📌), die Schätzung plant drumherum. Dort lässt sich auch die Aufenthaltsdauer anpassen (±15 Min).
+- **Tagesbeginn:** Antippen der Unterkunft am Tagesanfang stellt ein, wann der Tag losgeht (sonst 09:00).
+- **Warnungen:** „~15 Min zu spät“ für eine feste Zeit, „bei Ankunft geschlossen“ und „Zug knapp“ / „Flug knapp“ direkt am Ort.
+- Die bisherigen Zeiten aus dem Wanderlog-Import gelten jetzt als Schätzung; Heute, Widgets, Guides und Karte nutzen die geschätzten Zeiten.
+- **Chat:** Planvorschläge setzen nur noch feste Termine als Uhrzeit, der Chat sieht die geschätzten Zeiten („~“) und festen („fest“). Dafür muss der Server neu gebaut werden.
+
 ## 0.75.0
 
 - **Orte bewerten:** „Bewerten (n)“ im Orte-Tab führt nacheinander durch alle Orte, die du noch nicht bewertet hast – Region für Region in Reise-Reihenfolge. Pro Ort eine kompakte Karte mit Fotos, Bewertungen, Kurzbeschreibung, KI-Einschätzung und den Stimmen der anderen; unten 👎 / Neutral / 👍 / 👍👍, danach kommt sofort der nächste. „Überspringen“ lässt einen Ort für später offen, „Mehr“ öffnet die ganze Seite.

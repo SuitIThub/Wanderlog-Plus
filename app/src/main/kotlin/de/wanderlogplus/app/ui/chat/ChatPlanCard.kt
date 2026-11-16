@@ -167,7 +167,8 @@ private fun PlanRow(st: ChatPlanStep, checked: Boolean, enabled: Boolean, tag: S
                         else -> st.time ?: st.oldTime
                     }
                     time?.let {
-                        Text(it, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp), textDecoration = if (removing) TextDecoration.LineThrough else null)
+                        // Plan times are fixed times (appointments); the rest is estimated by the app.
+                        Text("fest $it", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(end = 8.dp), textDecoration = if (removing) TextDecoration.LineThrough else null)
                     }
                     Text(
                         st.title,
