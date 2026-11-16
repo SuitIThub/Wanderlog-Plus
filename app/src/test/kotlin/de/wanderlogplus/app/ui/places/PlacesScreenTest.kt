@@ -182,4 +182,30 @@ class PlacesScreenTest {
         rule.onNode(hasText("Idee") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("place-sv-a")), useUnmergedTree = true).assertDoesNotExist()
         rule.onNode(hasText("Besucht") and androidx.compose.ui.test.hasAnyAncestor(hasTestTag("place-sv-b")), useUnmergedTree = true).assertExists()
     }
+
+    private fun rateScreen(snap: TripSnapshot, me: String?, onRate: () -> Unit = {}) {
+        rule.setContent { WanderlogPlusTheme { PlacesScreen(snap, onOpenRegion = {}, me = me, onRate = onRate) } }
+    }
+
+    @Test
+    fun rateButtonShowsCount() {
+        var rated = false
+        rateScreen(de.wanderlogplus.app.testing.Fixtures.trip(), "daniel") { rated = true }
+        rule.onNodeWithText("Bewerten (5)").assertExists()
+        rule.onNodeWithTag("places-rate").performSemanticsAction(SemanticsActions.OnClick)
+        assertTrue(rated)
+    }
+
+    @Test
+    fun noRateButtonWithoutMe() {
+        rateScreen(de.wanderlogplus.app.testing.Fixtures.trip(), null)
+        rule.onNodeWithTag("places-rate").assertDoesNotExist()
+    }
+
+    @Test
+    fun noRateButtonWhenAllRated() {
+        val t = de.wanderlogplus.app.testing.Fixtures.trip()
+        rateScreen(t.copy(votes = t.savedPlaces.map { Vote(Votes.id(it.id, "daniel"), it.id, "daniel", 0) }), "daniel")
+        rule.onNodeWithTag("places-rate").assertDoesNotExist()
+    }
 }

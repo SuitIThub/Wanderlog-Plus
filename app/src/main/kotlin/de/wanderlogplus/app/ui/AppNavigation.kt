@@ -149,7 +149,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
     val nestedRoutes: Set<String>
         get() = when (this) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
-            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
+            ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_RATING_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.maps.ROUTE_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE, de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE)
             MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.more.BALANCES_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
@@ -791,6 +791,8 @@ fun AppNavigation(
                                     researchStatus = status.takeIf { researching.isNotEmpty() },
                                     onShowProgress = researchJob?.takeIf { reelsViewModelFactory != null }?.let { j -> { nav.navigate(de.wanderlogplus.app.ui.reels.jobRoute(j)) } },
                                     onReels = reelsViewModelFactory?.let { { nav.navigate(REELS_ROUTE) } },
+                                    me = vm.me.collectAsState().value,
+                                    onRate = { nav.navigate(de.wanderlogplus.app.ui.places.PLACE_RATING_ROUTE) },
                                 )
                             }
                         }
@@ -863,6 +865,26 @@ fun AppNavigation(
                     val id = entry.arguments?.getString("savedPlaceId").orEmpty()
                     SyncedScreen(syncStatus, onRefresh, scrollable = false) {
                         snap?.let { de.wanderlogplus.app.ui.places.PlaceMapScreen(it, id, onBack = { nav.popBackStack() }) }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.places.PLACE_RATING_ROUTE) { entry ->
+                    val vm: PlacesViewModel = viewModel(factory = placesViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.ORTE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val me by vm.me.collectAsState()
+                    ErrorSnack(vm.error, vm::consumeError, snackbar)
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        val m = me
+                        if (s == null || m == null) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        } else {
+                            de.wanderlogplus.app.ui.places.PlaceRatingScreen(
+                                s, m,
+                                onVote = vm::vote,
+                                onOpenPlace = { id -> nav.navigate(placeRoute(id)) },
+                                onDone = { nav.popBackStack() },
+                            )
+                        }
                     }
                 }
                 composable(PLACE_ROUTE) { entry ->

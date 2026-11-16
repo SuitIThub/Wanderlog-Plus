@@ -133,7 +133,12 @@ fun PlacesScreen(
     onShowProgress: (() -> Unit)? = null,
     /** Opens the reel analyses (results also reachable when the notification is gone); null hides it. */
     onReels: (() -> Unit)? = null,
+    /** Who rates from this phone; null hides „Bewerten“. */
+    me: String? = null,
+    /** Starts the Bewerten mode; null hides the button. */
+    onRate: (() -> Unit)? = null,
 ) {
+    val unrated = remember(snapshot, me) { me?.let { ratingQueue(snapshot, it).size } ?: 0 }
     val tiles = remember(snapshot) {
         regionTileOrder(snapshot).map { r ->
             RegionTile(r.id, r.name, savedPlacesIn(snapshot, r.id).size, isDayTrip(snapshot, r), regionColor(r.color), regionHeroImage(snapshot, r.id))
@@ -169,6 +174,11 @@ fun PlacesScreen(
                         Text("Ort suchen")
                     }
                 }
+            }
+        }
+        if (onRate != null && me != null && unrated > 0) {
+            item(key = "rate", span = { GridItemSpan(maxLineSpan) }) {
+                androidx.compose.material3.Button(onClick = onRate, modifier = Modifier.fillMaxWidth().testTag("places-rate")) { Text("Bewerten ($unrated)") }
             }
         }
         researchStatus?.let { msg ->
