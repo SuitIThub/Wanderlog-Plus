@@ -112,6 +112,10 @@ fun DayDetailScreen(
     onOpenPhoto: ((EntityType, String, Int) -> Unit)? = null,
     /** Restores a saved version of the program ("Verlauf"); null hides it. */
     onRestoreVersion: ((date: String, at: Long) -> Unit)? = null,
+    /** "Zeit & Dauer" of a program item; null hides it. */
+    onItemTime: ((itemId: String, fixedTime: String?, stayMinutes: Int?) -> Unit)? = null,
+    /** When a day starts at the stay (null: 09:00); null: not editable. */
+    onDayStart: ((date: String, time: String?) -> Unit)? = null,
     /** Puts a stay's hotel into the program at a position; null hides "Unterkunft". */
     onAddStayAt: ((date: String, stayId: String, position: ItemPosition) -> Unit)? = null,
     /** Own links of the day; null hides "Link". */
@@ -214,6 +218,8 @@ fun DayDetailScreen(
                     onOpenPlace = onOpenPlace,
                     history = day?.history.orEmpty(),
                     onRestoreVersion = onRestoreVersion?.let { restore -> { at: Long -> restore(date, at) } },
+                    onItemTime = onItemTime,
+                    onDayStart = onDayStart?.let { set -> { t: String? -> set(date, t) } },
                     weather = de.wanderlogplus.app.ui.weather.LocalTripWeather.current?.forDate(date),
                     onReplan = de.wanderlogplus.app.ui.design.LocalOpenChat.current,
                     links = day?.links.orEmpty(),

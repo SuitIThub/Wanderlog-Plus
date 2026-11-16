@@ -88,7 +88,13 @@ internal fun DayProgramTab(
     /** The day's own links and how to change them (null hides "Link"). */
     links: List<de.wanderlogplus.shared.model.CustomLink> = emptyList(),
     onSetLinks: ((List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
+    /** "Zeit & Dauer" of an item (fixed time, stay); null hides the menu entry. */
+    onItemTime: ((itemId: String, fixedTime: String?, stayMinutes: Int?) -> Unit)? = null,
+    /** Sets when the day starts (null: 09:00); null: the start card is not tappable. */
+    onDayStart: ((String?) -> Unit)? = null,
 ) {
+    var timeFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var editStart by rememberSaveable { mutableStateOf(false) }
     var showHistory by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
     if (showHistory && onRestoreVersion != null) {
         DayHistoryDialog(snapshot, history, onRestore = { at -> showHistory = false; onRestoreVersion(at) }, onDismiss = { showHistory = false })
@@ -152,7 +158,10 @@ internal fun DayProgramTab(
             moveTagPrefix = "program-move-",
             itemActions = { item ->
                 val i = items.indexOfFirst { it.id == item.id }
-                ItemMenu(item.id, first = i <= 0, last = i == items.lastIndex, onMove, onRemove)
+                ItemMenu(
+                    item.id, first = i <= 0, last = i == items.lastIndex, onMove, onRemove,
+                    onTime = onItemTime?.takeIf { item.kind == DayItemKind.PLACE }?.let { { timeFor = item.id } },
+                )
             },
             emptyProgram = {
                 Column {
@@ -184,7 +193,25 @@ internal fun DayProgramTab(
             },
             modifier = Modifier.testTag("program-list"),
             schedule = schedule,
+            onStartClick = onDayStart?.let { { editStart = true } },
         )
+        if (editStart && onDayStart != null) {
+            DayStartDialog(de.wanderlogplus.shared.query.DayNow.hhmm(schedule.dayStart), onSave = onDayStart, onDismiss = { editStart = false })
+        }
+        val timeItem = timeFor?.let { id -> items.firstOrNull { it.id == id } }
+        val timeStop = timeItem?.let { schedule.stops[it.id] }
+        if (timeItem != null && timeStop != null && onItemTime != null) {
+            val place = timeItem.placeId?.let { snapshot.places[it] }
+            val saved = snapshot.savedPlaces.firstOrNull { it.placeId == timeItem.placeId }
+            ItemTimeSheet(
+                estimateStart = timeStop.start,
+                defaultMinutes = de.wanderlogplus.shared.query.DayNow.stayMinutes(place, saved),
+                fixedTime = timeItem.fixedTime,
+                stayMinutes = timeItem.stayMinutes,
+                onSave = { f, m -> onItemTime(timeItem.id, f, m) },
+                onDismiss = { timeFor = null },
+            )
+        }
     }
 }
 
@@ -196,13 +223,20 @@ internal fun placeCoords(snapshot: TripSnapshot, item: DayItem): LatLngD? {
 
 /** ⋮ menu of a program item; entries tagged `item-up-<id>`, `item-down-<id>`, `item-remove-<id>`. */
 @Composable
-private fun ItemMenu(id: String, first: Boolean, last: Boolean, onMove: (String, Boolean) -> Unit, onRemove: (String) -> Unit) {
+private fun ItemMenu(id: String, first: Boolean, last: Boolean, onMove: (String, Boolean) -> Unit, onRemove: (String) -> Unit, onTime: (() -> Unit)? = null) {
     var open by remember(id) { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.testTag("item-menu-$id")) {
             Icon(Icons.Filled.MoreVert, contentDescription = "Aktionen")
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (onTime != null) {
+                DropdownMenuItem(
+                    text = { Text("Zeit & Dauer") },
+                    onClick = { open = false; onTime() },
+                    modifier = Modifier.testTag("item-time-$id"),
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Nach oben") },
                 onClick = { open = false; onMove(id, true) },

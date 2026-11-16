@@ -38,7 +38,7 @@ class LocalEditor(
     private val onChange: () -> Unit = {},
 ) {
     private companion object {
-        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs", "legs")
+        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs", "legs", "startTime")
     }
 
     private fun isReserved(field: String) = field == "_source" || field == "_sourceId" || field.startsWith("_base.")

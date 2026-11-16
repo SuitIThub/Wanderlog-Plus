@@ -119,4 +119,24 @@ class TripViewModelTest {
         assertEquals("Notiz", s.days.single().note)
         assertEquals(listOf("Bento"), s.dayItemsFor(s.days.single().id).map { it.text })
     }
+
+    @Test fun setItemTimeWritesBothFields() {
+        seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
+        seed(EntityType.DAY, "d1", Day("d1", "2027-05-09"))
+        seed(EntityType.DAY_ITEM, "i1", DayItem("i1", "d1", "a0", DayItemKind.PLACE, "p"))
+        val vm = vm()
+        runBlocking { vm.setItemTime("i1", "18:00", 90).join() }
+        TripSnapshot.from(store.all()).dayItems.single().let { assertEquals("18:00", it.fixedTime); assertEquals(90, it.stayMinutes) }
+        runBlocking { vm.setItemTime("i1", null, null).join() }
+        TripSnapshot.from(store.all()).dayItems.single().let { assertEquals(null, it.fixedTime); assertEquals(null, it.stayMinutes) }
+    }
+
+    @Test fun setDayStartWritesStartTime() {
+        seed(EntityType.TRIP, "t1", Trip("t1", "T", "2027-05-08", "2027-05-12"))
+        val vm = vm()
+        runBlocking { vm.setDayStart("2027-05-09", "10:30").join() }
+        assertEquals("10:30", TripSnapshot.from(store.all()).days.single().startTime)
+        runBlocking { vm.setDayStart("2027-05-09", null).join() }
+        assertEquals(null, TripSnapshot.from(store.all()).days.single().startTime)
+    }
 }

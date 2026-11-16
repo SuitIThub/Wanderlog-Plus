@@ -123,6 +123,18 @@ class TripViewModel(
     fun addFoundToPlaces(name: String, lat: Double, lng: Double, address: String?, category: PlaceCategory, regionId: String?, note: String = "", googlePlaceId: String? = null) =
         write { e, _ -> e.addPlaceToCollection(name, lat, lng, address, category, regionId, note = note, googlePlaceId = googlePlaceId) }
 
+    /** "Zeit & Dauer" of a program item: [fixedTime] "HH:mm" (null: estimated), [stayMinutes] (null: typical). */
+    fun setItemTime(itemId: String, fixedTime: String?, stayMinutes: Int?) = write { e, _ ->
+        e.set(EntityType.DAY_ITEM, itemId, mapOf(
+            "fixedTime" to (fixedTime?.let { JsonPrimitive(it) } ?: JsonNull),
+            "stayMinutes" to (stayMinutes?.let { JsonPrimitive(it) } ?: JsonNull),
+        ))
+    }
+
+    /** When [date] starts at the stay ("HH:mm"); null: 09:00 again. */
+    fun setDayStart(date: String, time: String?) =
+        write { e, s -> e.setDayFields(s, date, mapOf("startTime" to (time?.let { JsonPrimitive(it) } ?: JsonNull))) }
+
     fun setShowLegs(date: String, show: Boolean) = write { e, s -> e.setDayFields(s, date, mapOf("showLegs" to JsonPrimitive(show))) }
 
     /** Mode of the way [key] of [date]: a program item's id, or a way to a departure or to the night's stay. */

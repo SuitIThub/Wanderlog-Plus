@@ -84,6 +84,8 @@ fun DayTimeline(
     legs: (@Composable (FlowLeg) -> Unit)? = null,
     /** A small "insert here" element above the first program item and below every item; null shows none. */
     insertSlot: (@Composable (ItemPosition) -> Unit)? = null,
+    /** Tapping the start (last night's stay) – e.g. to set when the day starts; null: not tappable. */
+    onStartClick: (() -> Unit)? = null,
     /** The estimated day; null: estimated from the [flow] alone (no known ways, 09:00 start). */
     schedule: de.wanderlogplus.shared.query.DayScheduleView? = null,
 ) {
@@ -109,6 +111,7 @@ fun DayTimeline(
                         title = stayName(entry.stay),
                         subtitle = (if (entry.checkOut) checkOutText(entry.stay) else "Unterkunft") + " · ab " + de.wanderlogplus.shared.query.DayNow.hhmm(times.dayStart),
                         titleMaxLines = 2,
+                        onClick = onStartClick,
                         modifier = Modifier.testTag("timeline-start"),
                     )
                 }
