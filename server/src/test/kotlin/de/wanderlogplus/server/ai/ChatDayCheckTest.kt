@@ -37,16 +37,26 @@ class ChatDayCheckTest {
         stays = listOf(Stay("st", "p-hotel", "r-kyoto", "2027-05-20", "2027-05-22")),
         days = listOf(Day("d21", "2027-05-21"), Day("d22", "2027-05-22")),
         dayItems = listOf(
-            DayItem("i1", "d21", "a", placeId = "p-kiyo", time = "09:00"),
+            DayItem("i1", "d21", "a", placeId = "p-kiyo", fixedTime = "09:00"),
             DayItem("i2", "d21", "b", placeId = "p-garden"),
-            DayItem("i3", "d21", "c", placeId = "p-deer", time = "10:30"),
-            DayItem("i4", "d22", "a", placeId = "p-kiyo", time = "10:00"),
+            DayItem("i3", "d21", "c", placeId = "p-deer", fixedTime = "10:30"),
+            DayItem("i4", "d22", "a", placeId = "p-kiyo", fixedTime = "10:00"),
             DayItem("i5", "d22", "b", placeId = "p-museum"),
         ),
         trains = listOf(Train("tr", carrier = "JR", depart = Endpoint("Kyoto", placeId = "p-station", date = "2027-05-22", time = "12:00"), arrive = Endpoint("Tokyo", date = "2027-05-22", time = "14:15"))),
     )
 
     private val check = ChatDayCheck(trip)
+
+    @Test fun programStopsUseFixedTimeAndStay() {
+        val t = ChatTrip(trip.trip, trip.regions, trip.places, trip.saved, trip.stays, trip.days, listOf(
+            DayItem("x1", "d21", "a", placeId = "p-kiyo", time = "07:00", stayMinutes = 45),
+            DayItem("x2", "d21", "b", placeId = "p-garden", fixedTime = "12:00"),
+        ))
+        val stops = ChatDayCheck(t).programStops("2027-05-21")
+        assertEquals(listOf(null, "12:00"), stops.map { it.time })
+        assertEquals(listOf(45, null), stops.map { it.minutes })
+    }
 
     @Test
     fun `program check finds closed days, impossible times and returns home`() {

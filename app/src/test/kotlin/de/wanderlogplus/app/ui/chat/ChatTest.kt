@@ -353,7 +353,7 @@ class ChatTest {
             }
         }
         rule.onNodeWithText("Entfällt").assertExists()
-        rule.onNodeWithText("09:00 → 10:00").assertExists()
+        rule.onNodeWithText("fest 09:00 → 10:00").assertExists()
         rule.onNodeWithText("Plan-Check:\n- Moosgarten öffnet erst ca. 09:00.").assertExists()
         rule.onNodeWithText("Plan übernehmen (4 Änderungen)").assertExists()
         // Keep the noodle kitchen after all.

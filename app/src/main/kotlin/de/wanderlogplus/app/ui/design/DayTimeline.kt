@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -83,7 +84,14 @@ fun DayTimeline(
     legs: (@Composable (FlowLeg) -> Unit)? = null,
     /** A small "insert here" element above the first program item and below every item; null shows none. */
     insertSlot: (@Composable (ItemPosition) -> Unit)? = null,
+    /** Tapping the start (last night's stay) – e.g. to set when the day starts; null: not tappable. */
+    onStartClick: (() -> Unit)? = null,
+    /** The estimated day; null: estimated from the [flow] alone (no known ways, 09:00 start). */
+    schedule: de.wanderlogplus.shared.query.DayScheduleView? = null,
 ) {
+    val times = schedule ?: androidx.compose.runtime.remember(snapshot, flow) {
+        de.wanderlogplus.shared.query.DaySchedule.build(flow, snapshot.places, snapshot.savedPlaces, null, null)
+    }
     val dow = now?.let { it.dayOfWeek.value % 7 } // 0 = Sunday
     val time = now?.format(HH_MM)
     fun stayName(st: Stay) = snapshot.places[st.placeId]?.name?.takeIf { it.isNotBlank() } ?: "Unterkunft"
@@ -101,8 +109,9 @@ fun DayTimeline(
                 is FlowEntry.Start -> item("Start", key = "start") {
                     TextCard(
                         title = stayName(entry.stay),
-                        subtitle = if (entry.checkOut) checkOutText(entry.stay) else "Unterkunft",
+                        subtitle = (if (entry.checkOut) checkOutText(entry.stay) else "Unterkunft") + " · ab " + de.wanderlogplus.shared.query.DayNow.hhmm(times.dayStart),
                         titleMaxLines = 2,
+                        onClick = onStartClick,
                         modifier = Modifier.testTag("timeline-start"),
                     )
                 }
@@ -118,8 +127,9 @@ fun DayTimeline(
                 is FlowEntry.Item -> {
                     val item = entry.item
                     val i = shown.indexOf(item.id)
-                    // The time stands at the dot (as on "Heute"); without one the entry has no marker.
-                    item(item.time?.takeIf { it.isNotBlank() }.orEmpty(), key = "item-${item.id}") {
+                    // The (estimated "~" or fixed) time stands at the dot; notes have no marker.
+                    val stop = times.stops[item.id]
+                    item(times.startText(item.id).orEmpty(), key = "item-${item.id}") {
                         Column {
                             if (i == 0) insertSlot?.invoke(ItemPosition.Start)
                             val tag = Modifier.testTag(itemTagPrefix + item.id)
@@ -135,14 +145,24 @@ fun DayTimeline(
                                         title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
                                         subtitle = listOfNotNull(
                                             if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
-                                            entry.checkIn?.let { checkInText(it, item.time) },
+                                            entry.checkIn?.let { checkInText(it, stop?.let { s -> de.wanderlogplus.shared.query.DayNow.hhmm(s.start) }) },
                                             place?.rating?.takeIf { saved == null }?.let { ratingLabel(it) },
                                         ).joinToString(" · "),
                                         imageUrl = place?.heroImageUrl(),
                                         placeholderSymbol = if (isStay) "🏨" else categorySymbol(saved?.category),
                                         accent = accent,
                                         style = PhotoCardStyle.Compact,
-                                        extra = saved?.let { s -> { de.wanderlogplus.app.ui.places.RatingStrip(place, s) } },
+                                        extra = if (saved == null && stop?.fixed != true && stop?.warnings.isNullOrEmpty()) null else {
+                                            {
+                                                Column {
+                                                    saved?.let { s -> de.wanderlogplus.app.ui.places.RatingStrip(place, s) }
+                                                    if (stop != null) {
+                                                        val nextRide = flow.entries.drop(idx + 1).firstNotNullOfOrNull { (it as? FlowEntry.Ride)?.movement }
+                                                        StopTimeLine(item.id, stop, if (nextRide is Movement.FlightMove) "Flug" else "Zug")
+                                                    }
+                                                }
+                                            }
+                                        },
                                         badges = if (open) listOf(BadgeSpec("offen", BadgeTone.Positive)) else emptyList(),
                                         onClick = onOpenItem?.let { open -> { open(item) } },
                                         trailing = actions,
@@ -151,7 +171,7 @@ fun DayTimeline(
                                 }
                                 DayItemKind.NOTE -> TextCard(
                                     title = item.text.ifBlank { "Notiz" },
-                                    subtitle = item.time?.takeIf { it.isNotBlank() },
+                                    subtitle = null,
                                     onClick = onOpenItem?.let { open -> { open(item) } },
                                     trailing = actions,
                                     modifier = tag,
@@ -178,6 +198,33 @@ fun DayTimeline(
             item("Programm", key = "empty") { emptyProgram!!() }
         }
     }
+}
+
+/** The fixed time (pin, tag `time-fixed-<id>`) and the warnings (badges, tag `time-warning-<id>`) of a program place. */
+@Composable
+private fun StopTimeLine(itemId: String, stop: de.wanderlogplus.shared.query.ScheduledStop, ride: String) {
+    val texts = stop.warnings.map { warningText(it, ride) }
+    if (!stop.fixed && texts.isEmpty()) return
+    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (stop.fixed) {
+            Row(Modifier.testTag("time-fixed-$itemId"), verticalAlignment = Alignment.CenterVertically) {
+                Icon(androidx.compose.material.icons.Icons.Filled.PushPin, contentDescription = "Feste Uhrzeit", modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                Text("fest", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 2.dp))
+            }
+        }
+        if (texts.isNotEmpty()) {
+            Row(Modifier.testTag("time-warning-$itemId"), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                texts.forEach { Badge(BadgeSpec(it, BadgeTone.Warning)) }
+            }
+        }
+    }
+}
+
+/** "~15 Min zu spät", "bei Ankunft geschlossen", "Zug knapp". */
+fun warningText(w: de.wanderlogplus.shared.query.ScheduleWarning, ride: String = "Zug"): String = when (w.kind) {
+    de.wanderlogplus.shared.query.TimeWarning.LATE -> "~${w.minutes} Min zu spät"
+    de.wanderlogplus.shared.query.TimeWarning.CLOSED -> "bei Ankunft geschlossen"
+    de.wanderlogplus.shared.query.TimeWarning.MISSES_RIDE -> "$ride knapp"
 }
 
 /** "Check-out bis 10:00", or just "Check-out". */

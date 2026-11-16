@@ -85,9 +85,9 @@ data class ChatPlanStep(
     val lng: Double? = null,
     val address: String? = null,
     val category: String? = null,
-    /** "HH:mm" to set; null keeps the item's time (or none for a new one). */
+    /** A fixed time "HH:mm" to set (only real appointments); null keeps the item's fixed time (or none for a new one). */
     val time: String? = null,
-    /** The item's time before the plan (for KEEP), to show what changes. */
+    /** The item's fixed time before the plan (for KEEP), to show what changes. */
     val oldTime: String? = null,
     val reason: String? = null,
 ) {

@@ -241,7 +241,7 @@ private fun During(
     val nowMin = now.hour * 60 + now.minute
     val dayNow = remember(snapshot, view.day, state.movements, stayPlace, nowMin) {
         val items = view.day?.let { snapshot.dayItemsFor(it.id) }.orEmpty()
-        DayNow.layout(items, snapshot.places, snapshot.savedPlaces, state.movements, stayPlace, nowMin)
+        DayNow.layout(items, snapshot.places, snapshot.savedPlaces, state.movements, de.wanderlogplus.app.ui.trip.scheduleFor(snapshot, date), nowMin)
     }
     val move = remember(snapshot, now) { upcomingMove(snapshot, now) }
     val deadlines = remember(snapshot, date) { deadlineRows(snapshot, date) }

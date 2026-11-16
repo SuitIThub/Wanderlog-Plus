@@ -46,6 +46,17 @@ class GuideDayTest {
     }
 
     @Test
+    fun `a place without a fixed time stands at its estimated time`() {
+        val quiet = "2027-05-12"
+        val item = DayItem("i", "d2", "a", placeId = "p-museum", time = "07:00")
+        val w = world.copy(guides = listOf(Guide("g-mus", topic = "museum", title = "Museen")), days = listOf(Day("d2", quiet)), dayItems = listOf(item))
+        val f = DayFlow.build(quiet, listOf(item), emptyList(), listOf(tokyo, kiso), saved, places, regions)
+        val expected = de.wanderlogplus.shared.query.DaySchedule.build(f, places, saved, null, null).stops.getValue("i").start
+        assertTrue(expected > 9 * 60)
+        assertEquals(expected, GuideMatch.forDay(quiet, f, w, nowMinutes = 8 * 60).single().atMinutes)
+    }
+
+    @Test
     fun `suggestions are trip topics without guides and dismissed ones`() {
         val bare = world.copy(guides = emptyList())
         val days = listOf(date)

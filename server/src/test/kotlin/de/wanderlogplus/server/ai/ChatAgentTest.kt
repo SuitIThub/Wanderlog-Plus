@@ -54,7 +54,7 @@ class ChatAgentTest {
         ),
         stays = listOf(Stay("st", "p-hotel", "r-kyoto", "2027-05-18", "2027-05-22", confirmationNumber = "SECRET-123", travelerNames = listOf("Erika Muster"))),
         days = listOf(Day("d1", "2027-05-19", title = "Tempeltag")),
-        dayItems = listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00")),
+        dayItems = listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", fixedTime = "12:00")),
         trains = listOf(Train("tr", carrier = "JR", depart = Endpoint("Kyoto", date = "2027-05-22", time = "09:10"), arrive = Endpoint("Tokyo", date = "2027-05-22", time = "11:20"), confirmationNumber = "SECRET-TRAIN")),
     )
 
@@ -162,7 +162,7 @@ class ChatAgentTest {
         val last = model.seen.last()
         assertTrue(last.any { it["role"]?.jsonPrimitive?.content == "tool" && it["tool_call_id"]?.jsonPrimitive?.content == "c0" })
         val system = systemText(model.seen.first())
-        assertTrue("Tag: Mittwoch, 19.05.2027" in system && "Region Kyoto (r-kyoto)" in system && "12:00 Ramen Ichiran" in system && "Titel: Tempeltag" in system)
+        assertTrue("Tag: Mittwoch, 19.05.2027" in system && "Region Kyoto (r-kyoto)" in system && "12:00 (fest) Ramen Ichiran" in system && "Titel: Tempeltag" in system)
         assertTrue("Nara (r-nara), Tagesausflug von Kyoto" in system)
         assertFalse("SECRET-123" in system || "Erika" in system, "no booking data")
         assertTrue(model.seen.first()[1]["content"]!!.jsonPrimitive.content.startsWith("[Geöffnet bei: Tag 19.05.] "))
@@ -186,7 +186,7 @@ class ChatAgentTest {
         val system = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }.systemPrompt(trip, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
         assertTrue("Übernachtung: Hotel Gion (Kyoto), 2027-05-18 bis 2027-05-22, Gionmachi, Higashiyama, Kyoto, Koordinaten 35.00370,135.77880" in system, system)
         assertTrue("Bezugspunkt für Entfernungen: Unterkunft Hotel Gion" in system)
-        assertTrue("12:00 Ramen Ichiran [id=s-ramen], 810 m von der Unterkunft" in system, system)
+        assertTrue("12:00 (fest) Ramen Ichiran [id=s-ramen], 810 m von der Unterkunft" in system, system)
         assertTrue("Offene Vorschläge für diesen Tag" in system && "Kiyomizu-dera | Kyoto | SIGHT | 1,1 km entfernt" in system, system)
         // The whole trip: every day with its night and the train on the last day (without booking numbers).
         assertTrue("Unterkünfte:\n- Hotel Gion" in system)
@@ -276,6 +276,38 @@ class ChatAgentTest {
         assertTrue(t.run("route", """{"from":"kontext","to":"s-kiyo","mode":"DRIVE"}""").startsWith("Routen sind auf dem Server nicht eingerichtet; Luftlinie 1,1 km"))
         assertTrue("transit" in t.definitions.toString() && "transit" !in tools().definitions.map { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content })
     }
+
+    @Test
+    fun `day context marks fixed and estimated times and ignores old ones`() {
+        val t = trip.copyItems(listOf(
+            DayItem("i0", "d1", "0", placeId = "p-market", time = "07:00"),
+            DayItem("i1", "d1", "a", placeId = "p-ramen", fixedTime = "12:00"),
+        ))
+        val system = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }.systemPrompt(t, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertTrue(Regex("""- ~\d\d:\d\d Nishiki Markt""").containsMatchIn(system), system)
+        assertFalse("07:00 Nishiki" in system, system)
+        assertTrue("12:00 (fest) Ramen Ichiran" in system, system)
+    }
+
+    @Test
+    fun `the prompt asks for times only for real appointments`() {
+        val system = ChatAgent(ScriptedModel(listOf(text("ok"))), null) { "2027-05-19" }.systemPrompt(trip, ChatContext(ChatScreens.DAY, date = "2027-05-19"))
+        assertFalse("mit sinnvollen Uhrzeiten" in system, system)
+        assertTrue("Uhrzeit nur bei festen Terminen" in system, system)
+    }
+
+    @Test
+    fun `a plan time on an item without a fixed time is a change`() {
+        val t = trip.copyItems(listOf(DayItem("i1", "d1", "a", placeId = "p-ramen", time = "12:00")))
+        val tools = ChatTools(t, null, t.dayAnchor("2027-05-19")) {}
+        tools.run("show_day_plan", """{"date":"2027-05-19","steps":[{"action":"keep","id":"i1","time":"12:00"}]}""")
+        val step = tools.cards.single().plan!!.steps.single()
+        assertEquals("12:00", step.time)
+        assertEquals(null, step.oldTime)
+    }
+
+    private fun ChatTrip.copyItems(items: List<DayItem>) =
+        ChatTrip(trip, regions, places, saved, stays, days, items, flights, trains, weather, guides)
 
     @Test
     fun `day plan card keeps forgotten items, checks the result and replaces itself`() {

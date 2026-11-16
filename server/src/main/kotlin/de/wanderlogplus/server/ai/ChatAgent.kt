@@ -44,6 +44,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import de.wanderlogplus.shared.query.DaySchedule
+import de.wanderlogplus.shared.query.DayNow
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -508,13 +510,14 @@ object ChatContextText {
         dayEntity?.note?.takeIf { it.isNotBlank() }?.let { append("Notiz: ").append(it.take(800)).append('\n') }
         val anchor = t.dayAnchor(date)
         val items = programItems(dayEntity, t)
+        val schedule = DaySchedule.forDate(date, dayEntity, items, t.flights, t.trains, t.stays, t.saved, t.places, t.regions)
         if (items.isEmpty()) {
             append("Programm: noch nichts geplant\n")
         } else {
             append("Programm:\n")
             items.forEach { i ->
                 append("- ")
-                i.time?.let { append(it).append(' ') }
+                schedule.stops[i.id]?.let { st -> append(if (st.fixed) DayNow.hhmm(st.start) + " (fest)" else "~" + DayNow.hhmm(st.start)).append(' ') }
                 if (i.kind == DayItemKind.PLACE) {
                     val p = t.places[i.placeId]
                     append(p?.name ?: "Ort")
@@ -709,7 +712,7 @@ class ChatTools(
                         putJsonObject("name") { put("type", "string"); put("description", "für Orte ohne id (Webfund)") }
                         putJsonObject("lat") { put("type", "number") }
                         putJsonObject("lng") { put("type", "number") }
-                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm, optional") }
+                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm – nur für feste Termine (Reservierung, Führung, Ticket mit Zeitfenster); sonst weglassen, die App schätzt die Zeiten") }
                         putJsonObject("minutes") { put("type", "integer"); put("description", "Aufenthalt, optional") }
                     }
                 }
@@ -737,7 +740,7 @@ class ChatTools(
                         putJsonObject("place") { put("type", "string"); put("description", "add ohne id: Name und Ort eines Webfunds zum Nachschlagen der Lage") }
                         putJsonObject("title") { put("type", "string"); put("description", "Anzeigename für place") }
                         putJsonObject("category") { put("type", "string"); putJsonArray("enum") { PlaceCategory.entries.forEach { add(JsonPrimitive(it.name)) } } }
-                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm, optional") }
+                        putJsonObject("time") { put("type", "string"); put("description", "HH:mm – nur für feste Termine (Reservierung, Führung, Ticket mit Zeitfenster); sonst weglassen, die App schätzt die Zeiten") }
                         putJsonObject("reason") { put("type", "string"); put("description", "kurzer Grund, ein paar Wörter") }
                     }
                     putJsonArray("required") { add(JsonPrimitive("action")) }
@@ -1180,7 +1183,7 @@ class ChatTools(
                     val keep = o.s("action") == "keep"
                     steps += ChatPlanStep(
                         if (keep) ChatPlanStep.KEEP else ChatPlanStep.REMOVE, itemTitle(item), itemId = item.id,
-                        time = time.takeIf { keep && it != item.time }, oldTime = item.time, reason = reason,
+                        time = time.takeIf { keep && it != item.fixedTime }, oldTime = item.fixedTime, reason = reason,
                     )
                 }
                 "add" -> {
@@ -1189,7 +1192,7 @@ class ChatTools(
                     // "add" of something already in the program means: keep it here (no second copy).
                     fun keepHere(item: DayItem) {
                         if (!used.add(item.id)) return
-                        steps += ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, time = time.takeIf { it != item.time }, oldTime = item.time, reason = reason)
+                        steps += ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, time = time.takeIf { it != item.fixedTime }, oldTime = item.fixedTime, reason = reason)
                     }
                     fun inProgram(placeId: String?) = program.firstOrNull { it.kind == DayItemKind.PLACE && it.placeId == placeId }
                     when {
@@ -1230,7 +1233,7 @@ class ChatTools(
             if (item.id in used) return@forEachIndexed
             val lodging = item.placeId != null && t.stays.any { it.placeId == item.placeId }
             val drop = item.kind == DayItemKind.PLACE && !lodging
-            val own = item.time?.let { ChatDayCheck.mins(it) }
+            val own = item.fixedTime?.let { ChatDayCheck.mins(it) }
             val at = if (own != null && !drop) {
                 // A fixed time decides: before the first step planned later.
                 fun timeOf(st: ChatPlanStep) = (st.time ?: st.oldTime)?.let { ChatDayCheck.mins(it) }
@@ -1242,8 +1245,8 @@ class ChatTools(
             if (drop) dropped += itemTitle(item)
             steps.add(
                 at,
-                if (drop) ChatPlanStep(ChatPlanStep.REMOVE, itemTitle(item), itemId = item.id, oldTime = item.time, reason = "nicht im neuen Plan")
-                else ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, oldTime = item.time),
+                if (drop) ChatPlanStep(ChatPlanStep.REMOVE, itemTitle(item), itemId = item.id, oldTime = item.fixedTime, reason = "nicht im neuen Plan")
+                else ChatPlanStep(ChatPlanStep.KEEP, itemTitle(item), itemId = item.id, oldTime = item.fixedTime),
             )
             used += item.id
         }
@@ -1253,7 +1256,7 @@ class ChatTools(
             val item = st.itemId?.let { id -> program.firstOrNull { it.id == id } }
             when {
                 item != null && item.kind != DayItemKind.PLACE -> null
-                item != null -> PlanStop(st.title, item.placeId, time = st.time ?: item.time, legMode = item.legMode, legMinutes = item.legTransit?.routes?.firstOrNull()?.durationMinutes)
+                item != null -> PlanStop(st.title, item.placeId, time = st.time ?: item.fixedTime, minutes = item.stayMinutes, legMode = item.legMode, legMinutes = item.legTransit?.routes?.firstOrNull()?.durationMinutes)
                 st.savedPlaceId != null -> PlanStop(st.title, t.savedById[st.savedPlaceId]?.placeId, time = st.time)
                 else -> PlanStop(st.title, lat = st.lat, lng = st.lng, time = st.time, category = st.category?.let { c -> PlaceCategory.entries.firstOrNull { it.name == c } })
             }
@@ -1479,8 +1482,9 @@ class ChatAgent(
               ohne das zu sagen. Für andere Tage nutzt du get_day.
             - Wünscht sich der Nutzer einen Tagesablauf („plan mir den Tag“, „füll die Lücke“, „bau den Tag regenfest um“), stellst du ihn
               aus hinterlegten Orten (und bei Bedarf Webfunden) zusammen und zeigst ihn mit show_day_plan: alle bisherigen Programmpunkte
-              als keep (in neuer Reihenfolge) oder remove, neue als add, mit sinnvollen Uhrzeiten. Entferne nur, was dem Wunsch im Weg
-              steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
+              als keep (in neuer Reihenfolge) oder remove, neue als add. Eine Uhrzeit nur bei festen Terminen (Reservierung, Führung,
+              Ticket mit Zeitfenster) – alle anderen Zeiten schätzt die App aus Reihenfolge, Wegen und Aufenthalt („~“ im Programm).
+              Entferne nur, was dem Wunsch im Weg steht, und sag im Text kurz, was sich ändert. Löse Probleme der Prüfung, bevor du antwortest, wenn es geht.
             - Das Wetter der Reisetage steht unten unter „Wetter der Reisetage“ (Vorhersage des japanischen Wetterdienstes JMA für die nächsten Tage,
               sonst das Mittel der letzten Jahre – das ist keine Vorhersage, sag das). Bei Regen schlägst du von dir aus Orte
               für drinnen vor und weist darauf hin, wenn Wanderungen, Gärten oder Aussichtspunkte geplant sind; ist ein anderer

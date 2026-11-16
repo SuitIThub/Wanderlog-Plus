@@ -53,7 +53,7 @@ internal fun DayHistoryDialog(snapshot: TripSnapshot, history: List<DayVersion>,
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text("${versionTime(v.at)} · ${v.label}", style = MaterialTheme.typography.labelLarge)
                             val names = v.items.map { i ->
-                                (i.time?.let { "$it " } ?: "") + if (i.kind == DayItemKind.PLACE) snapshot.places[i.placeId]?.name ?: "Ort" else "Notiz"
+                                (i.fixedTime?.let { "$it " } ?: "") + if (i.kind == DayItemKind.PLACE) snapshot.places[i.placeId]?.name ?: "Ort" else "Notiz"
                             }
                             Text(
                                 names.joinToString(" · ").ifEmpty { "leeres Programm" },

@@ -41,7 +41,7 @@ class ChatDayCheck(private val t: ChatTrip) {
         return t.dayItems.filter { it.dayId == day.id && it.kind == DayItemKind.PLACE }.sortedBy { it.sortKey }.map { i ->
             val p = t.places[i.placeId]
             PlanStop(
-                name = p?.name ?: "Ort", placeId = i.placeId, time = i.time?.takeIf { it.isNotBlank() },
+                name = p?.name ?: "Ort", placeId = i.placeId, time = i.fixedTime?.takeIf { it.isNotBlank() }, minutes = i.stayMinutes,
                 legMode = i.legMode, legMinutes = i.legTransit?.routes?.firstOrNull()?.durationMinutes,
                 category = t.savedFor(i.placeId)?.category,
             )

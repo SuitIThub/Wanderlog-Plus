@@ -55,13 +55,11 @@ data class DayNowView(val steps: List<DayStep>, val current: DayStep?, val next:
 }
 
 /**
- * Lays out today like the chat's plan check: planned times are kept, places without a time follow the step before
- * (its end plus the way); stays take the place's typical duration (else by category). Ways are estimated from the
- * straight line (×1.3): up to 1.5 km on foot, else by public transport; a chosen connection wins.
- * Departing trains and flights are sorted in by their time.
+ * Today's steps with their state: the places' times come from the estimated day ([DaySchedule]); ways are estimated
+ * from the straight line (×1.3): up to 1.5 km on foot, else by public transport. Departing trains and flights are
+ * sorted in by their time.
  */
 object DayNow {
-    const val DAY_START = 9 * 60
     private const val DETOUR = 1.3
     private const val WALK_KMH = 4.5
     private const val WALK_MAX_KM = 1.5
@@ -116,43 +114,28 @@ object DayNow {
         }
     }
 
-    private fun has(p: Place?) = p != null && !(p.lat == 0.0 && p.lng == 0.0)
 
     /**
-     * [items] in program order, [movements] departing today, [stay] where the day starts (for the first way), [now]
-     * in minutes of the day.
+     * [items] in program order, [movements] departing today, [schedule] the estimated day ([DaySchedule]) for the
+     * places' times and ways, [now] in minutes of the day.
      */
     fun layout(
         items: List<DayItem>,
         places: Map<String, Place>,
         saved: List<SavedPlace>,
         movements: List<Movement>,
-        stay: Place?,
+        schedule: DayScheduleView,
         now: Int,
     ): DayNowView {
         val savedByPlace = saved.groupBy { it.placeId }.mapValues { (_, l) -> l.first() }
-        var clock: Int? = null
-        var at: Place? = stay?.takeIf { has(it) }
         val raw = mutableListOf<DayStep>()
         items.forEach { i ->
             if (i.kind != DayItemKind.PLACE) {
                 raw += DayStep.Note(i, StepState.LATER)
                 return@forEach
             }
-            val p = places[i.placeId]
-            val s = savedByPlace[i.placeId]
-            val chosen = i.legTransit?.routes?.firstOrNull()?.durationMinutes
-            val (wayMin, wayMode) = when {
-                chosen != null -> chosen to TravelMode.TRANSIT
-                has(at) && has(p) -> way(km(at!!.lat, at!!.lng, p!!.lat, p.lng), i.legMode).let { it.first to it.second }
-                else -> null to null
-            }
-            val fixed = mins(i.time)
-            val start = fixed ?: clock?.let { it + (wayMin ?: 0) } ?: (DAY_START + (wayMin ?: 0)).takeIf { raw.none { r -> r is DayStep.Visit } }
-            val end = start?.let { it + stayMinutes(p, s) }
-            raw += DayStep.Visit(i, p, s, start, end, fixed == null, wayMin, wayMode, StepState.LATER)
-            clock = end ?: clock
-            if (has(p)) at = p
+            val stop = schedule.stops[i.id]
+            raw += DayStep.Visit(i, places[i.placeId], savedByPlace[i.placeId], stop?.start, stop?.end, stop?.fixed != true, stop?.wayMinutes, stop?.wayMode, StepState.LATER)
         }
         // Departures by their time: before the first step that starts later (untimed ones go last).
         movements.forEach { m ->

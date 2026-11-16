@@ -20,14 +20,26 @@ class DayNowTest {
         Place("c", name = "Nara-Park", lat = 34.6851, lng = 135.8430),
     ).associateBy { it.id }
     private val items = listOf(
-        DayItem("i1", "d", "a", placeId = "a", time = "09:00"),
+        DayItem("i1", "d", "a", placeId = "a", fixedTime = "09:00"),
         DayItem("n", "d", "b", DayItemKind.NOTE, text = "Geld abheben"),
         DayItem("i2", "d", "c", placeId = "b"),
-        DayItem("i3", "d", "d", placeId = "c", time = "15:00"),
+        DayItem("i3", "d", "d", placeId = "c", fixedTime = "15:00"),
     )
     private val train = Movement.TrainMove(Train("t", "JR", depart = Endpoint("Kyoto", date = "2027-05-20", time = "13:00"), arrive = Endpoint("Nara", date = "2027-05-20", time = "13:45")))
 
-    private fun at(now: String) = DayNow.layout(items, places, emptyList(), listOf(train), hotel, DayNow.mins(now)!!)
+    private val stay = de.wanderlogplus.shared.model.Stay("st", "h", checkIn = "2027-05-19", checkOut = "2027-05-22")
+    private val schedule = DaySchedule.forDate("2027-05-20", null, items, emptyList(), listOf(train.train), listOf(stay), emptyList(), places + ("h" to hotel), emptyList())
+
+    private fun at(now: String) = DayNow.layout(items, places, emptyList(), listOf(train), schedule, DayNow.mins(now)!!)
+
+    @Test
+    fun `estimated only without a fixed time`() {
+        val legacy = listOf(DayItem("x", "d", "a", placeId = "a", time = "07:00"))
+        val s = DaySchedule.forDate("2027-05-20", null, legacy, emptyList(), emptyList(), listOf(stay), emptyList(), places + ("h" to hotel), emptyList())
+        val v = DayNow.layout(legacy, places, emptyList(), emptyList(), s, 0).steps.single() as DayStep.Visit
+        assertTrue(v.estimated)
+        assertEquals(DaySchedule.DEFAULT_START + v.wayMinutes!!, v.start)
+    }
 
     @Test
     fun `times are planned or estimated and moves sorted in`() {

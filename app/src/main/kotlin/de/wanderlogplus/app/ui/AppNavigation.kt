@@ -459,6 +459,8 @@ fun AppNavigation(
                 onAddStayAt = vm::addStayAt,
                 onRestoreVersion = { d, at -> vm.restoreVersion(d, at) },
                 onSetLinks = vm::setDayLinks,
+                onItemTime = { id, f, m -> vm.setItemTime(id, f, m) },
+                onDayStart = { d, t -> vm.setDayStart(d, t) },
             )
         }
 

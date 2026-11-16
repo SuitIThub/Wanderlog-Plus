@@ -38,7 +38,7 @@ class LocalEditor(
     private val onChange: () -> Unit = {},
 ) {
     private companion object {
-        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs", "legs")
+        val DAY_FIELDS = setOf("title", "note", "regionOverrideId", "showLegs", "legs", "startTime")
     }
 
     private fun isReserved(field: String) = field == "_source" || field == "_sourceId" || field.startsWith("_base.")
@@ -750,7 +750,7 @@ class LocalEditor(
             order.forEachIndexed { i, (id, time) ->
                 write(EntityType.DAY_ITEM, id, buildMap {
                     put("sortKey", JsonPrimitive(keys[i]))
-                    if (time != null) put("time", if (time.isBlank()) JsonNull else JsonPrimitive(time))
+                    if (time != null) put("fixedTime", if (time.isBlank()) JsonNull else JsonPrimitive(time))
                 })
             }
             val removed = current.filter { it.id in remove }
@@ -780,7 +780,8 @@ class LocalEditor(
                     mapOf(
                         "deleted" to JsonPrimitive(false),
                         "sortKey" to JsonPrimitive(v.sortKey),
-                        "time" to (v.time?.let { JsonPrimitive(it) } ?: JsonNull),
+                        "fixedTime" to (v.fixedTime?.let { JsonPrimitive(it) } ?: JsonNull),
+                        "stayMinutes" to (v.stayMinutes?.let { JsonPrimitive(it) } ?: JsonNull),
                     ),
                 )
                 if (v.kind == DayItemKind.PLACE && v.placeId != null) {
@@ -794,7 +795,7 @@ class LocalEditor(
     }
 
     private fun saveVersion(dayId: String, history: List<DayVersion>, items: List<DayItem>, label: String, now: Long) {
-        val version = DayVersion(now, label, items.map { DayVersionItem(it.id, it.sortKey, it.time, it.kind, it.placeId) })
+        val version = DayVersion(now, label, items.map { DayVersionItem(it.id, it.sortKey, it.time, it.kind, it.placeId, it.fixedTime, it.stayMinutes) })
         val list = (history.filter { it.at != now } + version).takeLast(MAX_DAY_VERSIONS)
         write(EntityType.DAY, dayId, mapOf("history" to Json.encodeToJsonElement(ListSerializer(DayVersion.serializer()), list)))
     }
@@ -811,7 +812,7 @@ class LocalEditor(
     }
 }
 
-/** One step of [LocalEditor.applyDayPlan]; [time] "HH:mm" to set, "" to clear, null to leave as is. */
+/** One step of [LocalEditor.applyDayPlan]; [time] the fixed time "HH:mm" to set, "" to clear, null to leave as is. */
 sealed interface PlanOp {
     data class Keep(val itemId: String, val time: String? = null) : PlanOp
     data class AddSaved(val savedPlaceId: String, val time: String? = null) : PlanOp

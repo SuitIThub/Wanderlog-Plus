@@ -86,7 +86,10 @@ class TransitTest {
 
     @Test fun theWayOfAnItemIsFromThePlaceBefore() {
         val w = de.wanderlogplus.app.ui.trip.dayWay(Fixtures.trip(), "2027-04-02", "i-3")!!
-        assertEquals("09:00", w.fromTime)
+        // One leaves the temple (fixed 09:00) when its stay is over.
+        val end = de.wanderlogplus.app.ui.trip.scheduleFor(Fixtures.trip(), "2027-04-02").stops.getValue("i-2").end
+        assertEquals(de.wanderlogplus.shared.query.DayNow.hhmm(end), w.fromTime)
+        assertTrue(end > 9 * 60)
         assertNull(de.wanderlogplus.app.ui.trip.dayWay(Fixtures.trip(), "2027-04-02", "nothing"))
     }
 
