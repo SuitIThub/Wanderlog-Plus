@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.logistics
 
+import androidx.compose.material.icons.filled.DirectionsTransit
+
 import de.wanderlogplus.app.ui.design.heroImage
 import de.wanderlogplus.app.ui.design.timesWithDuration
 import androidx.compose.runtime.mutableStateOf
@@ -203,6 +205,8 @@ fun LogisticsScreen(
     onAddTransit: (() -> Unit)? = null,
     /** Opens a journey (several legs); null opens its first leg. */
     onOpenJourney: ((String) -> Unit)? = null,
+    /** "Verbindung suchen": the free connection search (nothing is saved unless taken over); null hides it. */
+    onSearchTransit: (() -> Unit)? = null,
 ) {
     val entries = remember(snapshot) { logisticsEntries(snapshot) }
     val moves = remember(entries) { entries.filter { it !is LogisticsEntry.StayEntry } }
@@ -220,9 +224,15 @@ fun LogisticsScreen(
             ScreenTab("Fahrten", tab == TAB_MOVES, "tab-moves") { tab = TAB_MOVES }
             ScreenTab("Unterkünfte", tab == TAB_STAYS, "tab-stays") { tab = TAB_STAYS }
         }
-        if (onAdd != null) {
+        if (onAdd != null || (onSearchTransit != null && tab == TAB_MOVES)) {
             Row(Modifier.fillMaxWidth().padding(end = 8.dp), horizontalArrangement = Arrangement.End) {
-                androidx.compose.material3.TextButton(onClick = { editing = !editing }, modifier = Modifier.testTag("logistics-edit")) {
+                if (onSearchTransit != null && tab == TAB_MOVES) {
+                    androidx.compose.material3.TextButton(onClick = onSearchTransit, modifier = Modifier.testTag("logistics-search-transit")) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.DirectionsTransit, contentDescription = null, modifier = Modifier.padding(end = 6.dp))
+                        Text("Verbindung suchen")
+                    }
+                }
+                if (onAdd != null) androidx.compose.material3.TextButton(onClick = { editing = !editing }, modifier = Modifier.testTag("logistics-edit")) {
                     androidx.compose.material3.Icon(
                         if (editing) androidx.compose.material.icons.Icons.Filled.Check else androidx.compose.material.icons.Icons.Filled.Edit,
                         contentDescription = null, modifier = Modifier.padding(end = 6.dp),
