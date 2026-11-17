@@ -102,6 +102,16 @@ class AppUpdatesTest {
         assertEquals(UpdateState.Idle, debug.state.value)
     }
 
+    @Test fun openingTheAppAgainChecksAfterAQuarterOfAnHour() {
+        // Checked 20 minutes ago (e.g. at the last opening): opening again looks once more.
+        val again = vm(prefs = MemPrefs(lastCheckAt = 10_000_000_000 - 20 * 60_000))
+        again.checkAuto()
+        assertEquals("0.14.0", (waitFor(again) { it is UpdateState.Available } as UpdateState.Available).release.version)
+        // A shown offer is not checked away when the app comes back.
+        again.checkAuto()
+        assertTrue(again.state.value is UpdateState.Available)
+    }
+
     @Test fun manualCheckSaysUpToDateOrFailed() {
         val current = vm(current = "0.14.0")
         current.checkNow()

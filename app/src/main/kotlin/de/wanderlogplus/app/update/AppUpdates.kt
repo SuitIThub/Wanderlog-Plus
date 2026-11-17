@@ -135,7 +135,7 @@ sealed interface UpdateState {
 }
 
 /**
- * Update flow: [checkAuto] at start (at most every [autoIntervalMillis], never for a skipped version), [checkNow]
+ * Update flow: [checkAuto] whenever the app is opened (at most every [autoIntervalMillis], never for a skipped version), [checkNow]
  * from Einstellungen, then [download] after the user agreed; the activity installs [UpdateState.ReadyToInstall].
  */
 class UpdateViewModel(
@@ -146,7 +146,8 @@ class UpdateViewModel(
     /** Automatic checks only for release builds (a debug build is signed differently and cannot take the update). */
     private val autoCheck: Boolean,
     private val now: () -> Long = System::currentTimeMillis,
-    private val autoIntervalMillis: Long = 6 * 60 * 60 * 1000L,
+    /** Opening the app checks again after this pause (several releases a day should not be missed). */
+    private val autoIntervalMillis: Long = 15 * 60 * 1000L,
 ) : ViewModel() {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state
@@ -154,8 +155,10 @@ class UpdateViewModel(
 
     val version: String get() = currentVersion
 
+    /** On every opening of the app: at most every [autoIntervalMillis]; an offer on screen stays as it is. */
     fun checkAuto() {
         if (!autoCheck || now() - prefs.lastCheckAt < autoIntervalMillis) return
+        if (_state.value !is UpdateState.Idle) return
         check(manual = false)
     }
 

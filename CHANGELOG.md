@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.83.0
+
+- **Update-Hinweis beim Öffnen:** Die App schaut jetzt jedes Mal nach einer neuen Version, wenn du sie öffnest – auch wenn sie nur aus dem Hintergrund zurückkommt (höchstens alle 15 Minuten). Bisher geschah das nur beim Kaltstart und dann 6 Stunden lang nicht mehr, sodass neue Versionen oft erst über „Nach Updates suchen“ auftauchten. Eine übersprungene Version meldet sie weiterhin nicht.
+
 ## 0.82.0
 
 - **Vollbild-Karte eines Orts:** Die Liste der markierten Punkte startet eingeklappt – die Karte hat den ganzen Platz, die Leiste „n Punkte“ klappt die Liste bei Bedarf auf.

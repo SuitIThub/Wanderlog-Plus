@@ -191,7 +191,11 @@ class MainActivity : ComponentActivity() {
                 val updates: de.wanderlogplus.app.update.UpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = remember { updatesFactory(container) })
                 val updateState by updates.state.collectAsState()
                 var waitingInstall by remember { mutableStateOf<java.io.File?>(null) }
-                LaunchedEffect(Unit) { updates.checkAuto() }
+                // Every time the app comes to the front (start or back from the background), not only at a cold start.
+                androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+                    updates.checkAuto()
+                    onPauseOrDispose { }
+                }
                 // Back from "Installieren aus dieser Quelle erlauben": continue with the install.
                 androidx.lifecycle.compose.LifecycleResumeEffect(waitingInstall) {
                     val apk = waitingInstall
