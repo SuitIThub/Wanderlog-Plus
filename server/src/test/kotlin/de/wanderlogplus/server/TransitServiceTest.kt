@@ -89,6 +89,8 @@ class TransitServiceTest {
         assertEquals("Nagoya", shinkansen.to.name)
         assertEquals("Nakatsugawa", ltd.to.name)
         assertEquals(listOf("品川", "新横浜"), shinkansen.stops.map { it.nameJa })
+        // Stops without romaji from the timetable get it from the dictionary.
+        assertEquals(listOf("Shinagawa", "Shin-Yokohama"), shinkansen.stops.map { it.name })
     }
 
     @Test fun answersAreCachedPerStationsTimeAndOptionsAndFreshSkipsTheCache() {

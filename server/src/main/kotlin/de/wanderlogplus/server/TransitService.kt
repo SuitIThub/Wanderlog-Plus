@@ -163,10 +163,14 @@ class TransitService(
     fun stationsNear(lat: Double, lng: Double): List<TransitStationNear> {
         val f = stations ?: throw TransitNotConfigured()
         if (lat !in -90.0..90.0 || lng !in -180.0..180.0) throw BadInput()
-        return try { f.near(lat, lng) } catch (e: GeocoderUnavailable) { throw TransitUnavailable("stations_unavailable") }
+        val near = try { f.near(lat, lng) } catch (e: GeocoderUnavailable) { throw TransitUnavailable("stations_unavailable") }
+        return near.map { it.copy(station = it.station.withRomaji()) }
     }
 
-    fun search(req: TransitRequest): TransitResult {
+    /** A connection; stations and stops without a latin name get one in romaji ([Romaji]). */
+    fun search(req: TransitRequest): TransitResult = searchRaw(req).withRomaji()
+
+    private fun searchRaw(req: TransitRequest): TransitResult {
         if (elsewhere != null && !TransitousSource.isJapan(req)) {
             validate(req)
             return elsewhere.search(req)
