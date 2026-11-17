@@ -78,6 +78,22 @@ class PlaceMapTest {
         assertEquals(1, back)
     }
 
+    @Test fun listCollapsesAndExpands() {
+        rule.setContent { WanderlogPlusTheme { PlaceMapScreen(snapWithPois(), "s-tempel", onBack = {}) } }
+        rule.onNodeWithTag("place-map-points").assertExists()
+        rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("place-map-points").assertDoesNotExist()
+        rule.onNodeWithTag("place-map-list-toggle").assertExists()
+        rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithTag("place-map-points").assertExists()
+    }
+
+    @Test fun noToggleForASinglePoint() {
+        rule.setContent { WanderlogPlusTheme { PlaceMapScreen(de.wanderlogplus.app.testing.Fixtures.trip(), "s-tempel", onBack = {}) } }
+        rule.onNodeWithTag("place-map-screen").assertExists()
+        rule.onNodeWithTag("place-map-list-toggle").assertDoesNotExist()
+    }
+
     @Test fun researchTabListsSpots() {
         rule.setContent {
             WanderlogPlusTheme { PlaceDetailScreen(snapWithPois(), "s-tempel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }) }
