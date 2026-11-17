@@ -150,7 +150,8 @@ fun PlaceMapScreen(snapshot: TripSnapshot, savedPlaceId: String, onBack: () -> U
     val accent = region?.let { regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
     val points = remember(place, saved?.dossier) { placeMapPoints(place, saved?.dossier) }
     var focus by rememberSaveable(savedPlaceId) { mutableStateOf<String?>(null) }
-    var listOpen by rememberSaveable(savedPlaceId) { mutableStateOf(true) }
+    // Folded at first: the map gets the room; the bar above shows how many points there are.
+    var listOpen by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     val wide = isWideLayout()
 
     Column(modifier.fillMaxSize().testTag("place-map-screen")) {

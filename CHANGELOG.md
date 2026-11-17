@@ -3,6 +3,10 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.82.0
+
+- **Vollbild-Karte eines Orts:** Die Liste der markierten Punkte startet eingeklappt – die Karte hat den ganzen Platz, die Leiste „n Punkte“ klappt die Liste bei Bedarf auf.
+
 ## 0.81.0
 
 - **Stationsnamen in Romaji:** Bahnhöfe, Haltestellen und Zwischenhalte, die bisher nur auf Japanisch dastanden, bekommen eine lateinische Umschrift – „Kyōto-Ekimae (京都駅前)“, „Shin-Yokohama (新横浜)“, „Narita-Kūkō (成田空港)“. Die Umschrift macht der Server selbst mit einem Japanisch-Wörterbuch (keine KI-Kosten); Namen vom Fahrplandienst oder aus OpenStreetMap bleiben, eine Korrekturliste kennt besondere Lesungen (z. B. Nagiso, Tsumago, Magome, Kiyomizu-Gojō). Was das Wörterbuch nicht lesen kann, bleibt wie bisher nur Japanisch.

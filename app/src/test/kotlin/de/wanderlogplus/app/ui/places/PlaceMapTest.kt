@@ -68,6 +68,7 @@ class PlaceMapTest {
     @Test fun fullscreenListsPlaceAndSpotsWithKinds() {
         var back = 0
         rule.setContent { WanderlogPlusTheme { PlaceMapScreen(snapWithPois(), "s-tempel", onBack = { back++ }) } }
+        rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithText("Der Ort selbst").assertExists()
         rule.onNodeWithText("Nordtor").assertExists()
         rule.onNodeWithText("Eingang").assertExists()
@@ -78,14 +79,14 @@ class PlaceMapTest {
         assertEquals(1, back)
     }
 
-    @Test fun listCollapsesAndExpands() {
+    @Test fun listStartsFoldedAndExpands() {
         rule.setContent { WanderlogPlusTheme { PlaceMapScreen(snapWithPois(), "s-tempel", onBack = {}) } }
+        rule.onNodeWithTag("place-map-points").assertDoesNotExist()
+        rule.onNodeWithText("3 Punkte").assertExists()
+        rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("place-map-points").assertExists()
         rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("place-map-points").assertDoesNotExist()
-        rule.onNodeWithTag("place-map-list-toggle").assertExists()
-        rule.onNodeWithTag("place-map-list-toggle").performSemanticsAction(SemanticsActions.OnClick)
-        rule.onNodeWithTag("place-map-points").assertExists()
     }
 
     @Test fun noToggleForASinglePoint() {
