@@ -58,6 +58,8 @@ fun PlaceRatingScreen(
     onOpenPlace: (String) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the full map of a place (with its research spots). */
+    onOpenMap: (savedPlaceId: String) -> Unit = {},
 ) {
     val queue = rememberSaveable { ratingQueue(snapshot, me) }
     var index by rememberSaveable { mutableIntStateOf(0) }
@@ -82,7 +84,7 @@ fun PlaceRatingScreen(
             }
             return@Column
         }
-        RatingCard(snapshot, current, me, onOpenPlace, Modifier.weight(1f))
+        RatingCard(snapshot, current, me, onOpenPlace, onOpenMap, Modifier.weight(1f))
         HorizontalDivider()
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -102,7 +104,7 @@ fun PlaceRatingScreen(
 
 /** Photos, name, region and category, ratings, distances, description, the assistant's reason and the others' votes. */
 @Composable
-private fun RatingCard(snapshot: TripSnapshot, saved: SavedPlace, me: String, onOpenPlace: (String) -> Unit, modifier: Modifier) {
+private fun RatingCard(snapshot: TripSnapshot, saved: SavedPlace, me: String, onOpenPlace: (String) -> Unit, onOpenMap: (String) -> Unit, modifier: Modifier) {
     val place = snapshot.places[saved.placeId]
     val region = snapshot.regions.firstOrNull { it.id == saved.regionId }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -136,6 +138,10 @@ private fun RatingCard(snapshot: TripSnapshot, saved: SavedPlace, me: String, on
         }
         place?.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 6, overflow = TextOverflow.Ellipsis) }
         saved.worthReason.takeIf { it.isNotBlank() }?.let { Text("KI: $it", style = MaterialTheme.typography.bodySmall, color = muted) }
+        // The place and the spots from the research; a tap opens the full map (hidden without coordinates).
+        val points = androidx.compose.runtime.remember(place, saved.dossier) { placeMapPoints(place, saved.dossier) }
+        val accent = region?.let { de.wanderlogplus.app.ui.regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
+        PlaceMapCard(points, accent, { onOpenMap(saved.id) })
         val others = snapshot.votes.filter { it.savedPlaceId == saved.id && it.voter != me && Votes.valid(it) }
         voteNames(others).takeIf { it.isNotBlank() }?.let { Text("Andere: $it", style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.testTag("rating-others")) }
         TextButton(onClick = { onOpenPlace(saved.id) }, modifier = Modifier.testTag("rating-more")) { Text("Mehr") }

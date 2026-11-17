@@ -892,6 +892,7 @@ fun AppNavigation(
                                 onVote = vm::vote,
                                 onOpenPlace = { id -> nav.navigate(placeRoute(id)) },
                                 onDone = { nav.popBackStack() },
+                                onOpenMap = { id -> nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
                             )
                         }
                     }

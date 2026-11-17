@@ -38,6 +38,32 @@ class PlaceRatingScreenTest {
         }
     }
 
+    private var mapFor: String? = null
+
+    private fun showWithMap(snap: TripSnapshot) {
+        rule.setContent {
+            WanderlogPlusTheme {
+                PlaceRatingScreen(snap, me = "daniel", onVote = { _, _ -> }, onOpenPlace = {}, onDone = {}, onOpenMap = { mapFor = it })
+            }
+        }
+    }
+
+    @Test
+    fun mapUnderTheTextOpensTheFullMap() {
+        showWithMap(Fixtures.trip())
+        rule.onNodeWithTag("place-map-card", useUnmergedTree = true).assertExists()
+        tap("place-map-fullscreen")
+        assertEquals("s-tempel", mapFor)
+    }
+
+    @Test
+    fun noMapWithoutCoordinates() {
+        val base = Fixtures.trip()
+        showWithMap(base.copy(places = base.places + ("p-tempel" to base.places.getValue("p-tempel").copy(lat = 0.0, lng = 0.0))))
+        rule.onNodeWithTag("rating-card-s-tempel").assertExists()
+        rule.onNodeWithTag("place-map-card", useUnmergedTree = true).assertDoesNotExist()
+    }
+
     private fun tap(tag: String) = rule.onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
 
     @Test
