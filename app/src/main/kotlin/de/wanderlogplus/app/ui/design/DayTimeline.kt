@@ -269,8 +269,8 @@ fun Movement.viaLine(): String? {
 }
 
 /**
- * "09:12 – 09:58 · Carrier" (flights: airline code or name plus number); missing parts are left out. An arrival on a
- * later date than the departure gets "+n" days ("11:15 – 06:15 +1").
+ * "09:12 – 09:58 · 46 Min. · Carrier" (flights: airline code or name plus number); missing parts are left out. An arrival
+ * on a later date than the departure gets "+n" days ("11:15 – 06:15 +1"); the duration counts time zones.
  */
 fun Movement.timesLine(): String {
     val (dep, arr, carrier) = when (this) {
@@ -280,7 +280,19 @@ fun Movement.timesLine(): String {
         )
         is Movement.TrainMove -> Triple(train.depart, train.arrive, train.carrier.orEmpty())
     }
-    return listOf(timesOf(dep, arr), carrier.trim()).filter { it.isNotEmpty() }.joinToString(" · ")
+    return listOf(timesOf(dep, arr), durationOf(this), carrier.trim()).filter { it.isNotEmpty() }.joinToString(" · ")
+}
+
+/** "11 Std. 50 Min." – how long the ride takes across days and time zones; empty when unknown. */
+fun durationOf(m: Movement): String = de.wanderlogplus.shared.query.RideTimes.minutes(m)?.let { de.wanderlogplus.client.durationText(it) }.orEmpty()
+
+/** "09:12 – 09:58" plus the duration, without the carrier (for the Logistik list). */
+fun Movement.timesWithDuration(): String {
+    val (dep, arr) = when (this) {
+        is Movement.FlightMove -> flight.depart to flight.arrive
+        is Movement.TrainMove -> train.depart to train.arrive
+    }
+    return listOf(timesOf(dep, arr), durationOf(this)).filter { it.isNotEmpty() }.joinToString(" · ")
 }
 
 /** "09:12 – 09:58", with "+n" after the arrival when it is n days after the departure; empty without times. */

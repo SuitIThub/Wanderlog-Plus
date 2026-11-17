@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui.logistics
 
 import de.wanderlogplus.app.ui.design.heroImage
+import de.wanderlogplus.app.ui.design.timesWithDuration
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Train
@@ -177,6 +178,9 @@ internal fun cancellationOpen(s: Stay, today: String?): Boolean {
 /** "10:00 – 20:00" ("+1" after an arrival on the next day); empty without times. Same helper as the timeline. */
 internal fun timesText(depart: Endpoint, arrive: Endpoint): String = timesOf(depart, arrive)
 
+/** "11:15 – 06:15 +1 · 11 Std. 50 Min." for a card of the Logistik list. */
+internal fun movementTimes(m: Movement): String = m.timesWithDuration()
+
 private const val TAB_MOVES = 0
 private const val TAB_STAYS = 1
 
@@ -314,10 +318,7 @@ private fun MoveCard(snapshot: TripSnapshot, e: LogisticsEntry, accent: Color, o
         is LogisticsEntry.TrainEntry -> Triple(trainTitle(e.train), Movement.TrainMove(e.train), routeFor(e.train, snapshot))
         is LogisticsEntry.StayEntry -> return
     }
-    val times = when (movement) {
-        is Movement.FlightMove -> timesText(movement.flight.depart, movement.flight.arrive)
-        is Movement.TrainMove -> timesText(movement.train.depart, movement.train.arrive)
-    }
+    val times = movementTimes(movement)
     val files = snapshot.attachmentsFor(e.type, e.id).size
     Card(
         onClick = onClick,

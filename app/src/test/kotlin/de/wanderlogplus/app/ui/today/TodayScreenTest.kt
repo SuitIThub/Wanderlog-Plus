@@ -121,7 +121,7 @@ class TodayScreenTest {
         seed(EntityType.DAY_ITEM, "i0", DayItem("i0", "d1", "a-", DayItemKind.PLACE, "pa"))
         show("2027-05-09T12:00")
         rule.onNode(hasText("Flug Tokio → Kansai") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
-        rule.onNode(hasText("07:00 – 08:05 · NH 7") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("07:00 – 08:05 · 1 Std. 5 Min. · NH 7") and hasAnyAncestor(hasTestTag("movement-0")), useUnmergedTree = true).assertExists()
         val tops = listOf("movement-0", "movement-1", "today-item-i0", "today-item-i1", "timeline-night").map {
             rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot.top
         }
@@ -167,7 +167,7 @@ class TodayScreenTest {
         )
         show("2027-05-09T20:00")
         rule.onNode(hasText("Osaka → Tokio") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
-        rule.onNode(hasText("morgen · 08:00 – 09:10 · NH 8") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("morgen · 08:00 – 09:10 · 1 Std. 10 Min. · NH 8") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
         rule.onNode(hasText("in 12 Std.") and hasAnyAncestor(hasTestTag("next-trip")), useUnmergedTree = true).assertExists()
     }
 
