@@ -1,0 +1,55 @@
+# Deployt den Server automatisch, sobald server-relevanter Code auf main landet.
+# Läuft auf einem SELF-HOSTED Runner, der auf dem Zielserver installiert ist (Label: wlp-server),
+# und ruft dort das bestehende deploy.sh auf (git pull + docker compose up -d --build).
+#
+# WICHTIG (Repo ist öffentlich): Dieser Workflow wird NUR bei push auf main ausgelöst, NIE bei
+# pull_request. Ein self-hosted Runner darf bei öffentlichen Repos niemals auf pull_request laufen,
+# sonst könnte jeder per Fork-PR Code auf deinem Server ausführen.
+#
+# Einmalige Einrichtung auf dem Server: siehe server/DEPLOY.md
+# Benötigte Repository-Variable (Settings > Secrets and variables > Actions > Variables):
+#   WLP_DEPLOY_DIR   Absoluter Pfad zum ausgecheckten Repo auf dem Server (wo deploy.sh liegt)
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+    # Nur deployen, wenn etwas am Server oder seinen Abhängigkeiten geändert wurde.
+    paths:
+      - server/**
+      - shared/**
+      - importer/**
+      - build.gradle.kts
+      - settings.gradle.kts
+      - gradle.properties
+      - gradle/**
+      - .github/workflows/deploy-server.yml
+  # Erlaubt manuelles Auslösen über die Actions-Oberfläche.
+  workflow_dispatch:
+
+# Nie zwei Deploys gleichzeitig; ein laufendes nicht abbrechen.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Muss zum Label des installierten Runners passen (siehe server/DEPLOY.md).
+    runs-on: [self-hosted, wlp-server]
+    steps:
+      - name: Deploy ausführen
+        env:
+          WLP_DEPLOY_DIR: ${{ vars.WLP_DEPLOY_DIR }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WLP_DEPLOY_DIR:-}" ]; then
+            echo "Repository-Variable WLP_DEPLOY_DIR ist nicht gesetzt." >&2
+            echo "Settings > Secrets and variables > Actions > Variables > New variable" >&2
+            exit 1
+          fi
+          if [ ! -x "$WLP_DEPLOY_DIR/deploy.sh" ]; then
+            echo "deploy.sh nicht gefunden/ausführbar unter: $WLP_DEPLOY_DIR" >&2
+            exit 1
+          fi
+          cd "$WLP_DEPLOY_DIR"
+          ./deploy.sh
