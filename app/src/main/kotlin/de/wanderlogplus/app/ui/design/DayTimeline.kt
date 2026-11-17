@@ -146,6 +146,7 @@ fun DayTimeline(
                                         subtitle = listOfNotNull(
                                             if (isStay) "Unterkunft" else saved?.category?.let { categoryLabel(it) },
                                             entry.checkIn?.let { checkInText(it, stop?.let { s -> de.wanderlogplus.shared.query.DayNow.hhmm(s.start) }) },
+                                            stop?.let { durationText(it.end - it.start) },
                                             place?.rating?.takeIf { saved == null }?.let { ratingLabel(it) },
                                         ).joinToString(" · "),
                                         imageUrl = place?.heroImageUrl(),
@@ -217,6 +218,17 @@ private fun StopTimeLine(itemId: String, stop: de.wanderlogplus.shared.query.Sch
                 texts.forEach { Badge(BadgeSpec(it, BadgeTone.Warning)) }
             }
         }
+    }
+}
+
+/** A planned stay: "45 Min", "2 Std", "1 Std 30 Min". */
+fun durationText(minutes: Int): String {
+    val h = minutes / 60
+    val m = minutes % 60
+    return when {
+        h == 0 -> "$m Min"
+        m == 0 -> "$h Std"
+        else -> "$h Std $m Min"
     }
 }
 

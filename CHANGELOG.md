@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.77.0
+
+- **Aufenthaltsdauer im Tagesplan:** Jede Programmkarte zeigt dezent, wie lange der Aufenthalt geplant ist („Sehenswürdigkeiten · 1 Std 30 Min“) – die eigene Dauer aus „Zeit & Dauer“ oder die typische des Orts.
+- **Karte beim Bewerten:** Unter dem Text steht die Karte mit dem Ort und den Punkten aus der Recherche; Antippen öffnet die Vollbild-Karte wie in der Ortsansicht.
+- **Vollbild-Karte:** Die Liste der markierten Punkte lässt sich über die Leiste „n Punkte“ einklappen – dann bekommt die Karte den ganzen Platz.
+
 ## 0.76.0
 
 - **Geschätzte Uhrzeiten im Tagesplan:** Die Zeiten in der Zeitleiste hängen nicht mehr am Ort, sondern werden aus Reihenfolge, Wegen und Aufenthaltsdauer geschätzt („~13:00“) – beim Umsortieren rechnen sie sofort neu. Bekannte Wegzeiten (eingeblendete Wege, gewählte Verbindungen) zählen, sonst die Luftlinie.

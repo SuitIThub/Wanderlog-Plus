@@ -72,6 +72,20 @@ class DayTimelineTest {
         rule.onNode(hasText("ab 09:00", substring = true) and hasAnyAncestor(hasTestTag("timeline-start")), useUnmergedTree = true).assertExists()
     }
 
+    @Test fun durationTexts() {
+        assertEquals("45 Min", durationText(45))
+        assertEquals("2 Std", durationText(120))
+        assertEquals("1 Std 30 Min", durationText(90))
+    }
+
+    @Test fun programCardShowsStayDuration() {
+        val base = withItems { if (it.id == "i-3") it.copy(stayMinutes = 90) else it }
+        val snap = base.copy(dayItems = base.dayItems + de.wanderlogplus.shared.model.DayItem("n-1", "d-2", "a9", de.wanderlogplus.shared.model.DayItemKind.NOTE, text = "Bento kaufen"))
+        show(snap, "2027-04-02")
+        rule.onNode(hasText("1 Std 30 Min", substring = true) and hasAnyAncestor(hasTestTag("day-item-i-3")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("Min", substring = true) and hasAnyAncestor(hasTestTag("day-item-n-1")), useUnmergedTree = true).assertDoesNotExist()
+    }
+
     @Test fun noNightOnCheckOutDay() {
         val snap = Fixtures.trip()
         // 2027-04-06 is the last stay's check-out day: the query still reports the stay, but nobody sleeps there.

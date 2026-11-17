@@ -20,6 +20,10 @@ import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -146,6 +150,7 @@ fun PlaceMapScreen(snapshot: TripSnapshot, savedPlaceId: String, onBack: () -> U
     val accent = region?.let { regionColor(it.color) } ?: MaterialTheme.colorScheme.primary
     val points = remember(place, saved?.dossier) { placeMapPoints(place, saved?.dossier) }
     var focus by rememberSaveable(savedPlaceId) { mutableStateOf<String?>(null) }
+    var listOpen by rememberSaveable(savedPlaceId) { mutableStateOf(true) }
     val wide = isWideLayout()
 
     Column(modifier.fillMaxSize().testTag("place-map-screen")) {
@@ -171,14 +176,49 @@ fun PlaceMapScreen(snapshot: TripSnapshot, savedPlaceId: String, onBack: () -> U
                 }
             }
         }
+        val list = points.size > 1
+        val toggle: @Composable (Modifier) -> Unit = { m -> ListToggle(points.size, listOpen, { listOpen = !listOpen }, wide, m) }
         if (wide) {
             Row(Modifier.fillMaxSize()) {
                 map(Modifier.weight(2f).fillMaxHeight())
-                PointList(points, accent, focus, { focus = it }, Modifier.weight(1f).fillMaxHeight())
+                if (list && listOpen) {
+                    Column(Modifier.weight(1f).fillMaxHeight()) {
+                        toggle(Modifier.fillMaxWidth())
+                        PointList(points, accent, focus, { focus = it }, Modifier.fillMaxWidth().weight(1f))
+                    }
+                } else if (list) {
+                    toggle(Modifier.fillMaxHeight())
+                }
             }
         } else {
-            map(Modifier.fillMaxWidth().weight(if (points.size > 1) 0.62f else 1f))
-            if (points.size > 1) PointList(points, accent, focus, { focus = it }, Modifier.fillMaxWidth().weight(0.38f))
+            map(Modifier.fillMaxWidth().weight(if (list && listOpen) 0.62f else 1f))
+            if (list) {
+                toggle(Modifier.fillMaxWidth())
+                if (listOpen) PointList(points, accent, focus, { focus = it }, Modifier.fillMaxWidth().weight(0.38f))
+            }
+        }
+    }
+}
+
+/** The bar above the point list ("4 Punkte ▾"); a tap folds the list away so the map gets the room. Beside the map
+ * (wide) the folded bar is a narrow strip. */
+@Composable
+private fun ListToggle(count: Int, open: Boolean, onToggle: () -> Unit, wide: Boolean, modifier: Modifier) {
+    val icon = when {
+        wide && !open -> Icons.Filled.ChevronLeft
+        wide -> Icons.Filled.ChevronRight
+        open -> Icons.Filled.ExpandMore
+        else -> Icons.Filled.ExpandLess
+    }
+    val label = if (open) "Liste einklappen" else "Liste ausklappen"
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.clickable(onClickLabel = label, onClick = onToggle).testTag("place-map-list-toggle")) {
+        if (wide && !open) {
+            Box(Modifier.padding(horizontal = 4.dp), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = label) }
+        } else {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("$count Punkte", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Icon(icon, contentDescription = label)
+            }
         }
     }
 }
