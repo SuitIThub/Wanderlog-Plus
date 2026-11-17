@@ -3,6 +3,13 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.80.0
+
+- **Favoriten in der Verbindungssuche (für euch beide):** ☆ an „Von“ oder „Nach“ merkt nur diesen Ort als Ziel, ☆ an der Routenzeile nur die Route „A → B“ – getrennt voneinander. Favoriten stehen in der Suche oben: eine Route füllt beide Felder, ein Ziel füllt „Nach“.
+- **Zuletzt gesucht (pro Handy):** Die letzten 10 Routen stehen unter „Start und Ziel“ (antippen füllt beide Felder, ☆ merkt die Route); ihre Orte erscheinen auch als Vorschläge beim Tippen.
+- **„Schnell hin“ auf Heute:** Favoriten in der Region des Tages (Tagesausflüge zählen mit). Ein Ziel antippen sucht sofort von deinem Standort aus, eine Route sofort so wie gespeichert – jeweils ab jetzt.
+- **Wichtig:** Favoriten sind ein neuer gemeinsamer Datentyp – erst den Server neu bauen (`docker compose up -d --build`), dann die App auf beiden Handys aktualisieren.
+
 ## 0.79.0
 
 - **ÖPNV-Suche einfach so:** In der Logistik (Fahrten) öffnet „Verbindung suchen“ die Verbindungssuche ohne Bezug zu einem Ort – Von und Nach frei, Datum und Uhrzeit von jetzt. Nachschauen speichert nichts.

@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 
-enum class EntityType { TRIP, REGION, PLACE, SAVED_PLACE, STAY, FLIGHT, TRAIN, DAY, DAY_ITEM, NOTE, ATTACHMENT, EXPENSE, GUIDE, GUIDE_PREFS, VOTE }
+enum class EntityType { TRIP, REGION, PLACE, SAVED_PLACE, STAY, FLIGHT, TRAIN, DAY, DAY_ITEM, NOTE, ATTACHMENT, EXPENSE, GUIDE, GUIDE_PREFS, VOTE, TRANSIT_FAVORITE }
 
 /** A field value with the [Hlc.encode]d timestamp of its last write. */
 @Serializable

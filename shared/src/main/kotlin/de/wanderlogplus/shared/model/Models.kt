@@ -339,3 +339,26 @@ enum class PaymentStatus { OPEN, DEPOSIT, PAID }
 /** A link of the travellers: [label] shown on the button, [url] opened. */
 @Serializable
 data class CustomLink(val label: String = "", val url: String = "")
+
+/** One end of a favourite connection: a place with its position, or a station by its (Japanese) name. */
+@Serializable
+data class FavoriteEnd(val name: String = "", val lat: Double? = null, val lng: Double? = null, val station: String = "")
+
+/**
+ * A favourite of the connection search, shared by everyone on the trip: a goal ([KIND_PLACE], only [to]) or a route
+ * ([KIND_ROUTE], [from] → [to]).
+ */
+@Serializable
+data class TransitFavorite(
+    val id: String,
+    val kind: String = KIND_PLACE,
+    val to: FavoriteEnd = FavoriteEnd(),
+    val from: FavoriteEnd? = null,
+) {
+    val label: String get() = if (kind == KIND_ROUTE && from != null) "${from.name} → ${to.name}" else to.name
+
+    companion object {
+        const val KIND_PLACE = "place"
+        const val KIND_ROUTE = "route"
+    }
+}
