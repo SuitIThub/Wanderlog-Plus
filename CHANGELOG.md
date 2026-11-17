@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.78.0
+
+- **Fahrt- und Flugzeit:** Jede Teilstrecke zeigt, wie lange sie dauert – „11:15 – 06:15 +1 · 12 Std. · NH 204“ in der Logistik, auf „Heute“ und in der Reise-Ansicht, im Detail als „Flugzeit“/„Fahrzeit“. Gerechnet wird über Tageswechsel und Zeitzonen hinweg, inklusive Sommerzeit in Deutschland (Japan hat keine).
+- **Zeitzone je Abfahrt und Ankunft:** Im Bearbeiten gibt es das Feld „Zeitzone“. Es ist automatisch gefüllt, wenn der Flughafencode sie verrät oder der Ort in Japan liegt („Japan (automatisch)“); sonst wählst du sie aus der Liste (Deutschland, Finnland, Katar …). Ohne bekannte Zone steht keine Dauer da statt einer falschen.
+- **„gesamt“ einer Reise stimmt jetzt auch mit Flug:** Frankfurt → Japan wurde bisher in Ortszeiten gerechnet und war um die Zeitverschiebung zu lang.
+
 ## 0.77.0
 
 - **Aufenthaltsdauer im Tagesplan:** Jede Programmkarte zeigt dezent, wie lange der Aufenthalt geplant ist („Sehenswürdigkeiten · 1 Std 30 Min“) – die eigene Dauer aus „Zeit & Dauer“ oder die typische des Orts.

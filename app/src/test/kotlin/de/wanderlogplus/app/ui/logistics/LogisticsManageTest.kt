@@ -1,6 +1,7 @@
 package de.wanderlogplus.app.ui.logistics
 
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -20,6 +21,7 @@ import de.wanderlogplus.shared.sync.TransitResult
 import de.wanderlogplus.shared.sync.TransitRoute
 import de.wanderlogplus.shared.sync.TransitStation
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -130,6 +132,35 @@ class LogisticsManageTest {
         assertEquals("Miyakoji 3", after.getValue("number").jsonPrimitive.content)
         assertEquals("Q77", after.getValue("confirmationNumber").jsonPrimitive.content)
     }
+
+    @Test fun aFlightsTimeZoneIsFilledInAndCanBeChosen() {
+        var saved: Map<String, JsonElement>? = null
+        rule.setContent {
+            WanderlogPlusTheme {
+                LogisticsEditScreen(snapshot, EntityType.FLIGHT, NEW_ID, onBack = {}, onSave = { _, _, _, a, _ -> saved = a }, search = null)
+            }
+        }
+        rule.onNodeWithTag("edit-depart-zone").performScrollTo().assertTextContainsText("unbekannt")
+        rule.onNodeWithTag("edit-depart-name").performTextInput("Helsinki")
+        rule.onNodeWithTag("edit-arrive-name").performTextInput("Haneda")
+        // Choose "Finnland" for the departure.
+        rule.onNodeWithTag("edit-depart-zone").performScrollTo().performClick()
+        val i = 1 + de.wanderlogplus.shared.query.RideTimes.ZONE_OPTIONS.indexOfFirst { it.second == "Finnland" }
+        rule.onNodeWithTag("edit-depart-zone-option-$i").performClick()
+        rule.onNodeWithTag("edit-depart-zone").assertTextContainsText("Finnland")
+        rule.onNodeWithTag("edit-save").performClick()
+        assertEquals("Europe/Helsinki", saved!!.getValue("depart").jsonObject.getValue("timeZone").jsonPrimitive.content)
+    }
+
+    @Test fun aTrainInJapanShowsJapaneseTimeAutomatically() {
+        rule.setContent {
+            WanderlogPlusTheme { LogisticsEditScreen(snapshot, EntityType.TRAIN, NEW_ID, onBack = {}, onSave = { _, _, _, _, _ -> }, search = null) }
+        }
+        rule.onNodeWithTag("edit-depart-zone").performScrollTo().assertTextContainsText("Japan (automatisch)")
+    }
+
+    private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertTextContainsText(t: String) =
+        assert(androidx.compose.ui.test.hasText(t, substring = true).or(androidx.compose.ui.test.hasAnyDescendant(androidx.compose.ui.test.hasText(t, substring = true))))
 
     @Test fun newStayNeedsDatesAndIsSaved() {
         var saved: StayDraft? = null

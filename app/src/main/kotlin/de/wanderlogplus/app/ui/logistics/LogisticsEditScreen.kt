@@ -411,7 +411,7 @@ fun LogisticsEditScreen(
             )
 
             SectionLabel(if (type == EntityType.FLIGHT) "Abflug" else "Abfahrt")
-            EndpointFields("depart", draft.depart, { draft = draft.copy(depart = it) }, search?.let { { searching = SearchTarget.Depart } })
+            EndpointFields("depart", draft.depart, { draft = draft.copy(depart = it) }, search?.let { { searching = SearchTarget.Depart } }, flight = type == EntityType.FLIGHT)
 
             SectionLabel("Zwischenhalte")
             if (draft.via.isEmpty()) EmptyHint("Direkt, ohne Zwischenhalt")
@@ -439,7 +439,7 @@ fun LogisticsEditScreen(
             ) { Text("＋ Halt hinzufügen") }
 
             SectionLabel(if (type == EntityType.FLIGHT) "Landung" else "Ankunft")
-            EndpointFields("arrive", draft.arrive, { draft = draft.copy(arrive = it) }, search?.let { { searching = SearchTarget.Arrive } })
+            EndpointFields("arrive", draft.arrive, { draft = draft.copy(arrive = it) }, search?.let { { searching = SearchTarget.Arrive } }, flight = type == EntityType.FLIGHT)
             if (type == EntityType.TRAIN) {
                 WalkEndField("Start (vor dem Bahnhof)", draft.walkFrom, "edit-walk-from", search?.let { { searching = SearchTarget.WalkFrom } }) { draft = draft.copy(walkFrom = null) }
                 WalkEndField("Ziel (nach dem Bahnhof)", draft.walkTo, "edit-walk-to", search?.let { { searching = SearchTarget.WalkTo } }) { draft = draft.copy(walkTo = null) }
@@ -470,9 +470,12 @@ private fun <T> List<T>.move(from: Int, to: Int): List<T> {
     return toMutableList().apply { add(to, removeAt(from)) }
 }
 
-/** Name (with a search button that also sets coordinates), date and time of one endpoint. */
+/**
+ * Name (with a search button that also sets coordinates), date, time and – with the date – the time zone of one
+ * endpoint. The zone is filled in automatically when the airport code or Japan tells it ("Japan (automatisch)").
+ */
 @Composable
-private fun EndpointFields(tag: String, e: Endpoint, onChange: (Endpoint) -> Unit, onSearch: (() -> Unit)?, withDate: Boolean = true) {
+private fun EndpointFields(tag: String, e: Endpoint, onChange: (Endpoint) -> Unit, onSearch: (() -> Unit)?, withDate: Boolean = true, flight: Boolean = false) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedTextField(
             e.name,
@@ -498,6 +501,21 @@ private fun EndpointFields(tag: String, e: Endpoint, onChange: (Endpoint) -> Uni
                 e.time.orEmpty(), { onChange(e.copy(time = it)) },
                 label = { Text("Uhrzeit") }, placeholder = { Text("09:12") }, singleLine = true,
                 modifier = Modifier.width(120.dp).testTag("edit-$tag-time"),
+            )
+        }
+        if (withDate) {
+            val auto = de.wanderlogplus.shared.query.RideTimes.zoneOf(e.copy(timeZone = null), flight)?.id
+            val shown = e.timeZone?.takeIf { it.isNotBlank() }?.let { de.wanderlogplus.shared.query.RideTimes.zoneLabel(it) }
+                ?: auto?.let { de.wanderlogplus.shared.query.RideTimes.zoneLabel(it) + " (automatisch)" }
+                ?: "unbekannt – bitte wählen"
+            de.wanderlogplus.app.ui.LabeledDropdown(
+                tag = "edit-$tag-zone",
+                label = "Zeitzone",
+                value = shown,
+                options = listOf<Pair<String?, String>>(null to (auto?.let { "Automatisch (" + de.wanderlogplus.shared.query.RideTimes.zoneLabel(it) + ")" } ?: "Automatisch (unbekannt)")) +
+                    de.wanderlogplus.shared.query.RideTimes.ZONE_OPTIONS,
+                onSelect = { z -> onChange(e.copy(timeZone = z)) },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }

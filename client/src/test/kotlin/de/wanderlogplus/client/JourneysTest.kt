@@ -26,6 +26,17 @@ class JourneysTest {
         it.seedEntity(EntityType.TRAIN, "t2", local)
     }
 
+    @Test fun totalTimeCountsTimeZones() {
+        val f = fx()
+        f.editor.joinJourney(f.snapshot(), listOf(EntityType.FLIGHT to "f1", EntityType.FLIGHT to "f2"))
+        val j = journeys(f.snapshot()).single()
+        // Frankfurt 13:30 (UTC+2 in May) → Itami 10:40 next day (UTC+9): 14 h 10 min, not 21 h 10 min.
+        assertEquals(14 * 60 + 10L, j.totalMinutes)
+        assertEquals(12 * 60 + 15L, j.legs.first().minutes)
+        // The change at Haneda stays local: 45 minutes.
+        assertEquals(45L, transfer(f.snapshot(), j.legs[0], j.legs[1]).minutes)
+    }
+
     @Test fun joinKeepsEveryLegAndOrdersThemByTime() {
         val f = fx()
         val jid = f.editor.joinJourney(f.snapshot(), listOf(EntityType.TRAIN to "t1", EntityType.FLIGHT to "f2", EntityType.FLIGHT to "f1"))
@@ -38,7 +49,7 @@ class JourneysTest {
         assertEquals(jid, f.editor.joinJourney(f.snapshot(), listOf(EntityType.TRAIN to "t1", EntityType.TRAIN to "t2")))
         assertEquals(4, journeys(f.snapshot()).single().legs.size)
         assertEquals(jid, journeyOf(f.snapshot(), EntityType.TRAIN, "t2")?.id)
-        assertEquals(23L * 60 + 25, journeys(f.snapshot()).single().totalMinutes) // 13:30 → next day 12:55 (local times)
+        assertEquals(16L * 60 + 25, journeys(f.snapshot()).single().totalMinutes) // 13:30 Frankfurt (UTC+2) → next day 12:55 Nara (UTC+9)
     }
 
     @Test fun transfersShowWaitingPlatformsDistanceAndWarnings() {

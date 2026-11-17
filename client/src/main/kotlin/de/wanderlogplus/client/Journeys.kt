@@ -4,6 +4,7 @@ import de.wanderlogplus.shared.model.Endpoint
 import de.wanderlogplus.shared.model.Flight
 import de.wanderlogplus.shared.model.Train
 import de.wanderlogplus.shared.query.Movement
+import de.wanderlogplus.shared.query.RideTimes
 import de.wanderlogplus.shared.sync.EntityType
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -32,6 +33,12 @@ data class JourneyLeg(val movement: Movement, val departs: LocalDateTime?, val a
         is Movement.FlightMove -> movement.flight.via
         is Movement.TrainMove -> movement.train.via
     }
+
+    /** Departure and arrival with their time zones; null when a zone or time is unknown. */
+    val zoned: Pair<java.time.ZonedDateTime, java.time.ZonedDateTime>? by lazy { RideTimes.zoned(movement) }
+
+    /** How long the ride takes (across days and time zones); null when unknown. */
+    val minutes: Long? get() = RideTimes.minutes(movement)
 }
 
 /** Trains and flights sharing a journey id, in travel order (two or more). */
@@ -39,8 +46,8 @@ data class Journey(val id: String, val legs: List<JourneyLeg>) {
     val first: JourneyLeg get() = legs.first()
     val last: JourneyLeg get() = legs.last()
 
-    /** Minutes from the first departure to the last arrival; null when a time is missing. */
-    val totalMinutes: Long? get() = first.departs?.let { d -> last.arrives?.let { ChronoUnit.MINUTES.between(d, it) } }
+    /** Minutes from the first departure to the last arrival, across time zones; null when a time or zone is missing. */
+    val totalMinutes: Long? get() = first.zoned?.first?.let { d -> last.zoned?.second?.let { ChronoUnit.MINUTES.between(d, it) } }
 
     fun indexOf(type: EntityType, id: String): Int = legs.indexOfFirst { it.type == type && it.id == id }
 }
@@ -138,7 +145,9 @@ private fun platform(m: Movement, arriving: Boolean): String? {
 }
 
 fun transfer(snapshot: TripSnapshot, from: JourneyLeg, to: JourneyLeg): Transfer {
-    val minutes = from.arrives?.let { a -> to.departs?.let { d -> ChronoUnit.MINUTES.between(a, d) } }
+    // With zones when both are known (a change can cross a border), else in local time.
+    val zonedMinutes = from.zoned?.second?.let { a -> to.zoned?.first?.let { d -> ChronoUnit.MINUTES.between(a, d) } }
+    val minutes = zonedMinutes ?: from.arrives?.let { a -> to.departs?.let { d -> ChronoUnit.MINUTES.between(a, d) } }
     val a = from.arrive
     val b = to.depart
     val sameName = (a.code != null && a.code.equals(b.code, ignoreCase = true)) || (a.name.isNotBlank() && a.name.trim().equals(b.name.trim(), ignoreCase = true))

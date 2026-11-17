@@ -163,18 +163,19 @@ class DayTimelineTest {
             depart = Endpoint("Frankfurt", "FRA", date = "2027-03-31", time = "11:15"),
             arrive = Endpoint("Tokio", "HND", date = "2027-04-01", time = "06:15"),
         )
-        assertEquals("11:15 – 06:15 +1 · NH 204", Movement.FlightMove(overnight).timesLine())
+        assertEquals("11:15 – 06:15 +1 · 12 Std. · NH 204", Movement.FlightMove(overnight).timesLine())
         // The Logistik list uses the same helper.
-        assertEquals("11:15 – 06:15 +1", de.wanderlogplus.app.ui.logistics.timesText(overnight.depart, overnight.arrive))
+        assertEquals("11:15 – 06:15 +1 · 12 Std.", de.wanderlogplus.app.ui.logistics.movementTimes(Movement.FlightMove(overnight)))
         val sameDay = overnight.copy(arrive = overnight.arrive.copy(date = "2027-03-31"))
+        // Arriving "before" leaving on the same day is impossible across these zones: no duration.
         assertEquals("11:15 – 06:15 · NH 204", Movement.FlightMove(sameDay).timesLine())
         val noArrivalDate = overnight.copy(arrive = overnight.arrive.copy(date = null))
-        assertEquals("11:15 – 06:15 · NH 204", Movement.FlightMove(noArrivalDate).timesLine())
+        assertEquals("11:15 – 06:15 · 12 Std. · NH 204", Movement.FlightMove(noArrivalDate).timesLine())
         val train = Train(
             "t", carrier = "Nachtzug",
             depart = Endpoint("A", date = "2027-04-01", time = "22:00"),
             arrive = Endpoint("B", date = "2027-04-03", time = "07:00"),
         )
-        assertEquals("22:00 – 07:00 +2 · Nachtzug", Movement.TrainMove(train).timesLine())
+        assertEquals("22:00 – 07:00 +2 · 33 Std. · Nachtzug", Movement.TrainMove(train).timesLine())
     }
 }

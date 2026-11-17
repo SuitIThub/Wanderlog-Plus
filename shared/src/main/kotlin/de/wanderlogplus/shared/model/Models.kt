@@ -130,6 +130,8 @@ data class Endpoint(
     /** Coordinates picked in the app (place search); win over [placeId]'s place. */
     val lat: Double? = null,
     val lng: Double? = null,
+    /** IANA time zone of [date]/[time] ("Europe/Berlin"); null: from the airport code, in Japan Japanese time. */
+    val timeZone: String? = null,
 )
 
 @Serializable
