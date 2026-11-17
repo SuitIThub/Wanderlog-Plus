@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.81.0
+
+- **Stationsnamen in Romaji:** Bahnhöfe, Haltestellen und Zwischenhalte, die bisher nur auf Japanisch dastanden, bekommen eine lateinische Umschrift – „Kyōto-Ekimae (京都駅前)“, „Shin-Yokohama (新横浜)“, „Narita-Kūkō (成田空港)“. Die Umschrift macht der Server selbst mit einem Japanisch-Wörterbuch (keine KI-Kosten); Namen vom Fahrplandienst oder aus OpenStreetMap bleiben, eine Korrekturliste kennt besondere Lesungen (z. B. Nagiso, Tsumago, Magome, Kiyomizu-Gojō). Was das Wörterbuch nicht lesen kann, bleibt wie bisher nur Japanisch.
+- **Server neu bauen** (`docker compose up -d --build`), damit die Umschrift aktiv wird.
+
 ## 0.80.0
 
 - **Favoriten in der Verbindungssuche (für euch beide):** ☆ an „Von“ oder „Nach“ merkt nur diesen Ort als Ziel, ☆ an der Routenzeile nur die Route „A → B“ – getrennt voneinander. Favoriten stehen in der Suche oben: eine Route füllt beide Felder, ein Ziel füllt „Nach“.
