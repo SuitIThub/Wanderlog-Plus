@@ -37,6 +37,8 @@ data class TripSnapshot(
     val guidePrefs: GuidePrefs = GuidePrefs(),
     /** Everyone's votes on saved places ([de.wanderlogplus.shared.model.Votes]). */
     val votes: List<de.wanderlogplus.shared.model.Vote> = emptyList(),
+    /** Favourite goals and routes of the connection search (shared by everyone). */
+    val transitFavorites: List<de.wanderlogplus.shared.model.TransitFavorite> = emptyList(),
 ) {
     /** Files of an entity (tickets, PDFs …), without the gallery photos. */
     fun attachmentsFor(type: EntityType, id: String): List<Attachment> =
@@ -81,6 +83,7 @@ data class TripSnapshot(
                 guides = decoded(EntityType.GUIDE) { EntityCodec.decode<Guide>(it) },
                 guidePrefs = decoded(EntityType.GUIDE_PREFS) { EntityCodec.decode<GuidePrefs>(it) }.firstOrNull() ?: GuidePrefs(),
                 votes = decoded(EntityType.VOTE) { EntityCodec.decode<de.wanderlogplus.shared.model.Vote>(it) },
+                transitFavorites = decoded(EntityType.TRANSIT_FAVORITE) { EntityCodec.decode<de.wanderlogplus.shared.model.TransitFavorite>(it) },
             )
         }
 

@@ -101,6 +101,8 @@ fun TodayScreen(
     me: String? = null,
     /** Starts the Bewerten mode; null hides the „Orte bewerten“ card. */
     onRate: (() -> Unit)? = null,
+    /** "Schnell hin": searches a favourite from now; null hides the card. */
+    onQuickRoute: ((de.wanderlogplus.shared.model.TransitFavorite) -> Unit)? = null,
 ) {
     val openDeadline: ((de.wanderlogplus.shared.query.DeadlineTarget, String) -> Unit)? =
         if (onOpenPlace == null && onOpenLogistics == null) null else { t, id ->
@@ -117,7 +119,7 @@ fun TodayScreen(
         if (trip == null || queries == null) TodayState.Unknown
         else TodayQueries(queries, trip, snapshot.stays, snapshot.flights, snapshot.trains).state(now.toLocalDate())
     }
-    androidx.compose.runtime.CompositionLocalProvider(LocalReplaceTrain provides onReplaceTrain) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalReplaceTrain provides onReplaceTrain, de.wanderlogplus.app.ui.transit.LocalQuickRoute provides onQuickRoute) {
     when (state) {
         TodayState.Unknown -> EmptyState(onSyncNow, modifier)
         is TodayState.Before -> Before(snapshot, state, now, onOpenAttachment, available, openDeadline, modifier, me?.takeIf { onRate != null }, onRate ?: {})
@@ -279,6 +281,10 @@ private fun During(
     val focusMove = ((dayNow.current ?: dayNow.next) as? de.wanderlogplus.shared.query.DayStep.Move)?.movement
     val side: @Composable () -> Unit = {
         move?.takeIf { it.movement != focusMove }?.let { NextTripWidget(snapshot, it, now, accent, onOpenAttachment, available, onReplaceTrain = LocalReplaceTrain.current) }
+        de.wanderlogplus.app.ui.transit.LocalQuickRoute.current?.let { open ->
+            val quick = remember(snapshot, region?.id) { de.wanderlogplus.app.ui.transit.favoritesForRegion(snapshot, region?.id) }
+            de.wanderlogplus.app.ui.transit.QuickRoutesCard(quick, accent, open)
+        }
         if (openGuide != null && (dayGuides.isNotEmpty() || (suggestedGuides > 0 && openGuides != null))) {
             TodayGuidesWidget(dayGuides, suggestedGuides, accent, openGuide, openGuides)
         }

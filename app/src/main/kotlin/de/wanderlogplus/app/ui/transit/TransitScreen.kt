@@ -83,6 +83,13 @@ fun TransitScreen(
     onLocateFrom: (() -> Unit)? = null,
     /** Heading of the screen ("Verbindung abfragen" for a way, "Verbindung suchen" for the free search). */
     heading: String = "Verbindung abfragen",
+    /** ☆ of Von / Nach as goal favourites: null hides the star, else whether the end is one. */
+    fromStarred: Boolean? = null,
+    onStarFrom: () -> Unit = {},
+    toStarred: Boolean? = null,
+    onStarTo: () -> Unit = {},
+    /** Shown below Start und Ziel (route favourite, favourites, history); null: nothing. */
+    quickPicks: (@Composable () -> Unit)? = null,
 ) {
     val f = state.form
     Column(modifier.fillMaxSize().imePadding().testTag("transit-screen")) {
@@ -104,13 +111,14 @@ fun TransitScreen(
             }
 
             SectionLabel("Start und Ziel", color = accent)
-            StationField("Von", f.fromStation, f.fromPoint, state.nearFrom, "transit-from", suggest, onPickFrom, onClearFrom, onLocate = onLocateFrom) { v -> onEdit { it.copy(fromStation = v) } }
-            StationField("Nach", f.toStation, f.toPoint, state.nearTo, "transit-to", suggest, onPickTo, onClearTo) { v -> onEdit { it.copy(toStation = v) } }
+            StationField("Von", f.fromStation, f.fromPoint, state.nearFrom, "transit-from", suggest, onPickFrom, onClearFrom, onLocate = onLocateFrom, starred = fromStarred, onStar = onStarFrom) { v -> onEdit { it.copy(fromStation = v) } }
+            StationField("Nach", f.toStation, f.toPoint, state.nearTo, "transit-to", suggest, onPickTo, onClearTo, starred = toStarred, onStar = onStarTo) { v -> onEdit { it.copy(toStation = v) } }
             Text(
                 "Ort oder Hotel suchen und wählen – der nächste Bahnhof samt Fußweg wird gefunden, oder einen Bahnhof darunter antippen. Bahnhöfe auch von Hand: in Japan auf Japanisch (z. B. 京都), in Deutschland der Name (z. B. Hannover Kröpcke).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            quickPicks?.invoke()
 
             if (smartApplies(f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -181,6 +189,8 @@ private fun StationField(
     onPick: (EndpointHit) -> Unit,
     onClear: () -> Unit,
     onLocate: (() -> Unit)? = null,
+    starred: Boolean? = null,
+    onStar: () -> Unit = {},
     onChange: (String) -> Unit,
 ) {
     var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -207,10 +217,16 @@ private fun StationField(
                 value, { v -> typed = true; onChange(v) },
                 label = { Text(if (point != null) "$label (Bahnhof, optional)" else "$label (Ort, Hotel oder Bahnhof)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth().testTag(tag),
-                trailingIcon = onLocate?.let { locate ->
+                trailingIcon = if (onLocate == null && starred == null) null else {
                     {
-                        androidx.compose.material3.IconButton(onClick = locate, modifier = Modifier.testTag("$tag-locate")) {
-                            Icon(androidx.compose.material.icons.Icons.Filled.MyLocation, contentDescription = "Aktuelle Position")
+                        androidx.compose.foundation.layout.Row {
+                            if (onLocate != null) {
+                                androidx.compose.material3.IconButton(onClick = onLocate, modifier = Modifier.testTag("$tag-locate")) {
+                                    Icon(androidx.compose.material.icons.Icons.Filled.MyLocation, contentDescription = "Aktuelle Position")
+                                }
+                            }
+                            // Only when there is something to remember (a picked place or a station).
+                            if (starred != null && (point != null || value.isNotBlank())) StarButton(starred, onStar, "$tag-star", "Ziel")
                         }
                     }
                 },

@@ -99,6 +99,12 @@ class MoreViewModel(
         viewModelScope.launch { job.join(); id?.let(onSaved) }
     }
 
+    /** A favourite goal or route of the connection search (shared by everyone). */
+    fun addFavorite(f: de.wanderlogplus.shared.model.TransitFavorite) =
+        write { e, _ -> e.create(EntityType.TRANSIT_FAVORITE, de.wanderlogplus.shared.model.EntityCodec.fields(f.copy(id = "")).filterKeys { it != "id" }) }
+
+    fun removeFavorite(id: String) = write { e, _ -> e.delete(EntityType.TRANSIT_FAVORITE, id) }
+
     /** "Verbindung ändern": the picked connection replaces all legs of the train journey [journeyId]. */
     fun replaceJourney(journeyId: String, result: de.wanderlogplus.shared.sync.TransitResult) =
         write { e, s -> e.replaceJourney(s, journeyId, de.wanderlogplus.app.ui.logistics.namedRides(result)) }

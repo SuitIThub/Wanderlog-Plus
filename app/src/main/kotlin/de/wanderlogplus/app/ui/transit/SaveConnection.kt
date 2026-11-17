@@ -114,6 +114,11 @@ fun SaveConnectionDialog(
 /** The free connection search (Logistik → "Verbindung suchen"). */
 const val TRANSIT_FREE_ROUTE = "logistik/transit-search"
 
+/** The free search for a favourite (Schnell hin on Heute): filled in and started right away. */
+const val TRANSIT_FREE_FAV_ROUTE = "logistik/transit-search/{fav}"
+
+fun transitFreeRoute(favId: String) = "logistik/transit-search/${android.net.Uri.encode(favId)}"
+
 /**
  * "Aktuelle Position" as the start: asks for the location permission once, then finds the device's position and hands
  * it over as a picked point ("Mein Standort"), so the nearby stations are suggested. [onMissing] gets a message when
