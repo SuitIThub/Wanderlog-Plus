@@ -455,6 +455,23 @@ class LocalEditor(
     }
 
     /**
+     * A connection from the free search as new trains: one train for a single ride, else one journey of all [rides] in
+     * their order. Returns the id of the first train; null (and no change) without rides.
+     */
+    fun addConnection(rides: List<de.wanderlogplus.shared.model.Train>): String? {
+        if (rides.isEmpty()) return null
+        val jid = if (rides.size > 1) Ids.newId() else null
+        val ids = rides.map { Ids.newId() }
+        tx.run {
+            rides.forEachIndexed { i, r ->
+                writeNew(EntityType.TRAIN, ids[i], de.wanderlogplus.shared.model.EntityCodec.fields(r.copy(id = ids[i], journeyId = jid, journeyOrder = jid?.let { i })))
+            }
+        }
+        onChange()
+        return ids.first()
+    }
+
+    /**
      * "Andere Fahrt suchen": the first of [rides] replaces line, operator, stations, times and connection of train
      * [trainId] (booking, notes, travellers, class, links and seats stay; seats are marked as entered for the old
      * departure); further rides follow it in its journey (a new one when it had none). No rides: no change.

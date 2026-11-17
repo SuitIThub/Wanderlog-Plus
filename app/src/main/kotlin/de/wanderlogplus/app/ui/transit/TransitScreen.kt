@@ -1,5 +1,7 @@
 package de.wanderlogplus.app.ui.transit
 
+import androidx.compose.material.icons.filled.MyLocation
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -77,13 +79,17 @@ fun TransitScreen(
     /** "Frühere" / "Spätere" below the connections; null hides them. */
     onEarlier: (() -> Unit)? = null,
     onLater: (() -> Unit)? = null,
+    /** "Aktuelle Position" as the start (📍 next to Von); null hides it. */
+    onLocateFrom: (() -> Unit)? = null,
+    /** Heading of the screen ("Verbindung abfragen" for a way, "Verbindung suchen" for the free search). */
+    heading: String = "Verbindung abfragen",
 ) {
     val f = state.form
     Column(modifier.fillMaxSize().imePadding().testTag("transit-screen")) {
         Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
             Column {
-                Text("Verbindung abfragen", style = MaterialTheme.typography.titleLarge)
+                Text(heading, style = MaterialTheme.typography.titleLarge)
                 Text(title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
@@ -98,7 +104,7 @@ fun TransitScreen(
             }
 
             SectionLabel("Start und Ziel", color = accent)
-            StationField("Von", f.fromStation, f.fromPoint, state.nearFrom, "transit-from", suggest, onPickFrom, onClearFrom) { v -> onEdit { it.copy(fromStation = v) } }
+            StationField("Von", f.fromStation, f.fromPoint, state.nearFrom, "transit-from", suggest, onPickFrom, onClearFrom, onLocate = onLocateFrom) { v -> onEdit { it.copy(fromStation = v) } }
             StationField("Nach", f.toStation, f.toPoint, state.nearTo, "transit-to", suggest, onPickTo, onClearTo) { v -> onEdit { it.copy(toStation = v) } }
             Text(
                 "Ort oder Hotel suchen und wählen – der nächste Bahnhof samt Fußweg wird gefunden, oder einen Bahnhof darunter antippen. Bahnhöfe auch von Hand: in Japan auf Japanisch (z. B. 京都), in Deutschland der Name (z. B. Hannover Kröpcke).",
@@ -174,6 +180,7 @@ private fun StationField(
     suggest: EndpointSearch?,
     onPick: (EndpointHit) -> Unit,
     onClear: () -> Unit,
+    onLocate: (() -> Unit)? = null,
     onChange: (String) -> Unit,
 ) {
     var typed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -200,6 +207,13 @@ private fun StationField(
                 value, { v -> typed = true; onChange(v) },
                 label = { Text(if (point != null) "$label (Bahnhof, optional)" else "$label (Ort, Hotel oder Bahnhof)") },
                 singleLine = true, modifier = Modifier.fillMaxWidth().testTag(tag),
+                trailingIcon = onLocate?.let { locate ->
+                    {
+                        androidx.compose.material3.IconButton(onClick = locate, modifier = Modifier.testTag("$tag-locate")) {
+                            Icon(androidx.compose.material.icons.Icons.Filled.MyLocation, contentDescription = "Aktuelle Position")
+                        }
+                    }
+                },
             )
             hits.forEachIndexed { i, h ->
                 Column(

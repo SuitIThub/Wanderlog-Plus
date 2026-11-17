@@ -89,6 +89,16 @@ class MoreViewModel(
     fun replaceRide(trainId: String, result: de.wanderlogplus.shared.sync.TransitResult) =
         write { e, s -> e.replaceRide(s, trainId, de.wanderlogplus.app.ui.logistics.namedRides(result)) }
 
+    /**
+     * A connection of the free search into the Logistik: one train, or one journey for rides with changes. [onSaved]
+     * gets the first train's id once it is written.
+     */
+    fun addConnection(result: de.wanderlogplus.shared.sync.TransitResult, onSaved: (String) -> Unit = {}) {
+        var id: String? = null
+        val job = write { e, _ -> id = e.addConnection(de.wanderlogplus.app.ui.logistics.namedRides(result)) }
+        viewModelScope.launch { job.join(); id?.let(onSaved) }
+    }
+
     /** "Verbindung ändern": the picked connection replaces all legs of the train journey [journeyId]. */
     fun replaceJourney(journeyId: String, result: de.wanderlogplus.shared.sync.TransitResult) =
         write { e, s -> e.replaceJourney(s, journeyId, de.wanderlogplus.app.ui.logistics.namedRides(result)) }

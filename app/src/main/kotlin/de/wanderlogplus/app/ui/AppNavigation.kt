@@ -932,6 +932,7 @@ fun AppNavigation(
                                             onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
                                             onAddTransit = { nav.navigate(logisticsEditRoute(EntityType.TRAIN, de.wanderlogplus.app.ui.logistics.NEW_WITH_SEARCH)) },
                                             onOpenJourney = { j -> selected = "JOURNEY/$j" },
+                                            onSearchTransit = transitApi?.let { { nav.navigate(de.wanderlogplus.app.ui.transit.TRANSIT_FREE_ROUTE) } },
                                         )
                                     },
                                     detail = {
@@ -950,6 +951,7 @@ fun AppNavigation(
                                 onAdd = { t -> nav.navigate(logisticsEditRoute(t, de.wanderlogplus.app.ui.logistics.NEW_ID)) },
                                             onAddTransit = { nav.navigate(logisticsEditRoute(EntityType.TRAIN, de.wanderlogplus.app.ui.logistics.NEW_WITH_SEARCH)) },
                                 onOpenJourney = { j -> nav.navigate(de.wanderlogplus.app.ui.logistics.journeyRoute(j)) },
+                                onSearchTransit = transitApi?.let { { nav.navigate(de.wanderlogplus.app.ui.transit.TRANSIT_FREE_ROUTE) } },
                             )
                         }
                     }
@@ -1037,6 +1039,71 @@ fun AppNavigation(
                                 onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
                                 onEarlier = tvm::earlier, onLater = tvm::later,
                             )
+                        }
+                    }
+                }
+                composable(de.wanderlogplus.app.ui.transit.TRANSIT_FREE_ROUTE) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.LOGISTIK.route) ?: entry)
+                    val tripVm: TripViewModel = viewModel(factory = tripViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.REISE.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val api = transitApi
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        val s = snap
+                        if (s == null || api == null) {
+                            EmptyHint("Die Verbindungssuche braucht eine Verbindung zum Server.", Modifier.padding(24.dp))
+                        } else {
+                            val now = rememberMinuteNow(clock)
+                            val tvm: de.wanderlogplus.app.ui.transit.TransitViewModel = viewModel(
+                                key = "transit-free",
+                                factory = remember {
+                                    object : androidx.lifecycle.ViewModelProvider.Factory {
+                                        @Suppress("UNCHECKED_CAST")
+                                        override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T =
+                                            de.wanderlogplus.app.ui.transit.TransitViewModel(
+                                                api, null, null, now.toLocalDate().toString(), now.toLocalTime().toString().take(5), null, "depart",
+                                                fromIsPlace = false, toIsPlace = false,
+                                            ) as T
+                                    }
+                                },
+                            )
+                            val state by tvm.state.collectAsState()
+                            var saving by remember { mutableStateOf<de.wanderlogplus.shared.sync.TransitResult?>(null) }
+                            val locate = de.wanderlogplus.app.ui.transit.rememberLocateFrom(onFound = tvm::pickFrom, onMissing = { msg -> uiScope.launch { snackbar.showSnackbar(msg) } })
+                            de.wanderlogplus.app.ui.transit.TransitScreen(
+                                title = "Ohne Bezug – speichern nur, wenn du eine Verbindung übernimmst",
+                                heading = "Verbindung suchen",
+                                state = state,
+                                accent = MaterialTheme.colorScheme.primary,
+                                chosen = null,
+                                onEdit = tvm::edit,
+                                onSearch = tvm::search,
+                                onChoose = { r -> saving = r },
+                                onClear = {},
+                                onBack = { nav.popBackStack() },
+                                suggest = de.wanderlogplus.app.ui.transit.transitSuggest(s, state.form.fromPoint ?: state.form.toPoint, placeFinder ?: geoSearch?.let { de.wanderlogplus.client.PlaceFinder(null, it) }),
+                                onPickFrom = tvm::pickFrom, onPickTo = tvm::pickTo, onClearFrom = tvm::clearFrom, onClearTo = tvm::clearTo,
+                                onEarlier = tvm::earlier, onLater = tvm::later,
+                                onLocateFrom = locate,
+                            )
+                            saving?.let { r ->
+                                de.wanderlogplus.app.ui.transit.SaveConnectionDialog(
+                                    snapshot = s,
+                                    date = state.form.date,
+                                    onLogistics = {
+                                        saving = null
+                                        vm.addConnection(r) { id ->
+                                            nav.popBackStack()
+                                            nav.navigate(logisticsDetailRoute(EntityType.TRAIN, id))
+                                        }
+                                    },
+                                    onDay = { d, key ->
+                                        saving = null
+                                        tripVm.setLegTransit(d, key, r)
+                                        uiScope.launch { snackbar.showSnackbar("Als Weg am ${de.wanderlogplus.app.ui.dayLabel(d)} gespeichert") }
+                                    },
+                                    onDismiss = { saving = null },
+                                )
+                            }
                         }
                     }
                 }

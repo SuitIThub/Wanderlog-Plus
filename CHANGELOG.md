@@ -3,6 +3,12 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.79.0
+
+- **ÖPNV-Suche einfach so:** In der Logistik (Fahrten) öffnet „Verbindung suchen“ die Verbindungssuche ohne Bezug zu einem Ort – Von und Nach frei, Datum und Uhrzeit von jetzt. Nachschauen speichert nichts.
+- **📍 Aktuelle Position:** Neben „Von“ setzt ein Tipp deinen Standort als Start und schlägt die Bahnhöfe in der Nähe vor (fragt einmal nach der Standort-Freigabe).
+- **Wohin speichern?** „Übernehmen“ fragt, ob die Verbindung **in die Logistik** kommt (als Fahrt; mit Umstiegen als Reise mit Teilstrecken – danach öffnet sich die neue Fahrt für Buchung und Tickets) oder **als Weg in einen Tag** (Tag wählen, dann den Programmpunkt bzw. die Unterkunft, zu der der Weg führt).
+
 ## 0.78.0
 
 - **Fahrt- und Flugzeit:** Jede Teilstrecke zeigt, wie lange sie dauert – „11:15 – 06:15 +1 · 12 Std. · NH 204“ in der Logistik, auf „Heute“ und in der Reise-Ansicht, im Detail als „Flugzeit“/„Fahrzeit“. Gerechnet wird über Tageswechsel und Zeitzonen hinweg, inklusive Sommerzeit in Deutschland (Japan hat keine).
