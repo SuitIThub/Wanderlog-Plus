@@ -97,8 +97,11 @@ class HeaderImagesAndLinksTest {
             }
         }
         rule.onNodeWithTag("hero-image").performClick()
-        tap("header-pick-1")
+        rule.onNodeWithTag("header-pick-bar").assertExists()
+        // The collection: header k1 first, then k2.
+        tap("photo-1")
         assertEquals(listOf<String?>("wl:k2"), picks)
+        rule.onNodeWithTag("header-pick-bar").assertDoesNotExist()
     }
 
     @Test fun stayDetailHasLinksAndHeaderImage() {

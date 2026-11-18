@@ -114,8 +114,8 @@ class StayTabsTest {
         rule.onNodeWithTag("stay-tab-room").performClick()
         rule.onNodeWithTag("stay-room").performScrollTo()
         rule.onNodeWithTag("photo-0", useUnmergedTree = true).performClick()
-        // The index is the stay gallery's (the room photo is the second photo there).
-        assertEquals(1, opened)
+        // The index is the stay gallery's (the room photo is its header and comes first there).
+        assertEquals(0, opened)
     }
 
     @Test

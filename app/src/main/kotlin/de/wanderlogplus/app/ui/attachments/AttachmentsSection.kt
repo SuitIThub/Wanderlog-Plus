@@ -76,6 +76,12 @@ class AttachmentActions(
      * Null: no online search (no server).
      */
     val onSearchPhotos: ((target: AttachmentTarget, single: Boolean, onAdded: suspend (List<String>) -> Unit) -> Unit)? = null,
+    /** Sets the header of a place or stay to a photo reference (null: default); null: headers cannot be changed here. */
+    val onSetHeader: ((EntityType, String, String?) -> Unit)? = null,
+    /** Marks a photo (e.g. as room photo; null removes the mark). */
+    val onSetLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
+    /** Adopts a borrowed photo as own photo of the target ([origin] e.g. "g:<name>"), optionally as its header. */
+    val onAdopt: ((type: EntityType, id: String, source: AttachmentSource, origin: String, asHeader: Boolean) -> Unit)? = null,
 )
 
 @Composable

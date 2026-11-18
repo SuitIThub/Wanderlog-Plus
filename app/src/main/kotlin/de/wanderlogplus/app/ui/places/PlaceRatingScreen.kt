@@ -109,13 +109,16 @@ private fun RatingCard(snapshot: TripSnapshot, saved: SavedPlace, me: String, on
     val region = snapshot.regions.firstOrNull { it.id == saved.regionId }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp).testTag("rating-card-${saved.id}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val images = place?.imageKeys.orEmpty().map { it.trim() }.filter { it.isNotBlank() }
+        // The place's whole collection (own, Wanderlog, Google), as on its page.
+        val photos = de.wanderlogplus.app.ui.attachments.rememberGallery(snapshot, de.wanderlogplus.shared.sync.EntityType.SAVED_PLACE, saved.id)
+        val images = photos.gallery.photos
+        val files = de.wanderlogplus.app.ui.attachments.LocalAttachmentFiles.current
         if (images.isNotEmpty()) {
             // Keyed by place: a new place starts at its first photo.
             val pager = androidx.compose.runtime.key(saved.id) { rememberPagerState { images.size } }
             Box {
                 HorizontalPager(pager, Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) { i ->
-                    AsyncImage(wanderlogUrl(images[i], large = true), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    de.wanderlogplus.app.ui.attachments.GalleryImage(images[i], files, large = true, modifier = Modifier.fillMaxSize())
                 }
                 if (images.size > 1) {
                     Text(
@@ -125,7 +128,7 @@ private fun RatingCard(snapshot: TripSnapshot, saved: SavedPlace, me: String, on
                 }
             }
         } else {
-            PlacePhotosRow(place)
+            de.wanderlogplus.app.ui.attachments.GalleryGrid(photos.gallery, photos.google, files, onAdd = null, onOpen = {})
         }
         Text(place?.name?.takeIf { it.isNotBlank() } ?: "Ort", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(listOfNotNull(region?.name, categoryLabel(saved.category)).joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = muted)

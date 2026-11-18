@@ -246,9 +246,10 @@ fun DayDetailScreen(
                     },
                 )
                 TAB_PHOTOS -> androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(16.dp)) {
-                    de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                        day?.let { snapshot.photosFor(EntityType.DAY, it.id) }.orEmpty(),
-                        attachments?.files,
+                    de.wanderlogplus.app.ui.attachments.GalleryGrid(
+                        de.wanderlogplus.app.ui.attachments.galleryOf(snapshot, EntityType.DAY, day?.id.orEmpty(), null),
+                        google = null,
+                        files = attachments?.files,
                         onAdd = attachments?.onAddPhotosToDay?.let { add -> { add(date) } },
                         onOpen = { i -> day?.let { onOpenPhoto?.invoke(EntityType.DAY, it.id, i) } },
                     )

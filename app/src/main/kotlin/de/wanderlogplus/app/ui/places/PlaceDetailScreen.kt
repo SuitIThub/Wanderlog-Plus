@@ -3,6 +3,7 @@ package de.wanderlogplus.app.ui.places
 import de.wanderlogplus.app.ui.logistics.toDraft
 import de.wanderlogplus.app.ui.logistics.toWindow
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -170,8 +171,6 @@ fun PlaceDetailScreen(
     onSetLinks: ((savedPlaceId: String, links: List<de.wanderlogplus.shared.model.CustomLink>) -> Unit)? = null,
     /** "Ort löschen" in "Ort bearbeiten" (after a confirmation); null hides it. */
     onDelete: ((savedPlaceId: String) -> Unit)? = null,
-    /** Makes the photo attachment the header (after "Online suchen" in the header picker); null hides that button. */
-    onSetHeaderFromAttachment: ((savedPlaceId: String, attachmentId: String) -> Unit)? = null,
     /** Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
     googleSearch: GoogleSearch? = null,
     /** Links the place to a Google entry (null: unlinks), optionally taking its position. */
@@ -190,11 +189,18 @@ fun PlaceDetailScreen(
     var editingTags by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var deleting by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var choosingImage by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
+    // Picking a header happens in the photos tab; afterwards the page goes back to where it was.
+    var tabBeforePick by rememberSaveable(savedPlaceId) { mutableIntStateOf(TAB_INFO) }
+    // Leaving the photos tab ends picking.
+    LaunchedEffect(tab) { if (tab != TAB_PHOTOS) choosingImage = false }
     var editing by rememberSaveable(savedPlaceId) { mutableStateOf(false) }
     var draft by rememberSaveable(savedPlaceId) { mutableStateOf("") }
     // Shown right after saving, until the snapshot carries the new note.
     var pendingNote by remember(savedPlaceId) { mutableStateOf<String?>(null) }
     LaunchedEffect(saved?.note, failureCount) { pendingNote = null }
+    val photos = de.wanderlogplus.app.ui.attachments.rememberGallery(snapshot, EntityType.SAVED_PLACE, savedPlaceId)
+    val gallery = photos.gallery
+    val photoRepo = LocalPlacePhotos.current
 
     if (saved == null) {
         Column(modifier.fillMaxSize()) {
@@ -210,20 +216,22 @@ fun PlaceDetailScreen(
         HeroHeader(
             title = place?.name?.takeIf { it.isNotBlank() } ?: "Unbekannter Ort",
             kicker = region?.name ?: NO_REGION_LABEL,
-            imageUrl = saved.heroImage(place),
+            imageUrl = saved.heroImage(place, snapshot.photosFor(EntityType.SAVED_PLACE, saved.id).firstOrNull()),
             accent = accent,
             // The default height leaves room for a name over two lines (no repeat of it below the hero any more).
             onBack = onBack,
             onEdit = { editingTags = true },
-            onChangeImage = onSetHeaderImage?.let { { choosingImage = true } },
+            onChangeImage = onSetHeaderImage?.let { { tabBeforePick = tab; choosingImage = true; tab = TAB_PHOTOS } },
             titleMaxLines = 2,
-            modifier = if (onOpenSibling == null) Modifier else Modifier.pointerInput(saved.id, snapshot) {
+            // A tap shows the photos full screen, starting with the header.
+            modifier = (if (onOpenPhoto != null && !gallery.isEmpty) Modifier.clickable { onOpenPhoto(EntityType.SAVED_PLACE, saved.id, 0) } else Modifier)
+                .then(if (onOpenSibling == null) Modifier else Modifier.pointerInput(saved.id, snapshot) {
                 var dx = 0f
                 detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = {
                     val step = when { dx < -SWIPE_PX -> 1; dx > SWIPE_PX -> -1; else -> 0 }
                     if (step != 0) regionSibling(snapshot, saved.id, step)?.let(onOpenSibling)
                 }) { _, d -> dx += d }
-            },
+            }),
         )
 
         Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -272,7 +280,7 @@ fun PlaceDetailScreen(
             ScreenTab("Einschätzung", tab == TAB_ASSESS, "tab-assessment") { tab = TAB_ASSESS }
             ScreenTab("Recherche", tab == TAB_RESEARCH, "tab-research") { tab = TAB_RESEARCH }
             // Always shown: the tab positions behind it must not shift.
-            val photoCount = snapshot.photosFor(EntityType.SAVED_PLACE, saved.id).size
+            val photoCount = gallery.photos.size
             ScreenTab(if (photoCount > 0) "Fotos ($photoCount)" else "Fotos", tab == TAB_PHOTOS, "tab-photos") { tab = TAB_PHOTOS }
             ScreenTab("Notiz", tab == TAB_NOTE, "tab-note") { tab = TAB_NOTE }
             ScreenTab(if (fileCount > 0) "Anhänge ($fileCount)" else "Anhänge", tab == TAB_FILES, "tab-files") { tab = TAB_FILES }
@@ -280,6 +288,13 @@ fun PlaceDetailScreen(
 
         when (tab) {
             TAB_INFO -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                de.wanderlogplus.app.ui.attachments.GalleryStrip(
+                    gallery, attachments?.files,
+                    onOpen = { i -> onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i) },
+                    onAll = { tab = TAB_PHOTOS },
+                    tag = "place-photo-strip",
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 8.dp),
+                )
                 if (place != null && (saved.category == PlaceCategory.FOOD || saved.category == PlaceCategory.NIGHTLIFE)) {
                     val context = androidx.compose.ui.platform.LocalContext.current
                     TabelogCard(
@@ -323,14 +338,27 @@ fun PlaceDetailScreen(
             }
             TAB_ASSESS -> PlaceAssessmentTab(saved, accent, research)
             TAB_RESEARCH -> PlaceResearchTab(saved, accent, research)
-            TAB_PHOTOS -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                PlacePhotosRow(place)
-                Text("Eigene Fotos", style = MaterialTheme.typography.titleSmall)
-                de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                    snapshot.photosFor(EntityType.SAVED_PLACE, saved.id),
-                    attachments?.files,
+            TAB_PHOTOS -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val picking = choosingImage && onSetHeaderImage != null
+                if (picking) {
+                    de.wanderlogplus.app.ui.attachments.HeaderPickBar(
+                        onDefault = saved.headerImage?.let { { onSetHeaderImage?.invoke(saved.id, null); choosingImage = false; tab = tabBeforePick } },
+                        onCancel = { choosingImage = false; tab = tabBeforePick },
+                    )
+                }
+                de.wanderlogplus.app.ui.attachments.GalleryGrid(
+                    gallery, photos.google, attachments?.files,
                     onAdd = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
-                    onOpen = { i -> onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i) },
+                    onOpen = { i ->
+                        val p = gallery.photos.getOrNull(i)
+                        if (picking && p != null) {
+                            de.wanderlogplus.app.ui.attachments.pickHeader(p, EntityType.SAVED_PLACE, saved.id, gallery, photoRepo, attachments) { ref -> onSetHeaderImage?.invoke(saved.id, ref) }
+                            choosingImage = false; tab = tabBeforePick
+                        } else {
+                            onOpenPhoto?.invoke(EntityType.SAVED_PLACE, saved.id, i)
+                        }
+                    },
+                    highlightHeader = !picking,
                 )
             }
             TAB_NOTE -> PlaceNoteTab(
@@ -359,22 +387,6 @@ fun PlaceDetailScreen(
         }
     }
 
-    if (choosingImage && onSetHeaderImage != null) {
-        HeaderImagePicker(
-            place, snapshot.photosFor(EntityType.SAVED_PLACE, saved.id), attachments?.files, saved.headerImage,
-            onPick = { ref -> onSetHeaderImage(saved.id, ref); choosingImage = false },
-            onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.SAVED_PLACE, saved.id) } },
-            onDismiss = { choosingImage = false },
-            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
-                {
-                    choosingImage = false
-                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.SAVED_PLACE, saved.id), true) { ids ->
-                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(saved.id, it) }
-                    }
-                }
-            },
-        )
-    }
     if (editingTags) {
         EditSheet("Ort bearbeiten", onDismiss = { editingTags = false }) {
             PlaceEditForm(

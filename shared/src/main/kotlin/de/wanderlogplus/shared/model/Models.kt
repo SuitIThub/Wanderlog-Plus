@@ -281,6 +281,8 @@ data class Attachment(
     val kind: String = "file",
     /** What a photo shows, e.g. [LABEL_ROOM] for the booked room of a stay; null: nothing special. */
     val label: String? = null,
+    /** Where an adopted photo came from, e.g. "g:<Google photo name>"; hides the borrowed original. Null: own photo. */
+    val origin: String? = null,
 ) {
     companion object {
         const val LABEL_ROOM = "room"

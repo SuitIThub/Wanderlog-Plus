@@ -134,9 +134,6 @@ class MoreViewModel(
         write { e, s -> de.wanderlogplus.app.ui.places.googleLinkEdits(placeId, hit, takePosition)(e, s) }
 
     /** The photo attachment [attachmentId] becomes the header of [type]/[id]. */
-    fun setHeaderFromAttachment(type: EntityType, id: String, attachmentId: String) =
-        write { e, s -> de.wanderlogplus.app.ui.attachments.headerFromAttachmentEdits(type, id, attachmentId)(e, s) }
-
     /** Own header image of a stay ([ref] null: default). */
     fun setHeaderImage(type: EntityType, id: String, ref: String?) =
         write { e, _ -> e.set(type, id, mapOf("headerImage" to (ref?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull))) }

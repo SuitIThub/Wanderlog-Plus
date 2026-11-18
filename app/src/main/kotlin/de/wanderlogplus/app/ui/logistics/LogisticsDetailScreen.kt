@@ -116,8 +116,6 @@ fun LogisticsDetailScreen(
     onSetPhotoLabel: ((attachmentId: String, label: String?) -> Unit)? = null,
     /** Stays: open the stay's photos large at this gallery index (header image, photo strip); null: no viewer. */
     onOpenPhoto: ((index: Int) -> Unit)? = null,
-    /** Stays: makes the photo attachment the header (after "Online suchen"); null hides that button. */
-    onSetHeaderFromAttachment: ((EntityType, String, String) -> Unit)? = null,
     /** Stays: Google search for "Google-Eintrag"; null hides „Suchen“/„Ändern“. */
     googleSearch: de.wanderlogplus.app.ui.places.GoogleSearch? = null,
     /** Stays: links the stay's place to a Google entry (null: unlinks). */
@@ -142,6 +140,10 @@ fun LogisticsDetailScreen(
     var choosingImage by remember(type, id) { mutableStateOf(false) }
     // Stays: 0 Übersicht, 1 Zimmer & Ausstattung, 2 Fotos.
     var stayTab by remember(type, id) { mutableStateOf(0) }
+    // Picking a header happens in the photos tab; afterwards the page goes back to where it was.
+    var tabBeforePick by remember(type, id) { mutableStateOf(0) }
+    // Leaving the photos tab ends picking.
+    androidx.compose.runtime.LaunchedEffect(stayTab) { if (stayTab != 2) choosingImage = false }
     val stay = if (type == EntityType.STAY) snapshot.stays.firstOrNull { it.id == id } else null
     val customLinks = when (type) {
         EntityType.STAY -> stay?.links
@@ -149,37 +151,21 @@ fun LogisticsDetailScreen(
         EntityType.FLIGHT -> snapshot.flights.firstOrNull { it.id == id }?.links
         else -> null
     }.orEmpty()
-    if (choosingImage && stay != null && onSetHeaderImage != null) {
-        de.wanderlogplus.app.ui.places.HeaderImagePicker(
-            snapshot.places[stay.placeId], snapshot.photosFor(EntityType.STAY, id), attachments?.files, stay.headerImage,
-            onPick = { ref -> onSetHeaderImage(type, id, ref); choosingImage = false },
-            onUpload = attachments?.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } },
-            onDismiss = { choosingImage = false },
-            onSearchOnline = attachments?.onSearchPhotos?.takeIf { onSetHeaderFromAttachment != null }?.let { search ->
-                {
-                    choosingImage = false
-                    search(de.wanderlogplus.app.ui.attachments.AttachmentTarget.Entity(EntityType.STAY, id), true) { ids ->
-                        ids.firstOrNull()?.let { onSetHeaderFromAttachment?.invoke(EntityType.STAY, id, it) }
-                    }
-                }
-            },
-        )
-    }
-
+    val photos = de.wanderlogplus.app.ui.attachments.rememberGallery(snapshot, if (stay != null) EntityType.STAY else null, id)
+    val gallery = photos.gallery
+    val photoRepo = de.wanderlogplus.app.ui.places.LocalPlacePhotos.current
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("logistics-detail")) {
         val stayPhotosAll = if (type == EntityType.STAY) snapshot.photosFor(EntityType.STAY, id) else emptyList()
-        // Tapping the header shows the stay's photos, starting with the chosen header photo.
-        val headerIndex = snapshot.stays.firstOrNull { it.id == id }?.headerImage?.removePrefix("att:")
-            ?.let { ref -> stayPhotosAll.indexOfFirst { it.id == ref } }?.takeIf { it >= 0 } ?: 0
+        // Tapping the header shows the stay's photos, starting with the header photo (always the first).
         HeroHeader(
-            modifier = if (onOpenPhoto != null && stayPhotosAll.isNotEmpty()) Modifier.clickable { onOpenPhoto(headerIndex) } else Modifier,
+            modifier = if (onOpenPhoto != null && stay != null && !gallery.isEmpty) Modifier.clickable { onOpenPhoto(0) } else Modifier,
             title = view.title,
             kicker = view.kicker,
             imageUrl = view.imageUrl,
             accent = view.accent,
             onBack = onBack,
             titleMaxLines = 2,
-            onChangeImage = if (stay != null && onSetHeaderImage != null) ({ choosingImage = true }) else null,
+            onChangeImage = if (stay != null && onSetHeaderImage != null) ({ tabBeforePick = stayTab; choosingImage = true; stayTab = 2 }) else null,
         )
         RouteMap(view.route, view.accent, height = 160.dp, onClick = onOpenMap)
         if (type == EntityType.TRAIN || type == EntityType.FLIGHT) {
@@ -211,21 +197,17 @@ fun LogisticsDetailScreen(
             androidx.compose.material3.PrimaryTabRow(selectedTabIndex = stayTab) {
                 de.wanderlogplus.app.ui.design.ScreenTab("Übersicht", stayTab == 0, "stay-tab-overview") { stayTab = 0 }
                 de.wanderlogplus.app.ui.design.ScreenTab("Zimmer", stayTab == 1, "stay-tab-room", maxLines = 1) { stayTab = 1 }
-                de.wanderlogplus.app.ui.design.ScreenTab(if (stayPhotosAll.isEmpty()) "Fotos" else "Fotos (${stayPhotosAll.size})", stayTab == 2, "stay-tab-photos") { stayTab = 2 }
+                de.wanderlogplus.app.ui.design.ScreenTab(if (gallery.isEmpty) "Fotos" else "Fotos (${gallery.photos.size})", stayTab == 2, "stay-tab-photos") { stayTab = 2 }
             }
         }
 
         Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
             if (stay == null || stayTab == 0) {
-            if (stay != null && stayPhotosAll.isNotEmpty()) {
-                // Room photos first, then the rest.
-                val order = stayPhotosAll.indices.sortedBy { if (stayPhotosAll[it].label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM) 0 else 1 }.take(8)
-                Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    de.wanderlogplus.app.ui.attachments.PhotoStrip(
-                        stayPhotosAll, order, attachments?.files, onOpen = { i -> onOpenPhoto?.invoke(i) }, tag = "stay-photo-strip", modifier = Modifier.weight(1f),
-                    )
-                    androidx.compose.material3.TextButton(onClick = { stayTab = 2 }) { Text("Alle") }
-                }
+            if (stay != null) {
+                de.wanderlogplus.app.ui.attachments.GalleryStrip(
+                    gallery, attachments?.files, onOpen = { i -> onOpenPhoto?.invoke(i) }, onAll = { stayTab = 2 }, tag = "stay-photo-strip",
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
             snapshot.places[stay?.placeId]?.let { p ->
                 de.wanderlogplus.app.ui.places.GoogleLinkRow(
@@ -308,7 +290,7 @@ fun LogisticsDetailScreen(
                     roomPhotos = stayPhotosAll.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM },
                     // Room photos open at their place in the stay's whole gallery.
                     onOpenPhoto = { i ->
-                        stayPhotosAll.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM }.getOrNull(i)?.let { onOpenPhoto?.invoke(stayPhotosAll.indexOf(it)) }
+                        stayPhotosAll.filter { it.label == de.wanderlogplus.shared.model.Attachment.LABEL_ROOM }.getOrNull(i)?.let { onOpenPhoto?.invoke(gallery.indexOfOwn(it.id)) }
                     },
                     files = attachments?.files,
                     onResearch = onStayResearch?.let { r -> { links: List<String>, fresh: Boolean -> r(id, links, fresh) } },
@@ -318,16 +300,18 @@ fun LogisticsDetailScreen(
             }
 
             if (stay != null && stayTab == 2) {
-                // Google's photos of the stay, as on a place's page.
-                de.wanderlogplus.app.ui.places.PlacePhotosRow(snapshot.places[stay.placeId], Modifier.padding(top = 12.dp))
-            }
-
-            if (stay != null && stayTab == 2 && attachments != null) {
                 val stayPhotos = stayPhotosAll
+                val pickingHeader = choosingImage && onSetHeaderImage != null
                 // "Zimmerfotos wählen": tick all room photos at once instead of a dialog per photo.
                 var picking by remember(id) { mutableStateOf<Set<String>?>(null) }
                 val chosen = picking
-                if (onSetPhotoLabel != null && stayPhotos.isNotEmpty()) {
+                if (pickingHeader) {
+                    de.wanderlogplus.app.ui.attachments.HeaderPickBar(
+                        onDefault = stay.headerImage?.let { { onSetHeaderImage?.invoke(EntityType.STAY, id, null); choosingImage = false; stayTab = tabBeforePick } },
+                        onCancel = { choosingImage = false; stayTab = tabBeforePick },
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                } else if (onSetPhotoLabel != null && stayPhotos.isNotEmpty()) {
                     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         if (chosen == null) {
                             Box(Modifier.weight(1f))
@@ -348,14 +332,26 @@ fun LogisticsDetailScreen(
                         }
                     }
                 }
-                de.wanderlogplus.app.ui.attachments.PhotoGrid(
-                    stayPhotos, attachments.files,
-                    onAdd = if (chosen == null) attachments.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } } else null,
+                de.wanderlogplus.app.ui.attachments.GalleryGrid(
+                    gallery, photos.google, attachments?.files,
+                    onAdd = if (chosen == null && !pickingHeader) attachments?.onAddPhotos?.let { add -> { add(EntityType.STAY, id) } } else null,
                     onOpen = { i ->
-                        val p = stayPhotos.getOrNull(i)
-                        if (chosen != null && p != null) picking = if (p.id in chosen) chosen - p.id else chosen + p.id else onOpenPhoto?.invoke(i)
+                        val p = gallery.photos.getOrNull(i)
+                        when {
+                            p == null -> Unit
+                            chosen != null -> if (p is de.wanderlogplus.app.ui.attachments.GalleryPhoto.Own) {
+                                picking = if (p.photo.id in chosen) chosen - p.photo.id else chosen + p.photo.id
+                            }
+                            pickingHeader -> {
+                                de.wanderlogplus.app.ui.attachments.pickHeader(p, EntityType.STAY, id, gallery, photoRepo, attachments) { ref -> onSetHeaderImage?.invoke(EntityType.STAY, id, ref) }
+                                choosingImage = false; stayTab = tabBeforePick
+                            }
+                            else -> onOpenPhoto?.invoke(i)
+                        }
                     },
                     selected = chosen,
+                    highlightHeader = !pickingHeader,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
 

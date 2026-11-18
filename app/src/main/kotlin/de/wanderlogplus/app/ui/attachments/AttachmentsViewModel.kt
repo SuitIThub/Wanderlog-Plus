@@ -12,6 +12,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.InputStream
 
 /** What the user picked: name, type and a stream, resolved lazily on IO. */
@@ -29,6 +31,7 @@ sealed interface AttachmentTarget {
 const val MSG_TOO_LARGE = "Datei zu groß (max. 25 MB)"
 const val MSG_ADD_FAILED = "Anhang konnte nicht hinzugefügt werden"
 const val MSG_DELETE_FAILED = "Anhang konnte nicht gelöscht werden"
+const val MSG_SAVE_FAILED = "Änderung konnte nicht gespeichert werden"
 
 class AttachmentsViewModel(
     private val edit: EditFn,
@@ -92,6 +95,39 @@ class AttachmentsViewModel(
             else -> "$ok von ${sources.size} Fotos hinzugefügt"
         }
         if (ids.isNotEmpty()) onAdded(ids)
+    }
+
+    /** Header of a place or stay: a photo reference ("att:", "wl:", "g:") or null for the default. */
+    fun setHeader(type: EntityType, id: String, ref: String?): Job = write { e, _ ->
+        e.set(type, id, mapOf("headerImage" to (ref?.let { JsonPrimitive(it) } ?: JsonNull)))
+    }
+
+    /** What a photo shows (e.g. [Attachment.LABEL_ROOM]); null removes the mark. */
+    fun setLabel(attachmentId: String, label: String?): Job = write { e, _ ->
+        e.set(EntityType.ATTACHMENT, attachmentId, mapOf("label" to (label?.let { JsonPrimitive(it) } ?: JsonNull)))
+    }
+
+    /**
+     * Stores a borrowed photo ([source]) as own photo of [type]/[id] and remembers where it came from ([origin]), so the
+     * borrowed original is not shown beside it; [asHeader] also makes it the header.
+     */
+    fun adopt(type: EntityType, id: String, source: AttachmentSource, origin: String, asHeader: Boolean): Job =
+        addPhotos(AttachmentTarget.Entity(type, id), listOf(source)) { ids ->
+            val added = ids.firstOrNull() ?: return@addPhotos
+            edit { e, s ->
+                e.set(EntityType.ATTACHMENT, added, mapOf("origin" to JsonPrimitive(origin)))
+                if (asHeader) headerFromAttachmentEdits(type, id, added)(e, s)
+            }
+        }
+
+    private fun write(block: (de.wanderlogplus.client.LocalEditor, de.wanderlogplus.client.TripSnapshot) -> Unit): Job = writeScope.launch {
+        try {
+            edit(block)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _message.value = MSG_SAVE_FAILED
+        }
     }
 
     fun delete(a: Attachment): Job = writeScope.launch {
