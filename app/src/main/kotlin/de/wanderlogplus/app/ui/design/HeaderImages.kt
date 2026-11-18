@@ -24,8 +24,9 @@ object HeaderImages {
     }
 }
 
-/** The header of a saved place: its own image, else the place's first image. */
-fun SavedPlace?.heroImage(place: Place?): String? = HeaderImages.url(this?.headerImage) ?: place?.heroImageUrl()
+/** The header of a saved place: its own image, else the place's first image, else its first own photo ([firstPhoto]). */
+fun SavedPlace?.heroImage(place: Place?, firstPhoto: de.wanderlogplus.shared.model.Attachment? = null): String? =
+    HeaderImages.url(this?.headerImage) ?: place?.heroImageUrl() ?: firstPhoto?.let { HeaderImages.url(HeaderImages.OWN + it.fileHash) }
 
 /** The header of a stay: its own image, else a photo marked as room photo, else the hotel's first image. */
 fun Stay?.heroImage(place: Place?, roomPhoto: de.wanderlogplus.shared.model.Attachment? = null): String? =

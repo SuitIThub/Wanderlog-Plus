@@ -3,6 +3,20 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.84.0
+
+- **Eine Fotosammlung pro Ort und Unterkunft:** Eigene Fotos, Bilder aus der Online-Suche, Wanderlog-Bilder und Google-Fotos stehen jetzt in einem gemeinsamen Raster. Ein kleines Abzeichen zeigt bei Wanderlog- und Google-Fotos, woher sie kommen. „Mehr von Google“ ist die letzte Kachel im Raster und lädt weiterhin erst auf Tippen.
+- **Gleich bei Ort und Unterkunft:** In der Übersicht zeigt ein Foto-Streifen die ersten Bilder, mit „Alle“ geht es zum Fotos-Tab. Ein Tippen auf das Titelbild öffnet die Fotos im Vollbild.
+- **Ein Vollbild-Viewer für alle Fotos** mit diesen Aktionen:
+  - **Als Titelbild:** für jedes Foto.
+  - **Behalten:** übernimmt ein Google-Foto als eigenes Foto. Es wird dann synchronisiert, ist offline verfügbar und trägt den Urheber im Namen.
+  - **Zimmerfoto:** nur bei Unterkünften.
+  - **Löschen.**
+  
+  Ein übernommenes Google-Foto erscheint nicht doppelt.
+- **Titelbild aus der Sammlung:** „Titelbild ändern“ öffnet keine eigene Auswahl mehr. Stattdessen tippst du das neue Titelbild direkt in den Fotos an, „Standardbild“ setzt es zurück. Wählst du ein Google-Foto, wird es dabei automatisch übernommen.
+- Ein Ort ohne Wanderlog-Bild zeigt im Kopf jetzt sein erstes eigenes Foto.
+
 ## 0.83.0
 
 - **Update-Hinweis beim Öffnen:** Die App schaut jetzt jedes Mal nach einer neuen Version, wenn du sie öffnest – auch wenn sie nur aus dem Hintergrund zurückkommt (höchstens alle 15 Minuten). Bisher geschah das nur beim Kaltstart und dann 6 Stunden lang nicht mehr, sodass neue Versionen oft erst über „Nach Updates suchen“ auftauchten. Eine übersprungene Version meldet sie weiterhin nicht.

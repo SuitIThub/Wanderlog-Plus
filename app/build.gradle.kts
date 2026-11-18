@@ -17,8 +17,8 @@ android {
         applicationId = "de.wanderlogplus.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 104
-        versionName = "0.83.0"
+        versionCode = 105
+        versionName = "0.84.0"
         // MapLibre ships ~10 MB of native code per ABI; both target phones are arm64 (no emulator in use).
         ndk { abiFilters += listOf("arm64-v8a") }
     }

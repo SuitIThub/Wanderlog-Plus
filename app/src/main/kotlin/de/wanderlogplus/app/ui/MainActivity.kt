@@ -231,6 +231,7 @@ class MainActivity : ComponentActivity() {
                     LocalMapsEnabled provides true, LocalRouteMapRenderer provides routeMaps, LocalLegRepository provides container.legs,
                     de.wanderlogplus.app.ui.weather.LocalTripWeather provides tripWeather,
                     de.wanderlogplus.app.ui.places.LocalPlacePhotos provides container.placePhotos,
+                    de.wanderlogplus.app.ui.attachments.LocalAttachmentFiles provides container.attachmentFiles,
                     de.wanderlogplus.app.ui.logistics.LocalFlightLive provides flightLive,
                     de.wanderlogplus.app.ui.logistics.LocalTrainLive provides trainLive,
                 ) {

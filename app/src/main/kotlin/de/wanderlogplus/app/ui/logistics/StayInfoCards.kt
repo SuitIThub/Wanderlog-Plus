@@ -78,7 +78,10 @@ fun StayInfoCards(
                     if (room.type.isNotBlank()) Text(room.type, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (room.description.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(room.description), style = MaterialTheme.typography.bodyMedium)
                     if (roomPhotos.isNotEmpty()) {
-                        de.wanderlogplus.app.ui.attachments.PhotoGrid(roomPhotos, files, onAdd = null, onOpen = onOpenPhoto)
+                        de.wanderlogplus.app.ui.attachments.GalleryGrid(
+                            de.wanderlogplus.app.ui.attachments.Gallery(roomPhotos.map { de.wanderlogplus.app.ui.attachments.GalleryPhoto.Own(it) }, null, null, ""),
+                            google = null, files = files, onAdd = null, onOpen = onOpenPhoto,
+                        )
                     }
                 }
             }

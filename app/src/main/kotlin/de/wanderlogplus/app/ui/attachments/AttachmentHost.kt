@@ -156,6 +156,9 @@ fun rememberAttachmentActions(
             onSearchPhotos = if (online) { target, single, onAdded ->
                 photoRequest = PhotoRequest(target, queryForState.value(target), single = single, onlineOnly = true, onAdded = onAdded)
             } else null,
+            onSetHeader = { type, id, ref -> vm.setHeader(type, id, ref) },
+            onSetLabel = { id, label -> vm.setLabel(id, label) },
+            onAdopt = { type, id, source, origin, asHeader -> vm.adopt(type, id, source, origin, asHeader) },
         )
     }
 }

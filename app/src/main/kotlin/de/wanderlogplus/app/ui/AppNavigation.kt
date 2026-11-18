@@ -484,7 +484,6 @@ fun AppNavigation(
                 research = if (vm.canAssess) de.wanderlogplus.app.ui.places.ResearchAction(id in researching, { vm.research(listOf(id)) }, showProgress) else null,
                 onOpenMap = { nav.navigate(de.wanderlogplus.app.ui.places.placeMapRoute(id)) },
                 onOpenPhoto = attachmentFiles?.let { { t: EntityType, tid: String, i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(t, tid, i)) } },
-                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
                 onTabelogRequest = vm::tabelogRequest,
@@ -530,7 +529,6 @@ fun AppNavigation(
                 onSetPhotoLabel = vm::setPhotoLabel,
                 onOpenPhoto = if (type == EntityType.STAY) ({ i: Int -> nav.navigate(de.wanderlogplus.app.ui.attachments.photosRoute(EntityType.STAY, id, i)) }) else null,
                 stayResearchJob = stayResearchJob,
-                onSetHeaderFromAttachment = vm::setHeaderFromAttachment,
                 googleSearch = googleSearch,
                 onLinkGoogle = vm::linkGoogle,
                 onOpenMap = type?.takeIf { it == EntityType.TRAIN || it == EntityType.FLIGHT }?.let { t ->
@@ -1409,12 +1407,12 @@ fun AppNavigation(
                     val type = entry.arguments?.getString("type")?.let { t -> EntityType.entries.firstOrNull { it.name == t } }
                     val targetId = entry.arguments?.getString("targetId").orEmpty()
                     val index = entry.arguments?.getString("index")?.toIntOrNull() ?: 0
-                    val photos = remember(snapshot, type, targetId) { type?.let { snapshot?.photosFor(it, targetId) }.orEmpty() }
-                    de.wanderlogplus.app.ui.attachments.PhotoViewerScreen(
-                        photos, index, attachmentFiles,
-                        onDelete = attachmentActions?.onDelete,
-                        onBack = { nav.popBackStack() },
-                    )
+                    snapshot?.let { snap ->
+                        de.wanderlogplus.app.ui.attachments.GalleryViewerRoute(
+                            snap, type, targetId, index, attachmentFiles, attachmentActions,
+                            onBack = { nav.popBackStack() },
+                        )
+                    }
                 }
                 composable(ATTACHMENT_ROUTE) { entry ->
                     val id = entry.arguments?.getString("attachmentId").orEmpty()

@@ -104,7 +104,7 @@ class PhotoGalleryTest {
                 PlaceDetailScreen(snap(), "s-tempel", onBack = {}, onSaveNote = { _, _ -> }, onSetStatus = { _, _ -> }, attachments = actions, onOpenPhoto = { t, id, i -> opened = Triple(t, id, i) })
             }
         }
-        rule.onNodeWithText("Fotos (2)").performSemanticsAction(SemanticsActions.OnClick)
+        rule.onNodeWithText("Fotos (3)").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("photo-add").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(EntityType.SAVED_PLACE to "s-tempel", add)
         rule.onNodeWithTag("photo-1").performSemanticsAction(SemanticsActions.OnClick)
@@ -130,7 +130,10 @@ class PhotoGalleryTest {
         var deleted: Attachment? = null
         rule.setContent {
             WanderlogPlusTheme {
-                PhotoViewerScreen(listOf(photo, photo.copy(id = "a-3")), start = 1, files = null, onDelete = { deleted = it }, onBack = {})
+                GalleryViewerScreen(
+                    Gallery(listOf(GalleryPhoto.Own(photo), GalleryPhoto.Own(photo.copy(id = "a-3"))), null, null, ""), start = 1, files = null,
+                    actions = GalleryViewerActions(onDelete = { deleted = it }), onBack = {},
+                )
             }
         }
         rule.onNodeWithText("2 / 2").assertExists()
