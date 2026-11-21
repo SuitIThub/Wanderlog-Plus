@@ -1,6 +1,7 @@
 package de.wanderlogplus.server.ai
 
 import de.wanderlogplus.shared.guide.GuideMatch
+import de.wanderlogplus.shared.guide.GuideStatements
 import de.wanderlogplus.shared.guide.GuideTopics
 import de.wanderlogplus.shared.guide.GuideWorld
 import de.wanderlogplus.shared.model.Guide
@@ -28,8 +29,9 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
     /**
      * A complete guide (the id of [existing], else a new one), or [AiFailed]. Pins, hides and the topic of [existing]
      * stay. With [GuideAsk.additions] and an [existing] guide, the checked additions are worked in without new research.
+     * [onFacts] gets the topic research (for the fact check afterwards).
      */
-    fun write(ask: GuideAsk, tripContext: String, existing: Guide?, say: (String) -> Unit = {}): Guide {
+    fun write(ask: GuideAsk, tripContext: String, existing: Guide?, say: (String) -> Unit = {}, onFacts: (Facts?) -> Unit = {}): Guide {
         if (existing != null && ask.additions.isNotEmpty()) return merge(ask, existing, say)
         val topic = ask.topic ?: existing?.topic
         val name = GuideTopics.byKey(topic)?.name ?: ask.title.ifBlank { existing?.title.orEmpty() }
@@ -45,10 +47,12 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
                 say,
             ) ?: throw AiFailed("research_empty")
         }
+        onFacts(found)
         say("Guide wird geschrieben …")
         val system = """
             Du schreibst für eine Reise-App einen allgemeinen Guide für Reisende in Japan: knapp, praktisch, auf Deutsch, das Wichtigste zuerst.
             Behaupte nichts, was nicht in den Fakten oder den geprüften Ergänzungen steht, außer allgemein Bekanntem (Grußformeln, einfache Sätze).
+            $TRUTH_RULE
             Sätze zum Zeigen: kurz, höflich, Japanisch in Kana/Kanji, Lautschrift in Romaji.
             $FORMAT_RULES
             Antworte nur mit JSON: {"title": "…", "summary": "Zeile 1\nZeile 2\nZeile 3",
@@ -116,14 +120,14 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
         }
         val o = completeJson(model, system, user, GERMAN_PLEASE) { complete(it) && keepsContent(existing, parsed(it)) }
         val p = parsed(o)
-        return existing.copy(
+        return GuideStatements.pruneNotes(existing.copy(
             title = p.title,
             summary = p.summary,
             sections = p.sections,
             phrases = p.phrases,
             sources = (existing.sources + ask.additions.flatMap { it.sources }).distinct(),
             links = checkedLinks(o, existing, say),
-        )
+        ))
     }
 
     /**
@@ -147,7 +151,7 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
         )
         val o = completeJson(model, system, user, GERMAN_PLEASE) { tidyKeeps(existing, parsed(it)) }
         val p = parsed(o)
-        return existing.copy(title = p.title.ifBlank { existing.title }, summary = p.summary, sections = p.sections, phrases = p.phrases)
+        return GuideStatements.pruneNotes(existing.copy(title = p.title.ifBlank { existing.title }, summary = p.summary, sections = p.sections, phrases = p.phrases))
     }
 
     /** The apps and pages [g] mentions, checked; empty without a [LinkCheck]. */
@@ -210,6 +214,13 @@ class GuideWriter(private val facts: FactSource?, private val model: ChatModel, 
             „Shinkansen & Suica: Tokyo – Nagoya – Shin-Osaka – Hiroshima“ oder „Yakiniku & Grill“ statt „Yakiniku & Grill in Japan“.
             Die Beispiele zeigen nur, was wegfällt; „A & B“ ist kein Muster. Titel haben ganz verschiedene Formen, etwa
             „Trinkgeld“, „Onsen-Etikette“, „Bezahlen mit Karte“ oder „Nachtzüge“. Ein Titel ist so lang, wie das Thema es braucht.
+        """.trimIndent()
+
+        /** What a guide may claim: no sweeping rules, no myths; when in doubt, leave it out. */
+        internal val TRUTH_RULE = """
+            Nur Belegtes und allgemein Gültiges. Keine Pauschalregeln aus Touristen-Blogs: gilt etwas nur an bestimmten Orten,
+            zu bestimmten Zeiten oder nur, wo ein Schild es verlangt, schreib das so oder lass es weg. Kein „immer“, „nie“,
+            „verboten“, wo es nur eine Gewohnheit ist. Im Zweifel weglassen statt behaupten.
         """.trimIndent()
 
         /** Shape of a guide: glance, short core per section, background folded away as details. */

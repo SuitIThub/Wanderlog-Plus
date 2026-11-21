@@ -3,6 +3,14 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.85.0
+
+- **Guides werden auf Richtigkeit geprüft:** Jeder neue oder überarbeitete Guide wird nach dem Schreiben kritisch gegengelesen. Pauschalregeln, Übertreibungen, veraltete Angaben und verbreitete Touristen-Mythen werden gezielt recherchiert und dann korrigiert, gestrichen oder vorsichtiger formuliert. Das passiert automatisch, damit in einem Guide möglichst nichts Falsches steht.
+- **⚠ bei Unklarem:** Bleibt eine Aussage unklar, etwa weil sich die Quellen widersprechen, steht dahinter ein kleines Warnsymbol. Tippst du darauf, erscheint der Grund.
+- **Nachträglich prüfen:** Im Dreipunkte-Menü der Guide-Übersicht gibt es „Alle prüfen“ und „Alle gründlich prüfen“, im Menü eines Guides „Prüfen“ und „Gründlich prüfen“. Der Chat kann das ebenfalls („Prüf mal den Onsen-Guide“). Die normale Prüfung recherchiert nur die zweifelhaften Aussagen, die gründliche jede einzelne.
+- **Korrekturübersicht:** Wie beim Reel-Tipp-Import siehst du die neue Fassung, die alte, die Begründung und die Quellen. Mit „Zurücknehmen“ kannst du eine einzelne Änderung rückgängig machen. Du erreichst die Übersicht über „Letzte Prüfung“ in der Guide-Übersicht, das Dreipunkte-Menü und „Geprüft: …“ am Ende eines Guides.
+- **Weniger Recherchekosten:** Eine Recherche prüft bis zu acht Aussagen auf einmal.
+
 ## 0.84.0
 
 - **Eine Fotosammlung pro Ort und Unterkunft:** Eigene Fotos, Bilder aus der Online-Suche, Wanderlog-Bilder und Google-Fotos stehen jetzt in einem gemeinsamen Raster. Ein kleines Abzeichen zeigt bei Wanderlog- und Google-Fotos, woher sie kommen. „Mehr von Google“ ist die letzte Kachel im Raster und lädt weiterhin erst auf Tippen.

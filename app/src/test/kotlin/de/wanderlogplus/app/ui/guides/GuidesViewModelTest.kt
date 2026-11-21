@@ -142,4 +142,40 @@ class GuidesViewModelTest {
         vm.tidy(emptyList())
         assertEquals("Guides lassen sich gerade nicht straffen (Server nicht erreichbar?).", vm.message.value)
     }
+
+    @Test
+    fun revertBringsTheOldWordingBackAndListsTheCorrectionAsTakenBack() {
+        val corrected = Guide(
+            "g1", title = "Kleinigkeiten",
+            sections = listOf(de.wanderlogplus.shared.model.GuideSection("Essen", donts = listOf("Wo ein Schild es verlangt, nicht im Gehen essen"))),
+            notes = listOf(de.wanderlogplus.shared.model.GuideNote("Wo ein Schild es verlangt, nicht im Gehen essen", "uneins")),
+        )
+        seedGuide(corrected)
+        val c = de.wanderlogplus.shared.sync.GuideCorrection(
+            "g1", kind = de.wanderlogplus.shared.model.StatementKind.DONT, heading = "Essen", before = "Nie im Gehen essen",
+            after = "Wo ein Schild es verlangt, nicht im Gehen essen", verdict = de.wanderlogplus.shared.sync.TipVerdict.PARTLY, note = "uneins",
+        )
+        val job = AiJobInfo("j1", "guides", 1, "DONE", source = "check", corrections = listOf(c, c))
+        assertEquals(listOf(c), GuideCorrections.of(listOf(job), "g1"))
+        assertEquals("1 Korrektur", GuideCorrections.summary(listOf(c)))
+        assertTrue(GuideCorrections.isCheck(job))
+        vm.revert(c)
+        val back = snapshot().guides.single()
+        assertEquals(listOf("Nie im Gehen essen"), back.sections.single().donts)
+        assertEquals(emptyList<de.wanderlogplus.shared.model.GuideNote>(), back.notes)
+        assertEquals(de.wanderlogplus.shared.guide.CorrectionState.REVERTED, de.wanderlogplus.shared.guide.GuideStatements.stateOf(back, c))
+    }
+
+    @Test
+    fun checkStartsTheJob() {
+        val checks = mutableListOf<Pair<List<String>, Boolean>>()
+        val v = GuidesViewModel(
+            // The server lists the started check as done right away, so following it ends.
+            edit, CoroutineScope(Dispatchers.Unconfined), startGuides = { null }, recentJobs = { listOf(AiJobInfo("c1", "guides", 0, "DONE", source = "check")) }, pollMs = 0,
+            startGuideCheck = { ids, thorough -> checks += ids to thorough; AiJobInfo("c1", "guides", 0, "QUEUED", source = "check") },
+        )
+        v.check(listOf("g1"), thorough = true)
+        assertEquals(listOf(listOf("g1") to true), checks)
+        assertEquals("Guide wird gründlich geprüft …", v.message.value)
+    }
 }

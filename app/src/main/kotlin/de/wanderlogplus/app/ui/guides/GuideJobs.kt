@@ -87,15 +87,15 @@ fun GuideJobBanner(state: GuideJobState) {
     when (state) {
         is GuideJobState.Running -> SurfaceCard(Modifier.testTag("guide-job-running")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Wird gerade überarbeitet …", fontWeight = FontWeight.SemiBold)
+                Text(if (GuideCorrections.isCheck(state.job)) "Wird gerade geprüft …" else "Wird gerade überarbeitet …", fontWeight = FontWeight.SemiBold)
                 LinearProgressIndicator(progress = { if (state.job.total == 0) 0f else state.job.progress / state.job.total.toFloat() }, Modifier.fillMaxWidth())
                 state.job.steps.lastOrNull()?.let { Text(it.text, style = MaterialTheme.typography.bodySmall) }
-                Text("Der neue Text erscheint hier, sobald er fertig ist.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (GuideCorrections.isCheck(state.job)) "Korrekturen erscheinen hier, sobald die Prüfung fertig ist." else "Der neue Text erscheint hier, sobald er fertig ist.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         is GuideJobState.Failed -> SurfaceCard(Modifier.testTag("guide-job-failed")) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Überarbeitung fehlgeschlagen", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                Text(if (GuideCorrections.isCheck(state.job)) "Prüfung fehlgeschlagen" else "Überarbeitung fehlgeschlagen", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
                 Text(state.detail + ". Der bisherige Text ist unverändert.", style = MaterialTheme.typography.bodySmall)
             }
         }

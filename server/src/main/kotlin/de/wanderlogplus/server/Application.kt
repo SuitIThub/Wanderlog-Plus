@@ -437,6 +437,12 @@ fun Application.module(services: Services) {
                 if (bad) throw BadInput()
                 call.respond(withContext(Dispatchers.IO) { services.ai.startPlaceFacts(req.items) })
             }
+            post("/api/ai/guide-check") {
+                if (!services.ai.guideCheckConfigured) throw AiNotConfigured()
+                val req = call.receive<de.wanderlogplus.shared.sync.GuideCheckRequest>()
+                if (req.guideIds.size > 200) throw BadInput()
+                call.respond(withContext(Dispatchers.IO) { services.ai.startGuideCheck(req.guideIds.distinct(), req.thorough) })
+            }
             post("/api/ai/guide-tidy") {
                 if (!services.ai.guidesConfigured) throw AiNotConfigured()
                 val req = call.receive<de.wanderlogplus.shared.sync.GuideTidyRequest>()

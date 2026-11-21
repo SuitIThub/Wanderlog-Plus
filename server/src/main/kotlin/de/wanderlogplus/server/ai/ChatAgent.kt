@@ -37,6 +37,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -803,6 +804,17 @@ class ChatTools(
                     putJsonObject("wish") { put("type", "string"); put("description", "was ergänzt oder geändert werden soll") }
                 },
             )
+            add(
+                tool(
+                    "check_guides",
+                    "Lässt Guides auf Richtigkeit prüfen und korrigieren (Hintergrundauftrag mit Recherche): Pauschales, Übertriebenes, Veraltetes " +
+                        "wird korrigiert oder gestrichen, Unklares bekommt einen Hinweis. Ohne guideIds alle Guides. thorough prüft jede Aussage " +
+                        "statt nur der zweifelhaften (teurer, nur auf ausdrücklichen Wunsch).",
+                ) {
+                    putJsonObject("guideIds") { put("type", "array"); putJsonObject("items") { put("type", "string") } }
+                    putJsonObject("thorough") { put("type", "boolean") }
+                },
+            )
             fun target(name: String, description: String) = tool(name, description) {
                 putJsonObject("guideId") { put("type", "string") }
                 putJsonObject("targetType") { put("type", "string"); putJsonArray("enum") { GuideTargetType.entries.forEach { add(JsonPrimitive(it.name)) } } }
@@ -854,6 +866,7 @@ class ChatTools(
             "list_guides" -> guides?.let { ChatContextText.guides(guideList) } ?: "Unbekanntes Werkzeug."
             "create_guide" -> guides?.let { createGuide(args, it) } ?: "Unbekanntes Werkzeug."
             "update_guide" -> guides?.let { updateGuide(args, it) } ?: "Unbekanntes Werkzeug."
+            "check_guides" -> guides?.let { checkGuides(args, it) } ?: "Unbekanntes Werkzeug."
             "assign_guide" -> guides?.let { placeGuide(args, it, pin = true) } ?: "Unbekanntes Werkzeug."
             "unassign_guide" -> guides?.let { placeGuide(args, it, pin = false) } ?: "Unbekanntes Werkzeug."
             "set_guide_triggers" -> guides?.let { setTriggers(args, it) } ?: "Unbekanntes Werkzeug."
@@ -889,6 +902,24 @@ class ChatTools(
         val job = port.start(listOf(de.wanderlogplus.shared.sync.GuideAsk(g.topic, g.title, g.parentId, args.s("wish").orEmpty(), g.id)))
         guideCard(g.title, g.id, job.id, rewrite = true)
         return "Auftrag ${job.id} gestartet: „${g.title}“ wird überarbeitet. Das dauert einige Minuten."
+    }
+
+    private fun checkGuides(args: JsonObject, port: ChatGuides): String {
+        val asked = (args["guideIds"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.content?.trim()?.takeIf { s -> s.isNotEmpty() } }
+        val known = guideList.associateBy { it.id }
+        val unknown = asked.filter { it !in known }
+        if (unknown.isNotEmpty()) return "Unbekannte Guides: " + unknown.joinToString(", ")
+        if (guideList.isEmpty()) return "Es gibt noch keine Guides."
+        val thorough = (args["thorough"] as? JsonPrimitive)?.booleanOrNull == true
+        say("Starte Prüfung …")
+        val job = port.check(asked.distinct(), thorough)
+        val targets = if (asked.isEmpty()) guideList else asked.distinct().mapNotNull(known::get)
+        cards += ChatCard(
+            ChatCard.KIND_GUIDE, if (targets.size == 1) targets.single().title else "${targets.size} Guides",
+            subtitle = if (thorough) "Wird gründlich geprüft" else "Wird geprüft", guideId = targets.singleOrNull()?.id, jobId = job.id,
+        )
+        return "Auftrag ${job.id} gestartet: " + (if (targets.size == 1) "„${targets.single().title}“ wird" else "${targets.size} Guides werden") +
+            (if (thorough) " gründlich" else "") + " geprüft. Korrekturen werden direkt eingearbeitet; die App zeigt sie in der Guide-Übersicht."
     }
 
     /** A card under the answer that follows the guide job in the app. */
@@ -1374,6 +1405,9 @@ interface ChatGuides {
     /** Saves the change from [before] to [after]; only the fields that differ are written ([guideChanges]). */
     fun saveGuide(before: de.wanderlogplus.shared.model.Guide, after: de.wanderlogplus.shared.model.Guide)
     fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>): de.wanderlogplus.shared.sync.AiJobInfo
+
+    /** Starts the fact check of [guideIds] (empty = all); [thorough] researches every statement. */
+    fun check(guideIds: List<String>, thorough: Boolean): de.wanderlogplus.shared.sync.AiJobInfo
 }
 
 /** The fields that differ between two versions of a guide, so a pin never rewrites (and reverts) the text. */
