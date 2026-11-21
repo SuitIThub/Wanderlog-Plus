@@ -3,6 +3,11 @@
 Jede Version bekommt hier einen Abschnitt `## <versionName>`. Die GitHub-Action übernimmt ihn als Release-Text, und die
 App zeigt ihn beim Update an. Fehlt der Abschnitt, stehen dort die Commit-Titel seit dem letzten Release.
 
+## 0.86.0
+
+- **Updates kommen über den Browser:** „Herunterladen“ im Update-Dialog öffnet die neue Version im Browser. Nach dem Download tippst du auf die Benachrichtigung und installierst wie gewohnt. Die App installiert selbst nichts mehr und braucht deshalb keine Berechtigung mehr, andere Apps zu installieren. Diese Berechtigung war ein Grund, warum Google Play Protect die App als potenziell schädlich markiert hat. Beim ersten Mal fragt Android, ob der Browser Apps installieren darf.
+- Früher heruntergeladene Update-Dateien werden beim Start gelöscht.
+
 ## 0.85.0
 
 - **Guides werden auf Richtigkeit geprüft:** Jeder neue oder überarbeitete Guide wird nach dem Schreiben kritisch gegengelesen. Pauschalregeln, Übertreibungen, veraltete Angaben und verbreitete Touristen-Mythen werden gezielt recherchiert und dann korrigiert, gestrichen oder vorsichtiger formuliert. Das passiert automatisch, damit in einem Guide möglichst nichts Falsches steht.

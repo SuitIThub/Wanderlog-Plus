@@ -135,6 +135,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val container = (application as WanderlogPlusApp).container
+        // Updates once downloaded by the app itself (up to 0.85.0) are no longer needed: the browser downloads them now.
+        if (savedInstanceState == null) Thread { java.io.File(cacheDir, "updates").deleteRecursively() }.start()
         if (savedInstanceState == null) {
             handleSetupIntent(intent)
             handleReelIntent(intent)
@@ -190,19 +192,9 @@ class MainActivity : ComponentActivity() {
                 val routeMaps = remember { RouteMapRenderer(applicationContext) }
                 val updates: de.wanderlogplus.app.update.UpdateViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = remember { updatesFactory(container) })
                 val updateState by updates.state.collectAsState()
-                var waitingInstall by remember { mutableStateOf<java.io.File?>(null) }
                 // Every time the app comes to the front (start or back from the background), not only at a cold start.
                 androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
                     updates.checkAuto()
-                    onPauseOrDispose { }
-                }
-                // Back from "Installieren aus dieser Quelle erlauben": continue with the install.
-                androidx.lifecycle.compose.LifecycleResumeEffect(waitingInstall) {
-                    val apk = waitingInstall
-                    if (apk != null && packageManager.canRequestPackageInstalls()) {
-                        waitingInstall = null
-                        de.wanderlogplus.app.update.installApk(this@MainActivity, apk)
-                    }
                     onPauseOrDispose { }
                 }
                 val tripWeather by container.weather.weather.collectAsState()
@@ -299,14 +291,17 @@ class MainActivity : ComponentActivity() {
                         state = updateState,
                         currentVersion = updates.version,
                         debugBuild = isDebugBuild,
-                        onUpdate = updates::download,
+                        onUpdate = { release ->
+                            updates.dismiss()
+                            // The browser downloads the APK and offers it to Android's installer; the app installs nothing itself.
+                            try {
+                                startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(release.apkUrl)))
+                            } catch (e: android.content.ActivityNotFoundException) {
+                                android.widget.Toast.makeText(this@MainActivity, "Kein Browser zum Herunterladen gefunden.", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                        },
                         onLater = updates::later,
                         onSkip = updates::skip,
-                        onCancelDownload = updates::cancelDownload,
-                        onInstall = { ready ->
-                            updates.dismiss()
-                            if (!de.wanderlogplus.app.update.installApk(this@MainActivity, ready.apk)) waitingInstall = ready.apk
-                        },
                         onDismiss = updates::dismiss,
                     )
                 }
@@ -323,7 +318,6 @@ class MainActivity : ComponentActivity() {
             source = de.wanderlogplus.app.update.ReleaseSource(container.http),
             currentVersion = packageManager.getPackageInfo(packageName, 0).versionName ?: "0",
             prefs = PrefsUpdatePrefs(applicationContext),
-            downloadDir = java.io.File(cacheDir, "updates"),
             autoCheck = !isDebugBuild,
         ) as T
     }

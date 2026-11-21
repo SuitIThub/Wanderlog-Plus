@@ -15,7 +15,6 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -53,7 +52,7 @@ class AppUpdatesTest {
     private class MemPrefs(override var lastCheckAt: Long = 0, override var skippedVersion: String? = null) : UpdatePrefs
 
     private fun vm(src: ReleaseSource = source(), prefs: UpdatePrefs = MemPrefs(), current: String = "0.13.4", auto: Boolean = true, now: Long = 10_000_000_000) =
-        UpdateViewModel(src, current, prefs, tmp.newFolder(), autoCheck = auto, now = { now })
+        UpdateViewModel(src, current, prefs, autoCheck = auto, now = { now })
 
     private fun waitFor(vm: UpdateViewModel, cond: (UpdateState) -> Boolean): UpdateState {
         val end = System.currentTimeMillis() + 5_000
@@ -125,32 +124,20 @@ class AppUpdatesTest {
         assertTrue(waitFor(asked) { it !is UpdateState.Checking } is UpdateState.Available)
     }
 
-    @Test fun downloadChecksSizeAndDigest() = runBlocking {
-        val target = tmp.root.resolve("u/app.apk")
-        val progress = mutableListOf<Long>()
-        val r = source().parse(releaseJson())!!
-        source().download(r, target) { done, _ -> progress += done }
-        assertEquals(apkBytes.size.toLong(), target.length())
-        assertEquals(apkBytes.size.toLong(), progress.last())
-
-        val tampered = source(apk = apkBytes.copyOf().also { it[0] = 99 })
-        val failed = runCatching { tampered.download(r, tmp.root.resolve("u/bad.apk")) { _, _ -> } }
-        assertTrue(failed.isFailure)
-        assertFalse(tmp.root.resolve("u/bad.apk").exists())
-    }
-
     @Test fun dialogShowsChangelogAndStartsTheUpdate() {
         val r = source().parse(releaseJson())!!
         var updated: AppRelease? = null
         var skipped: AppRelease? = null
         rule.setContent {
             WanderlogPlusTheme {
-                UpdateDialog(UpdateState.Available(r), "0.13.4", debugBuild = false, onUpdate = { updated = it }, onLater = {}, onSkip = { skipped = it }, onCancelDownload = {}, onInstall = {}, onDismiss = {})
+                UpdateDialog(UpdateState.Available(r), "0.13.4", debugBuild = false, onUpdate = { updated = it }, onLater = {}, onSkip = { skipped = it }, onDismiss = {})
             }
         }
         rule.onNodeWithText("Update auf 0.14.0").assertExists()
         rule.onNodeWithText("Installiert: 0.13.4 · Download 0,2 MB").assertExists()
         rule.onNodeWithText("Neu: Ablauf", substring = true).assertExists()
+        rule.onNodeWithText("Herunterladen").assertExists()
+        rule.onNodeWithText("Download-Benachrichtigung", substring = true).assertExists()
         rule.onNodeWithTag("update-skip").performSemanticsAction(SemanticsActions.OnClick)
         rule.onNodeWithTag("update-install").performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(r, updated)
