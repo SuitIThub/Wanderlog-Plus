@@ -356,6 +356,7 @@ class MainActivity : ComponentActivity() {
             syncNow = container.syncScheduler::requestNow,
             startGuideLinks = { container.syncApi()?.startGuideLinks() },
             startGuideTidy = { ids -> container.syncApi()?.startGuideTidy(ids) },
+            startGuideCheck = { ids, thorough -> container.syncApi()?.startGuideCheck(ids, thorough) },
         ) as T
     }
 

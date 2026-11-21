@@ -97,6 +97,9 @@ fun main() {
         guideWriter = textModel?.let { text ->
             GuideWriter(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text, de.wanderlogplus.server.ai.LinkCheck())
         },
+        guideCheck = textModel?.let { text ->
+            de.wanderlogplus.server.ai.GuideCheck(config.parallelKey?.let { ParallelFacts(HttpParallelTransport(it), config.parallelProcessor) } ?: ModelFacts(text), text)
+        },
     )
     // The chat saves guide pins and rules right away and writes guides through the guides job.
     val chatGuides = object : de.wanderlogplus.server.ai.ChatGuides {
@@ -105,6 +108,7 @@ fun main() {
             if (changed.isNotEmpty()) sync.writeAsServer(ASSISTANT_AUTHOR, listOf(ServerEdit(de.wanderlogplus.shared.sync.EntityType.GUIDE, after.id, changed)))
         }
         override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) = aiJobs.startGuides(asks)
+        override fun check(guideIds: List<String>, thorough: Boolean) = aiJobs.startGuideCheck(guideIds, thorough)
     }.takeIf { aiJobs.guidesConfigured }
     val services = Services(
         config, store, sync, FileStore.forConfig(config),

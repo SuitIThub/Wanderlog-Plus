@@ -33,7 +33,21 @@ data class Guide(
     val writtenAt: Long = 0,
     /** Apps and web pages the guide mentions, checked by the server (package exists, page answers). */
     val links: List<GuideLink> = emptyList(),
+    /** Hints on statements that stay uncertain after the fact check (the ⚠ in the app); see [GuideNote]. */
+    val notes: List<GuideNote> = emptyList(),
+    /** Epoch millis of the last fact check; 0 for never. */
+    val checkedAt: Long = 0,
 )
+
+/**
+ * Why a statement of the guide is uncertain. It belongs to the statement with exactly this wording (a summary line,
+ * a section's core, a do or don't, or the details): once that text is edited the hint no longer applies.
+ */
+@Serializable
+data class GuideNote(val statement: String, val note: String)
+
+/** Where a statement of a guide sits. */
+enum class StatementKind { SUMMARY, TEXT, DO, DONT, DETAILS }
 
 enum class GuideLinkKind { APP, WEB }
 

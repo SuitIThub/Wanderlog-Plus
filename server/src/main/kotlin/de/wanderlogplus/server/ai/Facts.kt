@@ -63,7 +63,7 @@ class ParallelFacts(private val transport: ParallelTransport, private val proces
     private fun search(q: FactQuery): List<WebSource> {
         val body = buildJsonObject {
             put("objective", q.objective)
-            putJsonArray("search_queries") { q.queries.distinct().take(3).forEach { add(JsonPrimitive(it)) } }
+            putJsonArray("search_queries") { q.queries.distinct().take(5).forEach { add(JsonPrimitive(it)) } }
             put("mode", "fast")
             putJsonObject("advanced_settings") {
                 put("max_results", 5)

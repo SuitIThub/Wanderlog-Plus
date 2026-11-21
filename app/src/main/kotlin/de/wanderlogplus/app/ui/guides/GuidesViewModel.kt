@@ -11,6 +11,8 @@ import de.wanderlogplus.shared.model.GuideTarget
 import de.wanderlogplus.shared.sync.AiJobInfo
 import de.wanderlogplus.shared.sync.EntityType
 import de.wanderlogplus.shared.sync.GuideAsk
+import de.wanderlogplus.shared.sync.GuideCorrection
+import de.wanderlogplus.shared.guide.GuideStatements
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -35,6 +37,12 @@ interface GuideActions {
 
     /** Lets the server reshape guides ([guideIds], empty = all) into glance, core and details. */
     fun tidy(guideIds: List<String>) {}
+
+    /** Lets the server check guides ([guideIds], empty = all) for truth; [thorough] researches every statement. */
+    fun check(guideIds: List<String>, thorough: Boolean) {}
+
+    /** Takes a correction of the fact check back (the old wording again, the hint gone). */
+    fun revert(correction: GuideCorrection) {}
 }
 
 /** The guide actions for detail screens and the today card; null hides hiding/pinning there. */
@@ -60,6 +68,8 @@ class GuidesViewModel(
     private val startGuideLinks: suspend () -> AiJobInfo? = { null },
     /** Starts the "Straffen" job for the given guides (empty = all); null when no server is set up. */
     private val startGuideTidy: suspend (List<String>) -> AiJobInfo? = { null },
+    /** Starts the fact check for the given guides (empty = all); null when no server is set up. */
+    private val startGuideCheck: suspend (List<String>, Boolean) -> AiJobInfo? = { _, _ -> null },
 ) : ViewModel(), GuideActions {
     private val _jobs = MutableStateFlow<List<AiJobInfo>>(emptyList())
 
@@ -109,6 +119,21 @@ class GuidesViewModel(
         running = "Guides werden gestrafft …",
     )
 
+    override fun check(guideIds: List<String>, thorough: Boolean) = startJob(
+        start = { startGuideCheck(guideIds, thorough) },
+        failed = "Guides lassen sich gerade nicht prüfen (Server nicht erreichbar?).",
+        running = (if (guideIds.size == 1) "Guide wird" else "Guides werden") + (if (thorough) " gründlich" else "") + " geprüft …",
+    )
+
+    override fun revert(correction: GuideCorrection) = write { ed, s ->
+        val before = s.guides.firstOrNull { it.id == correction.guideId } ?: return@write
+        val after = GuideStatements.revert(before, correction) ?: run {
+            _message.value = "Die Stelle wurde inzwischen geändert."
+            return@write
+        }
+        ed.setChanged(EntityType.GUIDE, before.id, EntityCodec.fields(before), EntityCodec.fields(after))
+    }
+
     override fun addLinks() = startJob(
         start = { startGuideLinks() },
         failed = "Links lassen sich gerade nicht ergänzen (Server nicht erreichbar?).",
@@ -157,7 +182,7 @@ class GuidesViewModel(
         return true
     }
 
-    override fun save(guide: Guide) = change(guide.id) { guide }
+    override fun save(guide: Guide) = change(guide.id) { GuideStatements.pruneNotes(guide) }
 
     override fun delete(id: String) = write { ed, _ -> ed.delete(EntityType.GUIDE, id) }
 

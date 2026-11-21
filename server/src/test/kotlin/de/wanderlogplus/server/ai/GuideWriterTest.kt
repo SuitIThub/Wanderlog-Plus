@@ -394,4 +394,70 @@ Kein Handtuch ins Wasser.","sections":[
         GuideWriter(facts, model).write(GuideAsk(guideId = "g1", additions = additions), "", existing)
         assertTrue("auch über die Grenzen hinaus" in model.systems.single(), model.systems.single())
     }
+
+    private fun checkJobs(model: ChatModel) = AiJobs(
+        store, null, object : ReelMedia {
+            override fun download(url: String, dir: java.nio.file.Path) = throw DownloadFailed()
+            override fun extract(d: Downloaded, dir: java.nio.file.Path) = throw DownloadFailed()
+        },
+        tmp.resolve("work-c"), executor = Executors.newSingleThreadExecutor(),
+        writeResults = { edits -> sync.writeAsServer(ASSISTANT_AUTHOR, edits) },
+        guideWriter = GuideWriter(facts, model),
+        guideCheck = GuideCheck(facts, model),
+    )
+
+    @Test
+    fun `a new guide is checked before it is saved, with the topic facts in the first pass`() {
+        val model = Scripted { user ->
+            when {
+                "Aussagen:" in user && "Themenfakten" in user -> """{"suspects":[{"i":3,"why":"pauschal"}]}"""
+                "Aussagen:" in user -> """{"results":[{"i":0,"verdict":"PARTLY","text":"Handtuch nicht ins Becken","reason":"genauer"}]}"""
+                else -> answer("Onsen & Sentō")
+            }
+        }
+        val j = checkJobs(model)
+        val started = j.startGuides(listOf(GuideAsk(topic = "onsen")))
+        j.drain()
+        val job = j.get(started.id)!!
+        val g = storedGuides().single()
+        assertEquals(listOf("Handtuch nicht ins Becken"), g.sections.single().donts)
+        assertTrue(g.checkedAt > 0)
+        assertEquals("Handtuch ins Wasser", job.corrections.single().before)
+        assertTrue("Vor dem Baden gründlich waschen." in model.asked.first { "Themenfakten" in it })
+        assertTrue("1 Korrektur" in job.items.single().detail, job.items.single().detail)
+    }
+
+    @Test
+    fun `a failing check keeps the new guide unchecked`() {
+        val model = Scripted { user -> if ("Aussagen:" in user) throw AiFailed("ai_unreachable") else answer("Onsen & Sentō") }
+        val j = checkJobs(model)
+        j.startGuides(listOf(GuideAsk(topic = "onsen"))); j.drain()
+        val g = storedGuides().single()
+        assertEquals(listOf("Handtuch ins Wasser"), g.sections.single().donts)
+        assertEquals(0, g.checkedAt)
+    }
+
+    @Test
+    fun `the check job writes the corrections and lists them`() {
+        storeTwoGuides()
+        val model = Scripted { user ->
+            when {
+                "Recherchierte Fakten" in user -> """{"results":[{"i":0,"verdict":"UNVERIFIED","note":"Quellen uneins","reason":"x"}]}"""
+                else -> """{"suspects":[{"i":0,"why":"?"}]}"""
+            }
+        }
+        val j = checkJobs(model)
+        val started = j.startGuideCheck(listOf("g1"), thorough = false)
+        assertEquals(listOf("g1"), started.guideIds)
+        j.drain()
+        val job = j.get(started.id)!!
+        assertEquals("DONE", job.status)
+        val g1 = storedGuides().single { it.id == "g1" }
+        assertEquals(1, g1.notes.size)
+        assertEquals("Quellen uneins", g1.notes.single().note)
+        assertEquals(existing.pinnedTo, g1.pinnedTo)
+        assertTrue(g1.checkedAt > 0)
+        assertEquals("1 Hinweis", job.items.single().detail)
+        assertEquals("g1", job.corrections.single().guideId)
+    }
 }

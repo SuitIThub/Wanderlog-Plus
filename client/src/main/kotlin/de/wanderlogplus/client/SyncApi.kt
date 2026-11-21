@@ -445,6 +445,15 @@ class SyncApi(http: HttpClient, baseUrl: String, private val token: String) {
         }
     }
 
+    /** Checks guides ([guideIds], empty = all) for truth and works the corrections in, as one guide job. */
+    suspend fun startGuideCheck(guideIds: List<String> = emptyList(), thorough: Boolean = false): AiJobInfo = call {
+        client.post("$base/api/ai/guide-check") {
+            auth()
+            contentType(ContentType.Application.Json)
+            setBody(de.wanderlogplus.shared.sync.GuideCheckRequest(guideIds, thorough))
+        }
+    }
+
     /** Translates every non-German place description and the Japanese Tabelog texts into German, as one job. */
     suspend fun startTranslate(): AiJobInfo = call {
         client.post("$base/api/ai/translate") { auth() }

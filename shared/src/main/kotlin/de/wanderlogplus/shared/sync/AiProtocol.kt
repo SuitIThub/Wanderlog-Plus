@@ -55,6 +55,32 @@ data class GuideTidyRequest(val guideIds: List<String> = emptyList())
 @Serializable
 data class PlaceFactsItem(val savedPlaceId: String, val facts: List<String>, val sources: List<String> = emptyList())
 
+/**
+ * `POST /api/ai/guide-check`: check the statements of guides (empty = all) and correct them; [thorough] researches
+ * every statement instead of only the doubtful ones.
+ */
+@Serializable
+data class GuideCheckRequest(val guideIds: List<String> = emptyList(), val thorough: Boolean = false)
+
+/**
+ * One change the fact check made to a guide: [before] became [after] (empty: removed); with [note] the statement
+ * stays uncertain and carries that hint. [heading] and [index] say where it was (section heading, line or item).
+ */
+@Serializable
+data class GuideCorrection(
+    val guideId: String,
+    val guideTitle: String = "",
+    val kind: de.wanderlogplus.shared.model.StatementKind,
+    val heading: String = "",
+    val index: Int = 0,
+    val before: String,
+    val after: String = "",
+    val verdict: TipVerdict,
+    val reason: String = "",
+    val note: String = "",
+    val sources: List<String> = emptyList(),
+)
+
 /** `POST /api/ai/place-facts`: work reel facts into the research of saved places. */
 @Serializable
 data class PlaceFactsRequest(val items: List<PlaceFactsItem>)
@@ -174,6 +200,8 @@ data class AiJobInfo(
     val config: AssessConfig? = null,
     /** Guides: the guides written so far. */
     val guideIds: List<String> = emptyList(),
+    /** Guides: what the fact check changed, guide by guide. */
+    val corrections: List<GuideCorrection> = emptyList(),
     /** Stay research: the stay it is about. */
     val stayId: String? = null,
 )

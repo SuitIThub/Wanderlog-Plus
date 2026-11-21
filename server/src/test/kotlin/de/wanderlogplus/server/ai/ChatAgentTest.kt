@@ -513,6 +513,24 @@ class ChatAgentTest {
         }
         override fun start(asks: List<de.wanderlogplus.shared.sync.GuideAsk>) =
             de.wanderlogplus.shared.sync.AiJobInfo("job-1", "guides", 0, "QUEUED").also { started += asks }
+        val checks = mutableListOf<Pair<List<String>, Boolean>>()
+        override fun check(guideIds: List<String>, thorough: Boolean) =
+            de.wanderlogplus.shared.sync.AiJobInfo("job-2", "guides", 0, "QUEUED").also { checks += guideIds to thorough }
+    }
+
+    @Test
+    fun `check guides starts the check, refuses unknown guides`() {
+        val g = FakeGuides()
+        val tools = ChatTools(withGuides(), null, guides = g) {}
+        assertTrue(tools.run("check_guides", """{"guideIds":["nope"]}""").startsWith("Unbekannte Guides"))
+        assertTrue(g.checks.isEmpty())
+        val r = tools.run("check_guides", """{"guideIds":["g1"],"thorough":true}""")
+        assertEquals(listOf(listOf("g1") to true), g.checks)
+        assertTrue("gründlich" in r, r)
+        assertEquals("job-2", tools.cards.single().jobId)
+        assertEquals("g1", tools.cards.single().guideId)
+        tools.run("check_guides", "{}")
+        assertEquals(emptyList<String>() to false, g.checks.last())
     }
 
     private val onsen = de.wanderlogplus.shared.model.Guide("g1", topic = "onsen", title = "Onsen & Sentō")

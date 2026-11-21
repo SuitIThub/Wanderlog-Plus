@@ -71,6 +71,8 @@ class AiJobs(
     private val translator: Translator? = null,
     /** Works reel facts into the research of saved places; null: those jobs fail with `ai_not_configured`. */
     private val placeFacts: PlaceFacts? = null,
+    /** Checks guides for truth, after writing and on request; null: guides are written unchecked and checks fail. */
+    private val guideCheck: GuideCheck? = null,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val log = LoggerFactory.getLogger(AiJobs::class.java)
@@ -198,11 +200,13 @@ class AiJobs(
                     val trip = ChatTrip.from(store)
                     val existing = ask.guideId?.let { id -> trip.guides.firstOrNull { it.id == id } }
                         ?: GuideMatch.duplicateOf(ask.topic, ask.title, trip.guides)
-                    val g = w.write(ask, GuideWriter.tripContext(trip, ask.topic ?: existing?.topic), existing, say)
+                    var topicFacts: Facts? = null
+                    val written = w.write(ask, GuideWriter.tripContext(trip, ask.topic ?: existing?.topic), existing, say) { topicFacts = it }
                         .copy(writtenAt = now().toEpochMilli())
+                    val (g, corrections) = checked(written, topicFacts, say)
                     writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, EntityCodec.fields(g), create = true)))
-                    t.update { j -> j.copy(guideIds = (j.guideIds + g.id).distinct()) }
-                    t.item(key, state = "DONE", detail = g.title)
+                    t.update { j -> j.copy(guideIds = (j.guideIds + g.id).distinct(), corrections = j.corrections + corrections) }
+                    t.item(key, state = "DONE", detail = if (corrections.isEmpty()) g.title else g.title + " · " + correctionsText(corrections))
                     t.step("${label(ask)}: fertig", JobProgress.OK)
                 } catch (e: AiFailed) {
                     t.item(key, state = "FAILED", detail = failText(e.code))
@@ -221,6 +225,83 @@ class AiJobs(
             t.fail("internal")
         }
     }
+
+    /**
+     * [g] after the fact check, with its corrections; a check that fails leaves the guide as written (unchecked),
+     * since a new guide must not get lost over its check.
+     */
+    private fun checked(g: de.wanderlogplus.shared.model.Guide, known: Facts?, say: (String) -> Unit): Pair<de.wanderlogplus.shared.model.Guide, List<de.wanderlogplus.shared.sync.GuideCorrection>> {
+        val c = guideCheck ?: return g to emptyList()
+        return try {
+            say("Inhalte werden geprüft …")
+            val out = c.check(g, thorough = false, known = known, say = say)
+            say("Prüfung: " + correctionsText(out.corrections))
+            out.guide.copy(checkedAt = now().toEpochMilli()) to out.corrections
+        } catch (e: AiFailed) {
+            say("Prüfung fehlgeschlagen (" + failText(e.code) + "), Guide bleibt ungeprüft")
+            g to emptyList()
+        }
+    }
+
+    /**
+     * Checks the statements of guides ([guideIds], empty = all) and works the corrections in; [thorough] researches every
+     * statement. A guide job (kind "guides") so the guide screens follow it; the changes are in [AiJobInfo.corrections].
+     */
+    fun startGuideCheck(guideIds: List<String>, thorough: Boolean): AiJobInfo {
+        val all = ChatTrip.from(store).guides
+        val targets = if (guideIds.isEmpty()) all else all.filter { it.id in guideIds }
+        val job = save(
+            AiJobInfo(
+                UUID.randomUUID().toString(), "guides", now().toEpochMilli(), "QUEUED", total = targets.size, steps = listOf(queuedStep()),
+                appliedOnServer = writeResults != null, guideIds = targets.map { it.id }, source = if (thorough) "check-thorough" else "check",
+            ),
+        )
+        executor.execute { runGuideCheck(job, targets.map { it.id }, thorough) }
+        return job
+    }
+
+    private fun runGuideCheck(start: AiJobInfo, ids: List<String>, thorough: Boolean) {
+        val t = Tracker(start)
+        val c = guideCheck ?: run { t.fail("ai_not_configured"); return }
+        try {
+            t.status("RESEARCHING")
+            t.step((if (ids.size == 1) "1 Guide wird" else "${ids.size} Guides werden") + (if (thorough) " gründlich" else "") + " geprüft")
+            val names = ChatTrip.from(store).guides.associateBy { it.id }
+            t.items(ids.map { JobItem("check-$it", names[it]?.title?.ifBlank { null } ?: "Guide") })
+            ids.forEachIndexed { i, id ->
+                val key = "check-$id"
+                t.item(key, state = "RUNNING")
+                // Read fresh: an earlier guide's check may take minutes, and the user may edit meanwhile.
+                val g = ChatTrip.from(store).guides.firstOrNull { it.id == id }
+                try {
+                    if (g == null) {
+                        t.item(key, state = "FAILED", detail = "gelöscht")
+                    } else {
+                        val out = c.check(g, thorough, say = t.sayFor(key, g.title))
+                        val after = out.guide.copy(checkedAt = now().toEpochMilli())
+                        val changed = guideChanges(g, after)
+                        if (changed.isNotEmpty()) writeResults?.invoke(listOf(ServerEdit(EntityType.GUIDE, g.id, changed)))
+                        t.update { j -> j.copy(corrections = j.corrections + out.corrections) }
+                        t.item(key, state = "DONE", detail = correctionsText(out.corrections))
+                        t.step("${g.title}: " + correctionsText(out.corrections), JobProgress.OK)
+                    }
+                } catch (e: AiFailed) {
+                    t.item(key, state = "FAILED", detail = failText(e.code))
+                    t.step("${g?.title ?: "Guide"}: " + failText(e.code), JobProgress.WARN)
+                } catch (e: Exception) {
+                    log.error("Guide check failed: {}", e.javaClass.simpleName)
+                    t.item(key, state = "FAILED", detail = failText("internal"))
+                }
+                t.update { it.copy(progress = i + 1) }
+            }
+            t.done { it.copy(progress = it.total) }
+        } catch (e: Exception) {
+            log.error("Guide check job failed: {}", e.javaClass.simpleName)
+            t.fail("internal")
+        }
+    }
+
+    val guideCheckConfigured: Boolean get() = guideCheck != null
 
     /**
      * Finds and checks the apps and pages the guides mention ([guideIds], empty = all) and writes only their links.

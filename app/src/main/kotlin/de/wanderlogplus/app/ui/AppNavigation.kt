@@ -151,7 +151,7 @@ enum class Tab(val route: String, val label: String, val icon: ImageVector) {
             REISE -> setOf(DAY_ROUTE, DAY_SEARCH_ROUTE, DAY_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_ROUTE, TRIP_PLACE_ROUTE)
             ORTE -> setOf(REGION_ROUTE, PLACE_ROUTE, PLACES_SEARCH_ROUTE, de.wanderlogplus.app.ui.places.PLACE_RATING_ROUTE, de.wanderlogplus.app.ui.places.PLACE_MAP_ROUTE)
             LOGISTIK -> setOf(LOGISTICS_DETAIL_ROUTE, LOGISTICS_EDIT_ROUTE, de.wanderlogplus.app.maps.ROUTE_MAP_ROUTE, de.wanderlogplus.app.ui.transit.TRANSIT_REPLACE_ROUTE, de.wanderlogplus.app.ui.transit.JOURNEY_CHANGE_ROUTE)
-            MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.more.BALANCES_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
+            MEHR -> setOf(de.wanderlogplus.app.ui.guides.GUIDES_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_ROUTE, de.wanderlogplus.app.ui.guides.GUIDE_CORRECTIONS_ROUTE, NOTES_ROUTE, NOTE_ROUTE, IMPORT_ROUTE, CONFLICTS_ROUTE, SETTINGS_ROUTE, REELS_ROUTE, REEL_ROUTE, de.wanderlogplus.app.ui.more.ACCESS_ROUTE, de.wanderlogplus.app.ui.reels.REEL_POSITION_ROUTE, de.wanderlogplus.app.ui.more.AI_SETTINGS_ROUTE, de.wanderlogplus.app.ui.more.BALANCES_ROUTE, de.wanderlogplus.app.ui.reels.JOB_ROUTE, de.wanderlogplus.app.ui.reels.JOBS_ROUTE, de.wanderlogplus.app.ui.vault.VAULT_ROUTE)
             else -> emptySet()
         }
 }
@@ -1298,6 +1298,7 @@ fun AppNavigation(
                                 s, guidesVm, guideJobs,
                                 onOpen = { id -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(id)) },
                                 onBack = { nav.popBackStack() },
+                                onOpenCorrections = { nav.navigate(de.wanderlogplus.app.ui.guides.guideCorrectionsRoute()) },
                             )
                         }
                     }
@@ -1314,6 +1315,25 @@ fun AppNavigation(
                                 onBack = { nav.popBackStack() },
                                 onOpenGuide = { other -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(other)) },
                                 onImprove = openChat,
+                                onOpenCorrections = { nav.navigate(de.wanderlogplus.app.ui.guides.guideCorrectionsRoute(id)) },
+                            )
+                        }
+                    }
+                }
+                composable(
+                    de.wanderlogplus.app.ui.guides.GUIDE_CORRECTIONS_ROUTE,
+                    arguments = listOf(androidx.navigation.navArgument("guideId") { type = androidx.navigation.NavType.StringType; defaultValue = "" }),
+                ) { entry ->
+                    val vm: MoreViewModel = viewModel(factory = moreViewModelFactory, viewModelStoreOwner = nav.entryOrNull(Tab.MEHR.route) ?: entry)
+                    val snap by vm.snapshot.collectAsState()
+                    val id = entry.arguments?.getString("guideId")?.let { java.net.URLDecoder.decode(it, "UTF-8") }?.takeIf { it.isNotBlank() }
+                    LaunchedEffect(id) { guidesVm?.refreshJobs() }
+                    SyncedScreen(syncStatus, onRefresh, scrollable = false) {
+                        snap?.let { s ->
+                            de.wanderlogplus.app.ui.guides.GuideCorrectionsScreen(
+                                s, guidesVm, guideJobs, id,
+                                onOpenGuide = { other -> nav.navigate(de.wanderlogplus.app.ui.guides.guideRoute(other)) },
+                                onBack = { nav.popBackStack() },
                             )
                         }
                     }

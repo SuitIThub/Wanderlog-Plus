@@ -59,6 +59,7 @@ import de.wanderlogplus.app.ui.design.EmptyHint
 import de.wanderlogplus.app.ui.design.SurfaceCard
 import de.wanderlogplus.client.TripSnapshot
 import de.wanderlogplus.shared.guide.GuideMatch
+import de.wanderlogplus.shared.guide.GuideStatements
 import de.wanderlogplus.shared.guide.GuideSuggestions
 import de.wanderlogplus.shared.guide.GuideTopics
 import de.wanderlogplus.shared.model.Guide
@@ -80,8 +81,11 @@ fun GuidesScreen(
     onOpen: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens the corrections of the fact checks; null hides the entry. */
+    onOpenCorrections: (() -> Unit)? = null,
 ) {
     val world = remember(snapshot) { snapshot.guideWorld() }
+    var confirmThorough by remember { mutableStateOf(false) }
     val suggestions = remember(snapshot) { GuideSuggestions.open(world, snapshot.tripDates(), snapshot.guidePrefs) }
     val chosen = remember(suggestions) { mutableStateListOf<String>().apply { addAll(suggestions) } }
     var menu by remember { mutableStateOf(false) }
@@ -103,6 +107,21 @@ fun GuidesScreen(
                             onClick = { menu = false; actions.tidy(emptyList()) },
                             modifier = Modifier.testTag("guides-tidy"),
                         )
+                        DropdownMenuItem(
+                            text = { Text("Alle prüfen") },
+                            onClick = { menu = false; actions.check(emptyList(), thorough = false) },
+                            modifier = Modifier.testTag("guides-check"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Alle gründlich prüfen") },
+                            onClick = { menu = false; confirmThorough = true },
+                            modifier = Modifier.testTag("guides-check-thorough"),
+                        )
+                        if (onOpenCorrections != null) DropdownMenuItem(
+                            text = { Text("Korrekturen ansehen") },
+                            onClick = { menu = false; onOpenCorrections() },
+                            modifier = Modifier.testTag("guides-corrections"),
+                        )
                     }
                 }
             }
@@ -112,11 +131,28 @@ fun GuidesScreen(
             jobs.filter(GuideJobs::isActive).forEach { running ->
                 SurfaceCard(Modifier.testTag("guides-running")) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val what = if (running.guideIds.isNotEmpty()) "Wird überarbeitet" else "Wird erstellt"
+                        val what = when {
+                            GuideCorrections.isCheck(running) -> "Wird geprüft"
+                            running.guideIds.isNotEmpty() -> "Wird überarbeitet"
+                            else -> "Wird erstellt"
+                        }
                         Text("$what: ${GuideJobs.names(running)}", fontWeight = FontWeight.SemiBold)
                         if (running.total > 1) Text("${running.progress} von ${running.total}", style = MaterialTheme.typography.bodySmall)
                         LinearProgressIndicator(progress = { if (running.total == 0) 0f else running.progress / running.total.toFloat() }, Modifier.fillMaxWidth())
                         running.steps.lastOrNull()?.let { Text(it.text, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+            }
+            val lastCheck = jobs.filter { GuideCorrections.isCheck(it) && !GuideJobs.isActive(it) }.maxByOrNull { it.createdAt }
+            if (lastCheck != null && onOpenCorrections != null && System.currentTimeMillis() - lastCheck.createdAt <= 7 * 24 * 3_600_000L) {
+                SurfaceCard(onClick = onOpenCorrections, modifier = Modifier.testTag("guides-last-check")) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Letzte Prüfung: " + GuideCorrections.summary(lastCheck.corrections), fontWeight = FontWeight.SemiBold)
+                        Text(
+                            GuideJobs.writtenText(lastCheck.finishedAt.takeIf { it > 0 } ?: lastCheck.createdAt) +
+                                (if (lastCheck.corrections.isNotEmpty()) " · Antippen für Details" else ""),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -167,6 +203,25 @@ fun GuidesScreen(
             }
         }
     }
+    if (confirmThorough && actions != null) {
+        ConfirmThorough(all = true, onConfirm = { confirmThorough = false; actions.check(emptyList(), thorough = true) }, onDismiss = { confirmThorough = false })
+    }
+}
+
+@Composable
+private fun ConfirmThorough(all: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (all) "Alle Guides gründlich prüfen?" else "Gründlich prüfen?") },
+        text = {
+            Text(
+                "Dabei wird jede Aussage recherchiert, nicht nur die zweifelhaften. Das dauert länger und kostet mehr Recherche-Guthaben" +
+                    (if (all) ", bei allen Guides spürbar." else "."),
+            )
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Gründlich prüfen") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
 }
 
 @Composable
@@ -190,8 +245,11 @@ fun GuideScreen(
     onImprove: (() -> Unit)?,
     modifier: Modifier = Modifier,
     jobs: List<AiJobInfo> = emptyList(),
+    /** Opens this guide's corrections; null hides the entry. */
+    onOpenCorrections: (() -> Unit)? = null,
 ) {
     val g = snapshot.guides.firstOrNull { it.id == guideId }
+    var confirmThorough by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -209,6 +267,8 @@ fun GuideScreen(
                         if (actions != null) DropdownMenuItem(text = { Text("Bearbeiten") }, onClick = { menu = false; editing = true })
                         if (onImprove != null) DropdownMenuItem(text = { Text("Im Chat verbessern") }, onClick = { menu = false; onImprove() })
                         if (actions != null) DropdownMenuItem(text = { Text("Straffen") }, onClick = { menu = false; actions.tidy(listOf(g.id)) }, modifier = Modifier.testTag("guide-tidy"))
+                        if (actions != null) DropdownMenuItem(text = { Text("Prüfen") }, onClick = { menu = false; actions.check(listOf(g.id), thorough = false) }, modifier = Modifier.testTag("guide-check"))
+                        if (actions != null) DropdownMenuItem(text = { Text("Gründlich prüfen") }, onClick = { menu = false; confirmThorough = true }, modifier = Modifier.testTag("guide-check-thorough"))
                         if (actions != null) DropdownMenuItem(text = { Text("Löschen") }, onClick = { menu = false; confirmDelete = true })
                     }
                 }
@@ -225,14 +285,16 @@ fun GuideScreen(
             if (glance.isNotEmpty()) SurfaceCard(Modifier.testTag("guide-glance")) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("Auf einen Blick", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                    glance.forEach { Text("• " + de.wanderlogplus.app.ui.euroed(it), style = MaterialTheme.typography.bodyLarge) }
+                    glance.forEach { line ->
+                        NotedText(line, GuideStatements.noteFor(g, line)) { m -> Text("• " + de.wanderlogplus.app.ui.euroed(line), m, style = MaterialTheme.typography.bodyLarge) }
+                    }
                 }
             }
             if (g.links.isNotEmpty()) {
                 Text("Apps & Links", fontWeight = FontWeight.SemiBold)
                 GuideLinkChips(g.links, showNotes = true)
             }
-            g.sections.forEachIndexed { i, s -> GuideSectionCard(s, Modifier.testTag("guide-section-$i")) }
+            g.sections.forEachIndexed { i, s -> GuideSectionCard(s, { t -> GuideStatements.noteFor(g, t) }, Modifier.testTag("guide-section-$i")) }
             val children = snapshot.guides.filter { it.parentId == g.id }.sortedBy { it.title.lowercase() }
             if (children.isNotEmpty()) {
                 Text("Unterthemen", fontWeight = FontWeight.SemiBold)
@@ -272,9 +334,22 @@ fun GuideScreen(
             if (g.writtenAt > 0) {
                 Text(
                     "Zuletzt recherchiert: " + GuideJobs.writtenText(g.writtenAt),
-                    Modifier.padding(bottom = 16.dp).testTag("guide-written-at"),
+                    Modifier.padding(bottom = if (g.checkedAt > 0) 0.dp else 16.dp).testTag("guide-written-at"),
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (g.checkedAt > 0) {
+                val mine = GuideCorrections.of(jobs, g.id)
+                Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Geprüft: " + GuideJobs.writtenText(g.checkedAt),
+                        Modifier.testTag("guide-checked-at"),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (mine.isNotEmpty() && onOpenCorrections != null) {
+                        TextButton(onClick = onOpenCorrections, modifier = Modifier.testTag("guide-open-corrections")) { Text(GuideCorrections.summary(mine) + " ansehen") }
+                    }
+                }
             }
         }
     }
@@ -305,6 +380,9 @@ fun GuideScreen(
             dismissButton = { TextButton(onClick = { editing = false }) { Text("Abbrechen") } },
         )
     }
+    if (confirmThorough && g != null && actions != null) {
+        ConfirmThorough(all = false, onConfirm = { confirmThorough = false; actions.check(listOf(g.id), thorough = true) }, onDismiss = { confirmThorough = false })
+    }
     if (confirmDelete && g != null && actions != null) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -318,20 +396,25 @@ fun GuideScreen(
 
 /** A section, folded to heading and first sentence; open: core, dos and don'ts, and "Mehr dazu" for the details. */
 @Composable
-private fun GuideSectionCard(s: de.wanderlogplus.shared.model.GuideSection, modifier: Modifier = Modifier) {
+private fun GuideSectionCard(s: de.wanderlogplus.shared.model.GuideSection, noteFor: (String) -> String? = { null }, modifier: Modifier = Modifier) {
     var open by remember(s) { mutableStateOf(false) }
     var more by remember(s) { mutableStateOf(false) }
     SurfaceCard(onClick = { open = !open }, modifier = modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text((if (open) "▾ " else "▸ ") + s.heading, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleMedium)
+            val textNote = noteFor(s.text.trim())
             if (!open) {
-                if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(coreLine(s.text)), style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                if (s.text.isNotBlank()) NotedText(s.text, textNote) { m -> Text(de.wanderlogplus.app.ui.euroed(coreLine(s.text)), m, style = MaterialTheme.typography.bodyMedium, maxLines = 2) }
             } else {
-                if (s.text.isNotBlank()) Text(de.wanderlogplus.app.ui.euroed(s.text))
-                s.dos.forEach { DoLine(it, good = true) }
-                s.donts.forEach { DoLine(it, good = false) }
+                if (s.text.isNotBlank()) NotedText(s.text, textNote) { m -> Text(de.wanderlogplus.app.ui.euroed(s.text), m) }
+                s.dos.forEach { DoLine(it, good = true, note = noteFor(it.trim())) }
+                s.donts.forEach { DoLine(it, good = false, note = noteFor(it.trim())) }
                 if (s.details.isNotBlank()) {
-                    TextButton(onClick = { more = !more }) { Text(if (more) "Weniger" else "Mehr dazu") }
+                    val detailsNote = noteFor(s.details.trim())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { more = !more }) { Text(if (more) "Weniger" else "Mehr dazu") }
+                        if (detailsNote != null) NoteMark(detailsNote)
+                    }
                     if (more) Text(de.wanderlogplus.app.ui.euroed(s.details), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -340,7 +423,7 @@ private fun GuideSectionCard(s: de.wanderlogplus.shared.model.GuideSection, modi
 }
 
 @Composable
-private fun DoLine(text: String, good: Boolean) {
+private fun DoLine(text: String, good: Boolean, note: String? = null) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(
             if (good) Icons.Filled.Check else Icons.Filled.Close,
@@ -348,6 +431,7 @@ private fun DoLine(text: String, good: Boolean) {
             tint = if (good) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
         )
         Text(text, Modifier.weight(1f))
+        if (note != null) NoteMark(note, Modifier.padding(top = 3.dp))
     }
 }
 
